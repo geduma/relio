@@ -1,125 +1,126 @@
 # PRD — Relio (LLM Relay)
 
-**Status:** v1.0 Implementado  
-**Última actualización:** Julio 2026
+**Status:** v1.0 Implemented  
+**Last updated:** July 2026  
+**Target audience:** Personal / Self-hosted use
 
 ---
 
-## 1. Resumen Ejecutivo
+## 1. Executive Summary
 
-Relio es un proxy inteligente y self-hosted para Large Language Models (LLMs). Centraliza múltiples providers (OpenAI, Anthropic, Groq, etc.), implementa failover automático con circuit breaker, cachea respuestas, audita cada request en SQLite, y expone una API compatible con OpenAI para que cualquier agente AI pueda consumirla sin cambios.
+Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It centralizes multiple providers (OpenAI, Anthropic, Groq, etc.), implements automatic failover with circuit breaker, caches responses, audits every request in SQLite, and exposes an OpenAI-compatible API so any AI agent can consume it without changes.
 
-**Problema que resuelve:** Las aplicaciones AI que usan múltiples providers LLM necesitan manejar failover, rate limits, costos, auditoría y caching por su cuenta. Relio centraliza todo esto en un solo servicio, con dashboard visual para gestión.
+**Problem it solves:** AI applications using multiple LLM providers need to handle failover, rate limits, costs, auditing, and caching themselves. Relio centralizes all of this into a single service with a visual management dashboard, designed for personal/self-hosted use.
 
 ---
 
 ## 2. User Personas
 
-### 2.1 Desarrollador de Agentes AI
-- Necesita una API única compatible con OpenAI
-- No quiere manejar failover manual
-- Quiere una API Key por agente para controlar acceso
-- Necesita auditoría de cada request
+### 2.1 AI Agent Developer
+- Needs a single OpenAI-compatible API
+- Does not want to handle manual failover
+- Wants one API Key per agent for access control
+- Needs audit trail for every request
 
-### 2.2 Admin / DevOps
-- Gestiona múltiples providers (OpenAI, Anthropic, Groq...)
-- Necesita dashboard visual para monitorear costos y uso
-- Quiere controlar rate limits y orden de failover
-- Requiere métricas diarias y logs de auditoría
+### 2.2 Solo Admin / Hobbyist
+- Manages multiple providers (OpenAI, Anthropic, Groq...)
+- Needs a visual dashboard for cost and usage monitoring
+- Wants to control rate limits and failover order
+- Requires daily metrics and audit logs
 
 ---
 
-## 3. Requerimientos Funcionales
+## 3. Functional Requirements
 
-### 3.1 Proxy LLM
-| ID | Requerimiento | Prioridad |
+### 3.1 LLM Proxy
+| ID | Requirement | Priority |
 |---|---|---|
-| F-01 | Exponer endpoint `/v1/chat/completions` compatible con OpenAI API | P0 |
-| F-02 | Exponer endpoint `/v1/embeddings` compatible con OpenAI API | P0 |
-| F-03 | Detectar contenido multimodal (vision) dentro de `/v1/chat/completions` | P1 |
-| F-04 | Timeout de 30s por llamada a provider | P0 |
-| F-05 | Mantener formato de response idéntico a OpenAI | P0 |
+| F-01 | Expose `/v1/chat/completions` endpoint compatible with OpenAI API | P0 |
+| F-02 | Expose `/v1/embeddings` endpoint compatible with OpenAI API | P0 |
+| F-03 | Detect multimodal (vision) content inside `/v1/chat/completions` | P1 |
+| F-04 | 30s timeout per provider call | P0 |
+| F-05 | Maintain OpenAI-identical response format | P0 |
 
 ### 3.2 Failover
-| ID | Requerimiento | Prioridad |
+| ID | Requirement | Priority |
 |---|---|---|
-| F-06 | Seleccionar provider según orden configurable (Main, Fallback 1, N) | P0 |
-| F-07 | Saltar providers en cooldown | P0 |
-| F-08 | Saltar providers que excedieron rate limit (req/min) | P0 |
-| F-09 | Saltar providers que excedieron daily token limit | P1 |
-| F-10 | Si todos fallan, retornar 503 con detalle | P0 |
+| F-06 | Select provider by configured order (Main, Fallback 1, N) | P0 |
+| F-07 | Skip providers in cooldown | P0 |
+| F-08 | Skip providers exceeding rate limit (req/min) | P0 |
+| F-09 | Skip providers exceeding daily token limit | P1 |
+| F-10 | Return 503 with details if all providers fail | P0 |
 
 ### 3.3 Circuit Breaker
-| ID | Requerimiento | Prioridad |
+| ID | Requirement | Priority |
 |---|---|---|
-| F-11 | Estado HEALTHY: uso normal, cuenta fallos | P0 |
-| F-12 | Estado COOLDOWN: no intentar durante N segundos tras M fallos | P0 |
-| F-13 | Estado PAUSED: no intentar (manual) | P1 |
-| F-14 | Configurar umbral de fallos y duración de cooldown por provider | P0 |
+| F-11 | HEALTHY state: normal use, counts failures | P0 |
+| F-12 | COOLDOWN state: skip for N seconds after M failures | P0 |
+| F-13 | PAUSED state: skip until manually resumed | P1 |
+| F-14 | Configurable failure threshold and cooldown duration per provider | P0 |
 
 ### 3.4 Cache
-| ID | Requerimiento | Prioridad |
+| ID | Requirement | Priority |
 |---|---|---|
-| F-15 | Cachear respuestas por hash del body del request | P0 |
-| F-16 | TTL configurable por variable de entorno (default 30 días) | P0 |
-| F-17 | Cache hit incrementa contador y se registra en log | P1 |
-| F-18 | Cache expire cleanup automático en mantenimiento diario | P1 |
+| F-15 | Cache responses by request body hash | P0 |
+| F-16 | Configurable TTL via env var (default 30 days) | P0 |
+| F-17 | Cache hits increment counter and are logged | P1 |
+| F-18 | Automatic expired cache cleanup in daily maintenance | P1 |
 
-### 3.5 Autenticación y API Keys
-| ID | Requerimiento | Prioridad |
+### 3.5 Authentication & API Keys
+| ID | Requirement | Priority |
 |---|---|---|
-| F-19 | Login vía Geduma API (3 endpoints: providers, login, user) | P0 |
-| F-20 | Sesiones locales en SQLite (token Geduma es single-use) | P0 |
-| F-21 | API Keys locales para agentes AI (formato `llm_pk_xxx`) | P0 |
-| F-22 | API Key se muestra solo al crear | P0 |
-| F-23 | Revocación de API Keys | P0 |
-| F-24 | httpOnly cookie para sesión de dashboard | P0 |
+| F-19 | Login via Geduma API (3 endpoints: providers, login, user) | P0 |
+| F-20 | Local SQLite sessions (Geduma token is single-use) | P0 |
+| F-21 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
+| F-22 | API Key shown only once at creation | P0 |
+| F-23 | API Key revocation | P0 |
+| F-24 | httpOnly cookie for dashboard session | P0 |
 
 ### 3.6 Dashboard
-| ID | Requerimiento | Prioridad |
+| ID | Requirement | Priority |
 |---|---|---|
-| F-25 | Login con providers OAuth (Google, GitHub, etc.) | P0 |
-| F-26 | Listar providers con orden y estado | P0 |
-| F-27 | Crear/editar/eliminar providers | P0 |
-| F-28 | Reordenar providers (Main, Fallback 1, 2...) | P0 |
-| F-29 | Ver métricas por rango de fechas | P0 |
-| F-30 | Ver últimos requests (logs) | P0 |
-| F-31 | Gestionar API Keys (crear, listar, revocar) | P0 |
-| F-32 | Health check del proxy | P1 |
+| F-25 | Login with OAuth providers (Google, GitHub, etc.) | P0 |
+| F-26 | List providers with order and status | P0 |
+| F-27 | Create/edit/delete providers | P0 |
+| F-28 | Reorder providers (Main, Fallback 1, 2...) | P0 |
+| F-29 | View metrics by date range | P0 |
+| F-30 | View recent request logs | P0 |
+| F-31 | Manage API Keys (create, list, revoke) | P0 |
+| F-32 | Health check endpoint | P1 |
 
-### 3.7 Auditoría y Métricas
-| ID | Requerimiento | Prioridad |
+### 3.7 Audit & Metrics
+| ID | Requirement | Priority |
 |---|---|---|
-| F-33 | Registrar cada request en `requests_log` | P0 |
-| F-34 | Calcular costo estimado por request | P0 |
-| F-35 | Métricas diarias agregadas por provider | P0 |
-| F-36 | Historial de login en `login_history` | P1 |
-| F-37 | Backup automático diario de BD | P1 |
+| F-33 | Log every request in `requests_log` | P0 |
+| F-34 | Calculate estimated cost per request | P0 |
+| F-35 | Daily aggregated metrics per provider | P0 |
+| F-36 | Login history in `login_history` | P1 |
+| F-37 | Automatic daily DB backup | P1 |
 
 ---
 
-## 4. Requerimientos No Funcionales
+## 4. Non-Functional Requirements
 
-| ID | Requerimiento | Objetivo |
+| ID | Requirement | Target |
 |---|---|---|
-| NF-01 | Overhead del proxy | < 25ms por request (sin contar LLM) |
+| NF-01 | Proxy overhead | < 25ms per request (excluding LLM) |
 | NF-02 | Startup time | < 2s |
-| NF-03 | Consumo de memoria | < 100MB idle |
-| NF-04 | Almacenamiento logs | 90 días de retención |
-| NF-05 | Almacenamiento cache | 30 días TTL |
-| NF-06 | Almacenamiento métricas | 365 días |
-| NF-07 | Disponibilidad | Sin single point of failure (múltiples providers) |
-| NF-08 | Seguridad | API keys en texto plano en DB local, httpOnly cookies |
-| NF-09 | Portabilidad | Docker multi-stage, sin dependencias externas |
+| NF-03 | Memory usage | < 100MB idle |
+| NF-04 | Log retention | 90 days |
+| NF-05 | Cache retention | 30 days TTL |
+| NF-06 | Metrics retention | 365 days |
+| NF-07 | Availability | No single point of failure (multiple providers) |
+| NF-08 | Security | API keys in plain text in local DB, httpOnly cookies |
+| NF-09 | Portability | Docker multi-stage, no external dependencies |
 
 ---
 
-## 5. Arquitectura
+## 5. Architecture
 
-### 5.1 Diagrama de Componentes
+### 5.1 Component Diagram
 
 ```
-Cliente (HTTP)
+Client (HTTP)
     │
     ▼
 authMiddleware
@@ -135,33 +136,33 @@ failoverEngine → Provider 1 (Main)
 metricsLogger + SQLite
 ```
 
-### 5.2 Stack Tecnológico
+### 5.2 Technology Stack
 
-| Componente | Tecnología | Versión |
+| Component | Technology | Version |
 |---|---|---|
 | Backend | Node.js + Express.js | 20 LTS + 4.x |
-| Base de datos | SQLite (better-sqlite3) | 11.x |
+| Database | SQLite (better-sqlite3) | 11.x |
 | Frontend | React + Vite | 18 + 5.x |
 | HTTP Client | Native fetch | Node 18+ |
-| Auth | Geduma API | Externa |
+| Auth | Geduma API | External |
 | Testing | Vitest | 1.x |
 | Container | Docker multi-stage | — |
 
-### 5.3 Base de Datos
+### 5.3 Database Schema
 
-9 tablas:
-- `providers` — configuración de cada LLM provider
-- `requests_log` — cada request al proxy
-- `cache` — respuestas cacheadas por hash
-- `api_keys` — API keys locales para agentes AI
-- `login_history` — historial de autenticación
-- `circuit_breaker_state` — estado del circuit breaker
-- `sessions` — sesiones de dashboard (token Geduma)
-- `metrics` — agregados diarios
+9 tables:
+- `providers` — LLM provider configuration
+- `requests_log` — every proxy request
+- `cache` — cached responses by hash
+- `api_keys` — local API keys for AI agents
+- `login_history` — authentication history
+- `circuit_breaker_state` — circuit breaker status
+- `sessions` — dashboard sessions (Geduma token)
+- `metrics` — daily aggregated metrics
 
 ---
 
-## 6. Flujos Principales
+## 6. Core Flows
 
 ### 6.1 Proxy + Failover
 
@@ -169,72 +170,72 @@ metricsLogger + SQLite
 POST /v1/chat/completions
   Authorization: Bearer llm_pk_xxx
 
-1. Validar API Key
-2. Calcular hash del body → buscar en cache
-3. Cache hit → retornar (log cache_hit=true)
-4. Cache miss → seleccionar providers activos ordenados
-5. Para cada provider:
-   a. Verificar estado (healthy/cooldown/paused)
-   b. Verificar rate limit (req/min)
-   c. Verificar daily limit (tokens/día)
-   d. Llamar provider con timeout 30s
-   e. Éxito → cachear + log + métricas + retornar
-   f. Falla → incrementar contador, si >= umbral → cooldown
-6. Todos fallan → 503 Service Unavailable
+1. Validate API Key
+2. Hash request body → check cache
+3. Cache hit → return (log cache_hit=true)
+4. Cache miss → select active providers ordered by position
+5. For each provider:
+   a. Check state (healthy/cooldown/paused)
+   b. Check rate limit (req/min)
+   c. Check daily limit (tokens/day)
+   d. Call provider with 30s timeout
+   e. Success → cache + log + metrics + return
+   f. Failure → increment counter, if >= threshold → cooldown
+6. All fail → 503 Service Unavailable
 ```
 
 ### 6.2 Login
 
 ```
-1. GET /admin/api/auth/providers → lista providers OAuth
-2. Usuario click "Login with Google"
-3. Redirect a OAuth provider → callback con code
+1. GET /admin/api/auth/providers → list OAuth providers
+2. User clicks "Login with Google"
+3. Redirect to OAuth provider → callback with code
 4. POST /admin/api/auth/login { provider, code }
 5. Backend → Geduma API → token + user info
-6. Crear sesión local → cookie relio_session
-7. Redirect a /admin/dashboard
+6. Create local session → set relio_session cookie
+7. Redirect to /admin/dashboard
 ```
 
 ---
 
-## 7. Métricas de Éxito
+## 7. Success Metrics
 
-| Métrica | Objetivo |
+| Metric | Target |
 |---|---|
-| Tiempo de setup (desde clone hasta dashboard) | < 5 min |
-| Tests pasando | 100% |
-| Overhead del proxy | < 25ms |
-| Cobertura de providers soportados | Cualquiera con API compatible OpenAI |
-| Uptime | > 99.9% (failover automático) |
+| Setup time (clone to dashboard) | < 5 min |
+| Tests passing | 100% |
+| Proxy overhead | < 25ms |
+| Supported providers | Any OpenAI-compatible API |
+| Uptime | > 99.9% (automatic failover) |
 
 ---
 
 ## 8. Roadmap
 
-### v1.0 (Actual)
+### v1.0 (Current)
 - Core proxy + failover + circuit breaker
-- Dashboard React con gestión de providers
-- API Keys locales
-- Auditoría y métricas diarias
-- Cache persistente con TTL
+- React dashboard with provider management
+- Local API Keys
+- Audit logging and daily metrics
+- Persistent cache with configurable TTL
 - Docker multi-stage
-- Rate limiting por provider
+- Per-provider rate limiting
 
-### v2.0 (Futuro)
-- Encriptación de API keys en DB
-- Rate limiting por IP
-- Alertas y notificaciones
-- Exportación de métricas (Prometheus)
-- Múltiples usuarios
-- Webhook de eventos
+### v2.0 (Future)
+- API key encryption at rest
+- IP-based rate limiting
+- Alerts and notifications
+- Prometheus metrics export
+- Multi-user support
+- Event webhooks
 
 ---
 
-## 9. Riesgos y Mitigaciones
+## 9. Risks and Mitigations
 
-| Riesgo | Impacto | Mitigación |
+| Risk | Impact | Mitigation |
 |---|---|---|
-| Dependencia de Geduma API | Alto — sin auth no hay dashboard | Caché de sesiones, fallback a auth local (futuro) |
-| Pérdida de datos SQLite | Medio — pérdida de logs | Backup diario automático |
-| Provider LLM caído | Bajo — failover automático | Circuit breaker + múltiples fallbacks |
-| API Key comprometida | Alto — uso no autorizado | Revocación inmediata desde dashboard |
+| Geduma API dependency | High — no auth without it | Session caching, local auth fallback (future) |
+| SQLite data loss | Medium — log loss | Daily automatic backup |
+| LLM provider outage | Low — automatic failover | Circuit breaker + multiple fallbacks |
+| Compromised API Key | High — unauthorized usage | Immediate revocation from dashboard |

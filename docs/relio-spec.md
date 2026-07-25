@@ -1,39 +1,39 @@
-# Relio: LLM Relay - Especificación Técnica Completa
+# Relio: LLM Relay — Full Technical Specification
 
-**Nombre:** Relio (LLM Relay)  
-**Versión:** 1.0  
+**Name:** Relio (LLM Relay)  
+**Version:** 1.0  
 **Stack:** Node.js + Express.js + SQLite (better-sqlite3)  
-**Autenticación:** Geduma API (3 endpoints externos)  
-**BD Local:** SQLite (auditoría y configuración)  
-**Frontend:** React + Vite (auto-servido por Express)  
+**Authentication:** Geduma API (3 external endpoints)  
+**Local DB:** SQLite (audit and configuration)  
+**Frontend:** React + Vite (self-served by Express)  
 **HTTP Client:** Native `fetch` (Node 18+)  
 **Testing:** Vitest  
 **Infra:** Docker multi-stage (`docker/`)
 
 ---
 
-## 1. RESUMEN EJECUTIVO
+## 1. EXECUTIVE SUMMARY
 
-**Relio** es un proxy inteligente y minimalista que:
-- ✅ Centraliza múltiples LLM providers (OpenAI, Anthropic, Groq, etc)
-- ✅ Implementa failover automático con circuit breaker inteligente
-- ✅ Expone API compatible con OpenAI (`/v1/chat/completions`, `/v1/embeddings`, `/v1/vision`)
-- ✅ Registra cada request en SQLite para auditoría completa
-- ✅ Cachea respuestas idénticas persistentemente
-- ✅ Usa Geduma API para autenticación de usuarios (OAuth)
-- ✅ Genera API Keys locales para agentes AI
-- ✅ Sistema intuitivo para ordenar providers (Main, Fallback 1, 2, 3...)
-- ✅ Self-hosted, sin dependencias externas excepto los providers configurados
+**Relio** is an intelligent, minimalistic proxy that:
+- ✅ Centralizes multiple LLM providers (OpenAI, Anthropic, Groq, etc.)
+- ✅ Implements automatic failover with intelligent circuit breaker
+- ✅ Exposes an OpenAI-compatible API (`/v1/chat/completions`, `/v1/embeddings`)
+- ✅ Logs every request to SQLite for full audit
+- ✅ Caches identical responses persistently
+- ✅ Uses Geduma API for user authentication (OAuth)
+- ✅ Generates local API Keys for AI agents
+- ✅ Intuitive provider ordering (Main, Fallback 1, 2, 3...)
+- ✅ Self-hosted, no external dependencies beyond configured providers
 
 ---
 
-## 2. ARQUITECTURA GENERAL
+## 2. SYSTEM ARCHITECTURE
 
-### 2.1 Flujo de Requests
+### 2.1 Request Flow
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│         Cliente (Dashboard / Agente AI)                  │
+│              Client (Dashboard / AI Agent)               │
 └─────────────────────────────────────────────────────────┘
                             ▲
                             │
@@ -55,13 +55,13 @@
         │                    │                    │
     ┌───▼────────┐    ┌──────▼─────────┐   ┌────▼────┐
     │  Dashboard │    │ FailoverEngine │   │  Cache  │
-    │   Routes   │    │  (selecciona   │   │ Manager │
+    │   Routes   │    │  (selects      │   │ Manager │
     │            │    │   provider)    │   │         │
     └────────────┘    └──────┬─────────┘   └────┬────┘
                              │                  │
                     ┌────────▼──────────────────▼────┐
                     │  Circuit Breaker + Rate Limit  │
-                    │  (validación antes de enviar)  │
+                    │  (validation before sending)   │
                     └────────┬─────────────────────┘
                              │
         ┌────────────────────┴────────────────────┐
@@ -73,37 +73,38 @@
 
         DB Layer (SQLite)
         ├── providers (config)
-        ├── requests_log (auditoría)
-        ├── api_keys (keys locales)
-        ├── login_history (logs de auth)
-        ├── cache (deduplicación)
-        ├── metrics (agregados)
-        └── circuit_breaker_state (estado temporal)
+        ├── requests_log (audit)
+        ├── api_keys (local keys)
+        ├── login_history (auth logs)
+        ├── cache (deduplication)
+        ├── metrics (aggregates)
+        ├── circuit_breaker_state (temporal state)
+        └── sessions (dashboard sessions)
 ```
 
-### 2.2 Componentes Principales
+### 2.2 Core Components
 
-| Componente | Responsabilidad | Tecnología |
-|------------|-----------------|-----------|
-| **authService** | Login Geduma, validación API keys | Node.js |
-| **authMiddleware** | Validar requests entrantes | Express |
-| **failoverEngine** | Seleccionar provider según orden | Node.js |
-| **circuitBreaker** | Gestionar estado de providers | SQLite + memoria |
-| **cacheManager** | Deduplicar responses | SQLite |
-| **metricsLogger** | Registrar requests + calcular métricas | SQLite |
-| **dashboard** | UI para gestión de providers | React + Vite (auto-servido) |
-| **gedumaClient** | Cliente HTTP para Geduma API | Native fetch |
+| Component | Responsibility | Technology |
+|------------|----------------|-----------|
+| **authService** | Geduma login, API Key validation | Node.js |
+| **authMiddleware** | Validate incoming requests | Express |
+| **failoverEngine** | Select provider by order | Node.js |
+| **circuitBreaker** | Manage provider states | SQLite + memory |
+| **cacheManager** | Deduplicate responses | SQLite |
+| **metricsLogger** | Log requests + calculate metrics | SQLite |
+| **dashboard** | Provider management UI | React + Vite (self-served) |
+| **gedumaClient** | HTTP client for Geduma API | Native fetch |
 
 ---
 
-## 3. AUTENTICACIÓN: GEDUMA API
+## 3. AUTHENTICATION: GEDUMA API
 
-Relio consume **3 endpoints de Geduma API**. No maneja usuarios internamente.
+Relio consumes **3 Geduma API endpoints**. It does not manage users internally.
 
-### 3.1 Los 3 Endpoints de Geduma
+### 3.1 The 3 Geduma Endpoints
 
 #### 1. GET /api/auth/providers
-Lista de providers de login disponibles.
+List of available login providers.
 
 ```
 Request:
@@ -120,7 +121,7 @@ Response:
 ```
 
 #### 2. POST /api/auth/login
-Inicia login con un provider específico.
+Initiates login with a specific provider.
 
 ```
 Request:
@@ -144,7 +145,7 @@ Response:
 ```
 
 #### 3. GET /api/auth/user
-Obtiene datos del usuario autenticado.
+Gets authenticated user data.
 
 ```
 Request:
@@ -162,11 +163,11 @@ Response:
 
 ---
 
-## 4. BASE DE DATOS: SQLITE
+## 4. DATABASE: SQLITE
 
-### 4.1 Tabla: `providers`
+### 4.1 Table: `providers`
 
-Configuración de cada LLM provider.
+LLM provider configuration.
 
 ```sql
 CREATE TABLE providers (
@@ -176,76 +177,76 @@ CREATE TABLE providers (
   api_key TEXT NOT NULL,
   model TEXT NOT NULL,
   type TEXT NOT NULL CHECK(type IN ('chat', 'embeddings', 'vision')),
-  
-  -- Ordenamiento intuitivo (Main, Fallback 1, 2, ...)
+
+  -- Intuitive ordering (Main, Fallback 1, 2, ...)
   order_position INT NOT NULL DEFAULT 0,
   order_label TEXT,
-  
-  -- Estado
-  status TEXT NOT NULL DEFAULT 'active' 
+
+  -- Status
+  status TEXT NOT NULL DEFAULT 'active'
     CHECK(status IN ('active', 'paused', 'cooldown')),
-  
-  -- Costos por token (configurable por provider)
+
+  -- Per-token costs (configurable per provider)
   cost_per_input_token REAL DEFAULT 0,
   cost_per_output_token REAL DEFAULT 0,
 
-  -- Limites configurables
+  -- Configurable limits
   rate_limit_req_per_min INT DEFAULT 60,
   tokens_per_day INT DEFAULT 0,
   cost_per_day REAL DEFAULT 0,
-  
+
   -- Circuit Breaker
   cooldown_after_failures INT DEFAULT 5,
   cooldown_duration_seconds INT DEFAULT 300,
   current_failure_count INT DEFAULT 0,
   last_failure_at DATETIME,
   cooldown_until DATETIME,
-  
-  -- Auditoría
+
+  -- Audit
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   notes TEXT,
-  
+
   INDEX(order_position, status),
   INDEX(type, order_position),
   INDEX(status)
 );
 ```
 
-### 4.2 Tabla: `requests_log`
+### 4.2 Table: `requests_log`
 
-Cada request al proxy se registra aquí.
+Every proxy request is logged here.
 
 ```sql
 CREATE TABLE requests_log (
   id TEXT PRIMARY KEY,
   provider_id TEXT REFERENCES providers(id),
-  
+
   -- Request Info
   endpoint TEXT NOT NULL,
   request_body TEXT NOT NULL,
   origin_ip TEXT,
   origin_header TEXT,
-  
+
   -- Response Info
   status_code INT,
   response_body TEXT,
   error_message TEXT,
-  
-  -- Tokens y Costos
+
+  -- Tokens and Costs
   input_tokens INT DEFAULT 0,
   output_tokens INT DEFAULT 0,
   total_tokens INT DEFAULT 0,
   estimated_cost REAL DEFAULT 0,
-  
-  -- Timing y Auditoría
+
+  -- Timing and Audit
   request_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   response_time_ms INT,
   authenticated_via TEXT,
   cache_hit BOOLEAN DEFAULT FALSE,
   was_retry BOOLEAN DEFAULT FALSE,
   retry_count INT DEFAULT 0,
-  
+
   INDEX(provider_id, request_at),
   INDEX(request_at),
   INDEX(endpoint, request_at),
@@ -253,9 +254,9 @@ CREATE TABLE requests_log (
 );
 ```
 
-### 4.3 Tabla: `cache`
+### 4.3 Table: `cache`
 
-Deduplicación persistente de queries idénticas.
+Persistent deduplication of identical queries.
 
 ```sql
 CREATE TABLE cache (
@@ -267,15 +268,15 @@ CREATE TABLE cache (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   expires_at DATETIME,
   hit_count INT DEFAULT 1,
-  
+
   INDEX(query_hash),
   INDEX(endpoint, expires_at)
 );
 ```
 
-### 4.4 Tabla: `api_keys`
+### 4.4 Table: `api_keys`
 
-API Keys generadas localmente.
+Locally generated API Keys.
 
 ```sql
 CREATE TABLE api_keys (
@@ -286,15 +287,15 @@ CREATE TABLE api_keys (
   last_used_at DATETIME,
   revoked BOOLEAN DEFAULT FALSE,
   revoked_at DATETIME,
-  
+
   INDEX(key),
   INDEX(revoked, created_at)
 );
 ```
 
-### 4.5 Tabla: `login_history`
+### 4.5 Table: `login_history`
 
-Registra todos los intentos de login.
+Logs all login attempts.
 
 ```sql
 CREATE TABLE login_history (
@@ -307,15 +308,15 @@ CREATE TABLE login_history (
   user_agent TEXT,
   error_message TEXT,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  
+
   INDEX(email, timestamp),
   INDEX(timestamp)
 );
 ```
 
-### 4.6 Tabla: `circuit_breaker_state`
+### 4.6 Table: `circuit_breaker_state`
 
-Estado actual del circuit breaker.
+Current circuit breaker state.
 
 ```sql
 CREATE TABLE circuit_breaker_state (
@@ -325,14 +326,14 @@ CREATE TABLE circuit_breaker_state (
   last_failure_at DATETIME,
   cooldown_until DATETIME,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  
+
   INDEX(state, cooldown_until)
 );
 ```
 
-### 4.8 Tabla: `sessions`
+### 4.7 Table: `sessions`
 
-Sesiones locales de dashboard (el token Geduma es de un solo uso).
+Local dashboard sessions (Geduma token is single-use).
 
 ```sql
 CREATE TABLE sessions (
@@ -349,16 +350,16 @@ CREATE TABLE sessions (
 );
 ```
 
-### 4.9 Tabla: `metrics`
+### 4.8 Table: `metrics`
 
-Agregados diarios precalculados.
+Pre-calculated daily aggregates.
 
 ```sql
 CREATE TABLE metrics (
   id TEXT PRIMARY KEY,
   provider_id TEXT REFERENCES providers(id),
   metric_date DATE NOT NULL,
-  
+
   total_requests INT DEFAULT 0,
   total_input_tokens INT DEFAULT 0,
   total_output_tokens INT DEFAULT 0,
@@ -366,7 +367,7 @@ CREATE TABLE metrics (
   error_count INT DEFAULT 0,
   cache_hits INT DEFAULT 0,
   avg_response_time_ms REAL DEFAULT 0,
-  
+
   UNIQUE(provider_id, metric_date),
   INDEX(metric_date)
 );
@@ -374,19 +375,19 @@ CREATE TABLE metrics (
 
 ---
 
-## 5. FLUJOS DE AUTENTICACIÓN
+## 5. AUTHENTICATION FLOWS
 
-### 5.1 Flujo 1: Login en Dashboard (OAuth Geduma)
+### 5.1 Flow 1: Dashboard Login (Geduma OAuth)
 
 ```
-1. Usuario accede a http://localhost:3000/admin
-   └─> Sin autenticación → Redirige a /admin/login
+1. User visits http://localhost:3000/admin
+   └─> Not authenticated → Redirect to /admin/login
 
 2. Frontend: GET /admin/api/auth/providers
-   └─> Obtiene lista de providers de Geduma
+   └─> Gets provider list from Geduma
 
-3. Usuario hace click: "Login with Google"
-   └─> OAuth flow de Google → Obtiene authorization_code
+3. User clicks: "Login with Google"
+   └─> Google OAuth flow → Gets authorization_code
 
 4. Frontend: POST /admin/api/auth/login
    { "provider": "google", "code": "authorization_code" }
@@ -394,222 +395,213 @@ CREATE TABLE metrics (
 5. Backend → Geduma API:
    POST https://geduma-api.com/api/auth/login
 
-6. Si válido:
-   ├─ Almacena token Geduma en httpOnly cookie
-   ├─ Registra login en SQLite
-   └─ Retorna { user }
+6. If valid:
+   ├─ Store session token in httpOnly cookie
+   ├─ Log login in SQLite
+   └─ Return { user }
 
-7. Cliente redirige a /admin/dashboard
-   └─> Cookie tiene token automáticamente
+7. Client redirects to /admin/dashboard
+   └─> Cookie has token automatically
 ```
 
-### 5.2 Flujo 2: Acceso a Dashboard
+### 5.2 Flow 2: Dashboard Access
 
 ```
-Cliente hace request:
+Client makes request:
 GET /admin/api/summary
-Cookie: gedumaToken=...
+Cookie: relio_session=...
 
 Backend:
-├─ Valida cookie
-├─ Opcional: verifica con Geduma
-└─> Procesa request
+├─ Validate cookie
+├─ Check local session in SQLite
+└─> Process request
 
-Retorna datos protegidos
+Returns protected data
 ```
 
-### 5.3 Flujo 3: API Key Auth (Proxy Endpoints)
+### 5.3 Flow 3: API Key Auth (Proxy Endpoints)
 
 ```
-1. Agente AI hace request a /v1/chat/completions
+1. AI agent requests /v1/chat/completions
    Header: Authorization: Bearer llm_pk_xxx...
 
 2. authMiddleware:
-   ├─ Extrae y valida API key en SQLite
-   ├─ Verifica no revocada
-   ├─ Actualiza last_used_at
-   └─ Registra en login_history
+   ├─ Extract and validate API key in SQLite
+   ├─ Check not revoked
+   ├─ Update last_used_at
+   └─ Log in login_history
 
-3. FailoverEngine procesa normalmente
-   └─> Registra en requests_log
+3. FailoverEngine processes normally
+   └─> Log in requests_log
 ```
 
-### 5.4 Flujo 4: Logout
+### 5.4 Flow 4: Logout
 
 ```
 User: POST /admin/api/auth/logout
 Backend:
-├─ Limpia cookie gedumaToken
-├─ Registra logout en login_history
-└─> Redirige a /admin/login
+├─ Clear relio_session cookie
+├─ Log logout in login_history
+└─> Redirect to /admin/login
 ```
 
 ---
 
-## 6. FAILOVER: SELECCIÓN DE PROVIDER
+## 6. FAILOVER: PROVIDER SELECTION
 
-### 6.1 Algoritmo
+### 6.1 Algorithm
 
 ```javascript
-/**
- * Selecciona siguiente provider para request
- */
 async function selectProvider(modelType) {
-  // 1. Obtener providers activos ordenados por order_position
   const providers = await db.all(`
     SELECT * FROM providers
     WHERE type = ? AND status = 'active'
     ORDER BY order_position ASC
   `, [modelType]);
 
-  // 2. Iterar en orden hasta encontrar disponible
   for (const provider of providers) {
-    // ¿Está en cooldown?
     if (provider.cooldown_until && provider.cooldown_until > NOW()) {
-      continue;  // Saltar
+      continue;
     }
 
-    // ¿Rate limit alcanzado?
     if (await isRateLimitExceeded(provider)) {
-      continue;  // Saltar
+      continue;
     }
 
-    // ¿Tokens diarios alcanzados?
     if (await isDailyLimitExceeded(provider)) {
-      continue;  // Saltar
+      continue;
     }
 
-    // Este es el próximo a intentar
     return provider;
   }
 
-  return null;  // No hay providers disponibles
+  return null;
 }
 ```
 
-### 6.2 Orden de Providers
+### 6.2 Provider Order
 
 ```
-order_position = 0  → "Main" (primer intento)
-order_position = 1  → "Fallback 1" (segundo intento)
-order_position = 2  → "Fallback 2" (tercer intento)
-order_position = 3  → "Fallback 3" (cuarto intento)
+order_position = 0  → "Main" (first attempt)
+order_position = 1  → "Fallback 1" (second attempt)
+order_position = 2  → "Fallback 2" (third attempt)
+order_position = 3  → "Fallback 3" (fourth attempt)
 ```
 
-### 6.3 Circuit Breaker: Estados
+### 6.3 Circuit Breaker: States
 
 ```
 HEALTHY:
-├─ Usa normalmente
-├─ Cuenta fallos
-└─ Si fallos >= cooldown_after_failures → COOLDOWN
+├─ Use normally
+├─ Count failures
+└─ If failures >= cooldown_after_failures → COOLDOWN
 
 COOLDOWN:
-├─ No intenta durante cooldown_duration_seconds
-├─ Después del tiempo → vuelve a HEALTHY
-└─ Reinicia contador de fallos
+├─ Skip for cooldown_duration_seconds
+├─ After time → returns to HEALTHY
+└─ Reset failure counter
 
 PAUSED (manual):
-└─ No intenta mientras esté paused
+└─ Skip while paused
 ```
 
-### 6.4 Flujo de Failover Completo
+### 6.4 Complete Failover Flow
 
 ```
 ┌────────────────────────────────────────────────┐
-│ Cliente: POST /v1/chat/completions            │
+│ Client: POST /v1/chat/completions             │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 1. Validar autenticación (API Key)             │
+│ 1. Validate authentication (API Key)           │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 2. Buscar en cache (query_hash)                │
-│    ¿Hit? → Retorna + log cache_hit=true        │
+│ 2. Check cache (query_hash)                    │
+│    Hit? → Return + log cache_hit=true          │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 3. Seleccionar provider (orden_position)       │
-│    Obtiene: Main → Fallback 1 → Fallback 2... │
+│ 3. Select provider (order_position)            │
+│    Gets: Main → Fallback 1 → Fallback 2...    │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 4. Para cada provider en orden:                │
-│    a. ¿Está healthy? → Intenta                 │
-│    b. ¿En cooldown? → Pasa al siguiente        │
-│    c. ¿Rate limit? → Pasa al siguiente         │
-│    d. ¿Daily limit? → Pasa al siguiente        │
+│ 4. For each provider in order:                 │
+│    a. Is healthy? → Try                        │
+│    b. In cooldown? → Skip                      │
+│    c. Rate limit? → Skip                       │
+│    d. Daily limit? → Skip                      │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 5. Call a provider:                            │
-│    a. OK: Retorna response + cachea            │
-│    b. FALLA:                                   │
-│       ├─ Incrementa failure_count              │
-│       ├─ Si >= cooldown_after_failures         │
-│       │  └─ Entra en COOLDOWN                  │
-│       ├─ Registra fallo                        │
-│       └─ Intenta siguiente provider            │
+│ 5. Call provider:                              │
+│    a. OK: Return response + cache              │
+│    b. FAILS:                                   │
+│       ├─ Increment failure_count               │
+│       ├─ If >= cooldown_after_failures         │
+│       │  └─ Enter COOLDOWN                     │
+│       ├─ Log failure                           │
+│       └─ Try next provider                     │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 6. Si TODOS fallan:                            │
-│    Retorna 503 + error detallado               │
+│ 6. If ALL fail:                                │
+│    Return 503 + detailed error                 │
 └────────────────────────────────────────────────┘
                     ▼
 ┌────────────────────────────────────────────────┐
-│ 7. Registra request_log (para auditoría)       │
+│ 7. Log request_log (for audit)                 │
 └────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 7. ENDPOINTS API
+## 7. API ENDPOINTS
 
-### 7.1 Autenticación
+### 7.1 Authentication
 
 #### GET /admin/api/auth/providers
-Obtiene providers de login disponibles.
+Gets available login providers.
 
 ```javascript
-// Sin requiere autenticación
-// Retorna: { providers: [...] }
+// No auth required
+// Returns: { providers: [...] }
 ```
 
 #### POST /admin/api/auth/login
-Inicia login con Geduma.
+Initiates login with Geduma.
 
 ```javascript
-// Sin requiere autenticación
+// No auth required
 // Body: { "provider": "google", "code": "..." }
-// Retorna: { user: { email, name, ... } }
+// Returns: { user: { email, name, ... } }
 ```
 
 #### POST /admin/api/auth/logout
-Termina sesión.
+Ends session.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Retorna: { success: true }
+// Requires: relio_session cookie
+// Returns: { success: true }
 ```
 
 ### 7.2 Dashboard: Providers
 
 #### GET /admin/api/providers?type=chat
-Lista providers ordenados.
+Lists ordered providers.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Query params: type ('chat', 'embeddings', 'vision' - opcional)
-// Retorna: [ { id, name, model, order_position, order_label, status, ... } ]
+// Requires: relio_session cookie
+// Query params: type ('chat', 'embeddings', 'vision' - optional)
+// Returns: [ { id, name, model, order_position, order_label, status, ... } ]
 ```
 
 #### POST /admin/api/providers
-Crear nuevo provider.
+Creates a new provider.
 
 ```javascript
-// Requiere: gedumaToken en cookie
+// Requires: relio_session cookie
 // Body: {
 //   "name": "OpenAI GPT-4",
 //   "api_url": "https://api.openai.com/v1",
@@ -623,48 +615,48 @@ Crear nuevo provider.
 //   "cooldown_after_failures": 5,
 //   "cooldown_duration_seconds": 300
 // }
-// Retorna: { success: true, provider_id: "..." }
+// Returns: { success: true, provider_id: "..." }
 ```
 
 #### PATCH /admin/api/providers/:id
-Editar provider (sin cambiar orden).
+Edits provider (without changing order).
 
 ```javascript
-// Requiere: gedumaToken en cookie
+// Requires: relio_session cookie
 // Body: { "status": "paused", "rate_limit_req_per_min": 120, ... }
-// NO permite cambiar: order_position, order_label
-// Retorna: { success: true }
+// Does NOT allow: order_position, order_label
+// Returns: { success: true }
 ```
 
 #### PATCH /admin/api/providers/reorder
-Cambiar orden de providers.
+Changes provider order.
 
 ```javascript
-// Requiere: gedumaToken en cookie
+// Requires: relio_session cookie
 // Body: { "provider_ids": ["id_1", "id_3", "id_2"] }
-// Actualiza order_position de cada uno
-// Auto-regenera order_label (Main, Fallback 1, ...)
-// Retorna: { success: true }
+// Updates order_position for each
+// Auto-regenerates order_label (Main, Fallback 1, ...)
+// Returns: { success: true }
 ```
 
 #### DELETE /admin/api/providers/:id
-Eliminar provider.
+Deletes provider.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Reorganiza automáticamente order_position de otros providers
-// Retorna: { success: true }
+// Requires: relio_session cookie
+// Auto-reorganizes order_position for remaining providers
+// Returns: { success: true }
 ```
 
-### 7.3 Dashboard: Métricas
+### 7.3 Dashboard: Metrics
 
 #### GET /admin/api/metrics?from=2024-01-01&to=2024-01-31
-Métricas por provider en rango.
+Per-provider metrics in a date range.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Query: from, to (fechas ISO)
-// Retorna: {
+// Requires: relio_session cookie
+// Query: from, to (ISO dates)
+// Returns: {
 //   "period": "2024-01-01 to 2024-01-31",
 //   "providers": [
 //     {
@@ -683,48 +675,46 @@ Métricas por provider en rango.
 // }
 ```
 
-#### GET /admin/api/logs?limit=50&offset=0
-Últimos requests.
+#### GET /admin/api/metrics/logs?limit=50&offset=0
+Recent requests.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Query: limit, offset (para paginación)
-// Retorna: [ { id, provider_id, endpoint, status_code, ... } ]
+// Requires: relio_session cookie
+// Query: limit, offset (for pagination)
+// Returns: [ { id, provider_id, endpoint, status_code, ... } ]
 ```
 
-#### GET /admin/api/health
-Health check del proxy.
+#### GET /admin/api/metrics/health
+Proxy health check.
 
 ```javascript
-// Sin requiere autenticación (puede ser usado por monitoreo)
-// Retorna: {
+// No auth required (can be used by monitoring)
+// Returns: {
 //   "status": "healthy",
 //   "providers_healthy": 3,
 //   "providers_cooldown": 1,
-//   "providers_paused": 0,
-//   "uptime_seconds": 86400,
-//   "db_size_mb": 2.3
+//   "providers_paused": 0
 // }
 ```
 
 ### 7.4 Dashboard: API Keys
 
 #### POST /admin/api/auth/api-keys
-Crear nueva API Key.
+Creates a new API Key.
 
 ```javascript
-// Requiere: gedumaToken en cookie
+// Requires: relio_session cookie
 // Body: { "name": "Production App" }
-// Retorna: { "apiKey": "llm_pk_xxx...", "message": "..." }
-// NOTA: Mostrar key solo una vez
+// Returns: { "apiKey": "llm_pk_xxx...", "message": "..." }
+// NOTE: Key shown only once
 ```
 
 #### GET /admin/api/auth/api-keys
-Listar API Keys (sanitizadas).
+Lists API Keys (sanitized).
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Retorna: [
+// Requires: relio_session cookie
+// Returns: [
 //   {
 //     "key_preview": "llm_pk_...xxx",
 //     "name": "Production App",
@@ -736,51 +726,52 @@ Listar API Keys (sanitizadas).
 ```
 
 #### DELETE /admin/api/auth/api-keys/:keyPreview
-Revocar API Key.
+Revokes an API Key.
 
 ```javascript
-// Requiere: gedumaToken en cookie
-// Param: keyPreview (ej: "llm_pk_...xxx")
-// Retorna: { success: true }
+// Requires: relio_session cookie
+// Param: keyPreview (e.g. "llm_pk_...xxx")
+// Returns: { success: true }
 ```
 
-### 7.5 Proxy Endpoints (Públicos)
+### 7.5 Proxy Endpoints (Public)
 
 #### POST /v1/chat/completions
-Compatible OpenAI.
+OpenAI-compatible chat/vision.
 
 ```javascript
-// Requiere: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer llm_pk_xxx...
 // Body: { "model": "gpt-4", "messages": [...], ... }
-// Retorna: Response idéntica a OpenAI API
+// Returns: OpenAI-identical response
 ```
 
 #### POST /v1/embeddings
-Compatible OpenAI.
+OpenAI-compatible embeddings.
 
 ```javascript
-// Requiere: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer llm_pk_xxx...
 // Body: { "model": "text-embedding-ada-002", "input": "...", ... }
-// Retorna: Response idéntica a OpenAI API
+// Returns: OpenAI-identical response
 ```
 
-> **Nota:** Vision multimodal se maneja dentro de `/v1/chat/completions`
-> detectando automáticamente contenido de imagen en `messages`. No hay
-> endpoint `/v1/vision` separado.
+> **Note:** Multimodal vision is handled inside `/v1/chat/completions`
+> by automatically detecting image content in `messages`. There is no
+> separate `/v1/vision` endpoint.
 
 ---
 
-## 8. VARIABLES DE ENTORNO
+## 8. ENVIRONMENT VARIABLES
 
 ```env
 # Geduma API Integration
 GEDUMA_API_URL=https://geduma-api.com
 GEDUMA_API_TOKEN=your_geduma_api_token_here
+APP_BASE_URL=http://localhost:3000
 
 # SQLite Database
 DB_PATH=./db/db.sqlite
 
-# Cache TTL (segundos, default 30 días = 2592000)
+# Cache TTL (seconds, default 30 days = 2592000)
 CACHE_TTL_SECONDS=2592000
 
 # Node Environment
@@ -796,22 +787,22 @@ COOKIE_HTTP_ONLY=true
 
 ---
 
-## 9. ESTRUCTURA DE CARPETAS
+## 9. FOLDER STRUCTURE
 
 ```
 relio/
 ├── src/
 │   ├── index.js                    # Entry point (Express)
-│   ├── config.js                   # Config desde .env
+│   ├── config.js                   # Env var config
 │   ├── db.js                       # SQLite setup + migrations
 │   ├── services/
-│   │   ├── authService.js          # Geduma API + sesiones locales
-│   │   ├── failoverEngine.js       # Selección de provider
-│   │   ├── circuitBreaker.js       # Estados y cooldown
-│   │   ├── cacheManager.js         # Deduplicación con TTL
-│   │   └── metricsLogger.js        # Logging y agregados diarios
+│   │   ├── authService.js          # Geduma API + local sessions
+│   │   ├── failoverEngine.js       # Provider selection
+│   │   ├── circuitBreaker.js       # States and cooldown
+│   │   ├── cacheManager.js         # Deduplication with TTL
+│   │   └── metricsLogger.js        # Logging and daily aggregates
 │   ├── middleware/
-│   │   └── authMiddleware.js       # Validación cookie/API Key
+│   │   └── authMiddleware.js       # Cookie/API Key validation
 │   ├── routes/
 │   │   ├── auth.routes.js          # /admin/api/auth/*
 │   │   ├── providers.routes.js     # /admin/api/providers/*
@@ -819,179 +810,170 @@ relio/
 │   │   ├── keys.routes.js          # /admin/api/auth/api-keys/*
 │   │   └── proxy.routes.js         # /v1/chat/completions, /v1/embeddings
 │   ├── handlers/
-│   │   ├── requestHandler.js       # Procesa requests proxy
-│   │   └── dashboardHandler.js     # Endpoints dashboard
+│   │   ├── requestHandler.js       # Proxy request processing
+│   │   └── dashboardHandler.js     # Dashboard endpoints
 │   ├── utils/
-│   │   ├── logger.js               # Logs a archivo
-│   │   └── validators.js           # Validación de inputs
+│   │   ├── logger.js               # File logging
+│   │   └── validators.js           # Input validation
 │   └── external/
-│       └── gedumaClient.js         # Cliente Geduma con native fetch
+│       └── gedumaClient.js         # Geduma API client (native fetch)
 ├── frontend/
 │   ├── src/
-│   │   ├── main.jsx                # Entry point React
-│   │   ├── App.jsx                 # Router principal
+│   │   ├── main.jsx                # React entry point
+│   │   ├── App.jsx                 # Main router
 │   │   ├── components/
-│   │   │   ├── Login.jsx           # Pantalla de login
-│   │   │   ├── Dashboard.jsx       # Layout protegido
-│   │   │   ├── ProvidersList.jsx   # Lista + drag-and-drop
-│   │   │   ├── ProviderForm.jsx    # Crear/editar provider
-│   │   │   ├── Metrics.jsx         # Métricas y gráficas
-│   │   │   ├── ApiKeys.jsx         # Gestión de API Keys
-│   │   │   └── Logs.jsx            # Últimos requests
-│   │   └── style.css               # Estilos globales
+│   │   │   ├── Login.jsx           # Login screen
+│   │   │   ├── Dashboard.jsx       # Protected layout
+│   │   │   ├── ProvidersList.jsx   # List + reorder
+│   │   │   ├── ProviderForm.jsx    # Create/edit provider
+│   │   │   ├── Metrics.jsx         # Metrics and stats
+│   │   │   ├── ApiKeys.jsx         # API Key management
+│   │   │   └── Logs.jsx            # Recent requests
+│   │   └── style.css               # Global styles
 │   ├── index.html                  # HTML template
-│   ├── vite.config.js              # Vite config (proxy a Express en dev)
-│   └── package.json                # Dependencias frontend
+│   ├── vite.config.js              # Vite config (proxy to Express in dev)
+│   └── package.json                # Frontend dependencies
 ├── docker/
 │   ├── Dockerfile                  # Multi-stage: build frontend + backend
-│   ├── docker-compose.yml          # Servicio relio
-│   └── .dockerignore               # Ignorados para Docker
+│   ├── docker-compose.yml          # Relio service
+│   └── .dockerignore               # Docker ignore rules
 ├── db/
-│   ├── db.sqlite                   # Base de datos (git-ignored)
-│   ├── migrations/                 # Migraciones SQL versionadas
-│   └── backups/                    # Backups automáticos
+│   ├── db.sqlite                   # Database (git-ignored)
+│   ├── migrations/                 # Versioned SQL migrations
+│   └── backups/                    # Automatic backups
 ├── logs/
-│   ├── app.log                     # Logs de aplicación
-│   └── archive/                    # Logs comprimidos antiguos
+│   ├── app.log                     # Application logs
+│   └── archive/                    # Compressed old logs
 ├── .env.example                    # Template variables
 ├── .gitignore
-├── package.json                    # Dependencias backend
+├── package.json                    # Backend dependencies
 └── README.md
 ```
 
 ---
 
-## 10. FLUJO COMPLETO: LOGIN
+## 10. COMPLETE LOGIN FLOW
 
 ```
-1. Usuario en http://localhost:3000/admin
+1. User at http://localhost:3000/admin
    └─> GET /admin/api/auth/providers
-       └─> Backend llama Geduma
-       └─> Frontend muestra botones (Google, GitHub, etc)
+       └─> Backend calls Geduma
+       └─> Frontend shows buttons (Google, GitHub, etc)
 
-2. Usuario: "Login with Google"
-   └─> OAuth flow de Google → authorization_code
+2. User: "Login with Google"
+   └─> OAuth flow → authorization_code
 
 3. Frontend: POST /admin/api/auth/login
    { "provider": "google", "code": "..." }
 
 4. Backend:
    └─> POST https://geduma-api.com/api/auth/login
-   └─> Geduma valida
-   └─> Retorna { success: true, token, user }
+   └─> Geduma validates
+   └─> Returns { success: true, token, user }
 
 5. Backend:
-   ├─ Almacena token en httpOnly cookie
-   ├─ Registra login en SQLite
-   └─ Retorna { user }
+   ├─ Store session in httpOnly cookie
+   ├─ Log login in SQLite
+   └─ Return { user }
 
 6. Frontend:
-   ├─ localStorage.removeItem('jwt') (si existía)
-   ├─ Redirige a /admin/dashboard
-   └─> Cookie tiene token automáticamente
+   └─> Redirect to /admin/dashboard
 
-7. Requests posteriores:
+7. Subsequent requests:
    GET /admin/api/summary
-   Cookie: gedumaToken=... (automático)
-   └─> Backend valida, procesa
+   Cookie: relio_session=... (automatic)
+   └─> Backend validates, processes
 ```
 
 ---
 
-## 11. FLUJO COMPLETO: PROXY + FAILOVER
+## 11. COMPLETE PROXY + FAILOVER FLOW
 
 ```
-1. Agente AI: POST /v1/chat/completions
+1. AI agent: POST /v1/chat/completions
    Header: Authorization: Bearer llm_pk_xxx...
    Body: { "model": "gpt-4", "messages": [...] }
 
 2. Backend - authMiddleware:
-   ├─ Extrae API key: "llm_pk_xxx..."
-   ├─ Busca en SQLite: api_keys
-   ├─ Valida: no revocada, existe
-   └─> Continúa a siguiente paso
+   ├─ Extract API key: "llm_pk_xxx..."
+   ├─ Lookup in SQLite: api_keys
+   ├─ Validate: not revoked, exists
+   └─> Continue to next step
 
 3. Backend - cacheManager:
-   ├─ Calcula query_hash
-   ├─ Busca en cache
-   ├─ ¿Hit? Retorna + cache_hit=true
-   └─> Si miss, continúa
+   ├─ Calculate query_hash
+   ├─ Check cache
+   ├─ Hit? Return + cache_hit=true
+   └─> If miss, continue
 
 4. Backend - failoverEngine:
-   ├─ Obtiene providers por type = 'chat'
-   ├─ Ordena por order_position
-   └─> Para cada provider en orden:
+   ├─ Get providers by type = 'chat'
+   ├─ Order by order_position
+   └─> For each provider in order:
 
-5. Primer intento (order_position = 0 "Main"):
-   ├─ Verifica circuitBreaker (¿healthy?)
-   ├─ Verifica rate limits
-   ├─ Intenta call con timeout 30s
-   ├─ OK → Retorna response + cachea
-   └─> Si FALLA:
-       ├─ Incrementa failure_count
-       ├─ Si >= cooldown_after_failures
-       │  └─ Entra en COOLDOWN
-       ├─ Registra fallo en SQLite
-       └─> Intenta siguiente provider
+5. First attempt (order_position = 0 "Main"):
+   ├─ Check circuitBreaker (healthy?)
+   ├─ Check rate limits
+   ├─ Call with 30s timeout
+   ├─ OK → Return response + cache
+   └─> If FAILS:
+       ├─ Increment failure_count
+       ├─ If >= cooldown_after_failures → COOLDOWN
+       ├─ Log failure in SQLite
+       └─> Try next provider
 
-6. Segundo intento (order_position = 1 "Fallback 1"):
-   └─> Mismo flujo que paso 5
-
-7. Tercer intento (order_position = 2 "Fallback 2"):
-   └─> Mismo flujo que paso 5
-
-8. Si TODOS fallan:
+6. If all fail:
    ├─ 503 Service Unavailable
-   ├─ Error detallado de qué falló
-   └─> Registra en requests_log
+   ├─ Detailed error message
+   └─> Log in requests_log
 
-9. Si alguno tiene éxito:
-   ├─ Registra en requests_log (provider_id, tokens, cost, tiempo)
-   ├─ Actualiza metrics agregados
-   ├─ Cachea response
-   └─> Retorna al cliente
+7. If success:
+   ├─ Log in requests_log (provider_id, tokens, cost, time)
+   ├─ Update daily metrics
+   ├─ Cache response
+   └─> Return to client
 ```
 
 ---
 
-## 12. MÉTRICAS Y AUDITORÍA
+## 12. METRICS AND AUDIT
 
-### 12.1 Métricas Automáticas
+### 12.1 Automatic Metrics
 
-**Por cada request:**
-- Tokens entrada/salida
-- Tiempo de respuesta
-- Provider utilizado
+**Per request:**
+- Input/output tokens
+- Response time
+- Provider used
 - Cache hit/miss
-- Autenticación usada
+- Auth method used
 
-**Agregados diarios (tabla metrics):**
+**Daily aggregates (metrics table):**
 - Total requests
 - Total tokens
-- Costo estimado
+- Estimated cost
 - Error rate
-- Tiempo promedio respuesta
-- Efectividad del caché
+- Average response time
+- Cache effectiveness
 
-**Globales:**
-- Costo total/día
-- Distribución de carga
-- Uptime por provider
-- Hit rate del caché
+**Global:**
+- Total cost/day
+- Load distribution
+- Per-provider uptime
+- Cache hit rate
 
-### 12.2 Auditoría: Login History
+### 12.2 Audit: Login History
 
 ```sql
-SELECT email, method, provider, status, timestamp 
-FROM login_history 
-ORDER BY timestamp DESC 
+SELECT email, method, provider, status, timestamp
+FROM login_history
+ORDER BY timestamp DESC
 LIMIT 50;
 ```
 
-### 12.3 Auditoría: Requests
+### 12.3 Audit: Requests
 
 ```sql
-SELECT 
+SELECT
   request_at,
   provider_id,
   endpoint,
@@ -1001,152 +983,152 @@ SELECT
   response_time_ms,
   cache_hit,
   authenticated_via
-FROM requests_log 
-ORDER BY request_at DESC 
+FROM requests_log
+ORDER BY request_at DESC
 LIMIT 100;
 ```
 
 ---
 
-## 13. MANEJO DE DATOS Y ROTACIÓN
+## 13. DATA MANAGEMENT AND ROTATION
 
-### 13.1 Retención de Datos
+### 13.1 Data Retention
 
-- **requests_log:** 90 días
-- **cache:** 30 días (TTL por entry)
-- **login_history:** 90 días
-- **metrics:** 365 días (agregados)
-- **circuit_breaker_state:** Temporal (sin retención)
+- **requests_log:** 90 days
+- **cache:** 30 days (TTL per entry)
+- **login_history:** 90 days
+- **metrics:** 365 days (aggregates)
+- **circuit_breaker_state:** Temporal (no retention)
+- **sessions:** 7 days (expired sessions)
 
-### 13.2 Backup Automático
+### 13.2 Automatic Backup
 
 ```
-Cada día a las 02:00 AM:
+Every day at 02:00 AM:
 ├─ Backup: cp db.sqlite → backups/db-YYYY-MM-DD.sqlite
-├─ Comprimir backups antiguos
-├─ Mantener entre 2-10 backups (configurable)
-├─ Limpiar logs de 90+ días
-└─ Archivar logs viejos a logs/archive/
+├─ Keep between 2-10 backups (configurable)
+├─ Clean logs older than 90 days
+├─ Archive old logs to logs/archive/
+└─ Clean expired sessions
 ```
 
 ---
 
-## 14. PERFORMANCE Y OVERHEAD
+## 14. PERFORMANCE AND OVERHEAD
 
-### 14.1 Latencia Esperada
+### 14.1 Expected Latency
 
 ```
-Lookup en BD providers:              ~2-5ms
-Request routing + failover logic:    ~5-10ms
-Cache lookup:                        ~1-3ms
-Call a provider (HTTP):              ~1,000-5,000ms
-Logging a DB (async):                ~5-10ms
+Provider DB lookup:                    ~2-5ms
+Request routing + failover logic:      ~5-10ms
+Cache lookup:                          ~1-3ms
+Call to provider (HTTP):               ~1,000-5,000ms
+Logging to DB:                         ~5-10ms
 
-TOTAL OVERHEAD:                      ~15-25ms (0.3%-2.5% del total)
+TOTAL OVERHEAD:                        ~15-25ms (0.3%-2.5% of total)
 ```
 
-### 14.2 Optimizaciones Implementadas
+### 14.2 Optimizations
 
-- ✅ In-memory cache para providers (refresh c/60s)
-- ✅ Índices estratégicos en SQLite
-- ✅ Async/await nativo en Express
-- ✅ Circuit breaker en memoria + sincronización a BD
-- ✅ Logging asincrónico
-
----
-
-## 15. CHECKLIST DE IMPLEMENTACIÓN V1
-
-- [ ] Setup Express.js + better-sqlite3 + native fetch
-- [ ] Crear todas las tablas (9 tablas: providers, requests_log, cache, api_keys, login_history, circuit_breaker_state, sessions, metrics + migraciones)
-- [ ] Implementar authService.js (login Geduma, sesiones locales)
-- [ ] Implementar authMiddleware.js (cookie para dashboard, API Key para proxy)
-- [ ] Implementar failoverEngine.js
-- [ ] Implementar circuitBreaker.js
-- [ ] Implementar cacheManager.js (TTL configurable)
-- [ ] Implementar metricsLogger.js
-- [ ] Crear endpoints auth (/admin/api/auth/*)
-- [ ] Crear endpoints providers (/admin/api/providers/*)
-- [ ] Crear endpoints metrics (/admin/api/metrics/*)
-- [ ] Crear endpoints keys (/admin/api/auth/api-keys/*)
-- [ ] Crear endpoints proxy (/v1/chat/completions, /v1/embeddings)
-- [ ] Setup React + Vite en frontend/
-- [ ] Implementar Login.jsx
-- [ ] Implementar Dashboard.jsx + navegación
-- [ ] Implementar ProvidersList.jsx + drag-and-drop
-- [ ] Implementar ProviderForm.jsx
-- [ ] Implementar Metrics.jsx
-- [ ] Implementar ApiKeys.jsx
-- [ ] Implementar Logs.jsx
-- [ ] Backend auto-sirve frontend build (express.static)
-- [ ] Agregar variables .env.example
-- [ ] Crear Dockerfile multi-stage en docker/
-- [ ] Crear docker-compose.yml en docker/
-- [ ] Tests con Vitest (unit + integración)
-- [ ] Crear README.md
+- ✅ In-memory provider cache (refresh every 60s)
+- ✅ Strategic SQLite indexes
+- ✅ Native async/await in Express
+- ✅ Circuit breaker in memory + sync to DB
+- ✅ Async logging
 
 ---
 
-## 16. SEGURIDAD
+## 15. V1 IMPLEMENTATION CHECKLIST
 
-- ✅ API Keys solo se muestran al crear (no se recuperan)
-- ✅ Auditoría completa de accesos (login_history, requests_log)
-- ✅ Validación de todos los inputs (express-validator o manual)
-- ✅ httpOnly cookies para tokens de sesión
-- ✅ Rate limiting por IP (agregar después)
-- ✅ Encriptación de API keys en DB (agregar después)
+- [x] Setup Express.js + better-sqlite3 + native fetch
+- [x] Create all tables (9 tables)
+- [x] Implement authService.js (Geduma login, local sessions)
+- [x] Implement authMiddleware.js (cookie for dashboard, API Key for proxy)
+- [x] Implement failoverEngine.js
+- [x] Implement circuitBreaker.js
+- [x] Implement cacheManager.js (configurable TTL)
+- [x] Implement metricsLogger.js
+- [x] Create auth endpoints (/admin/api/auth/*)
+- [x] Create providers endpoints (/admin/api/providers/*)
+- [x] Create metrics endpoints (/admin/api/metrics/*)
+- [x] Create keys endpoints (/admin/api/auth/api-keys/*)
+- [x] Create proxy endpoints (/v1/chat/completions, /v1/embeddings)
+- [x] Setup React + Vite in frontend/
+- [x] Implement Login.jsx
+- [x] Implement Dashboard.jsx + navigation
+- [x] Implement ProvidersList.jsx + drag-and-drop
+- [x] Implement ProviderForm.jsx
+- [x] Implement Metrics.jsx
+- [x] Implement ApiKeys.jsx
+- [x] Implement Logs.jsx
+- [x] Backend self-serves frontend build (express.static)
+- [x] Add .env.example
+- [x] Create Dockerfile multi-stage in docker/
+- [x] Create docker-compose.yml in docker/
+- [x] Tests with Vitest (unit + integration)
+- [x] Create README.md
 
 ---
 
-## 17. EJEMPLO: CREAR PROVIDER Y USAR
+## 16. SECURITY
 
-### 17.1 Usuario crea provider
+- ✅ API Keys shown only at creation (never retrieved)
+- ✅ Full access audit (login_history, requests_log)
+- ✅ Input validation on all endpoints
+- ✅ httpOnly cookies for session tokens
+- ⬜ IP-based rate limiting (planned)
+- ⬜ API key encryption at rest (planned)
+
+---
+
+## 17. EXAMPLE: CREATE PROVIDER AND USE
+
+### 17.1 User creates first provider
 
 ```
 Dashboard:
 1. Click "Add Provider"
-2. Completa:
+2. Fill in:
    - Name: "OpenAI GPT-4"
    - API URL: "https://api.openai.com/v1"
    - API Key: "sk-..."
    - Model: "gpt-4"
    - Type: "chat"
    - Rate limit: 60 req/min
-   - Tokens/day: 0 (sin limite)
+   - Tokens/day: 0 (no limit)
    - Cooldown after failures: 5
    - Cooldown duration: 300s
 
 3. Click "Create"
-4. Provider se crea con order_position = 0 ("Main")
+4. Provider created with order_position = 0 ("Main")
 ```
 
-### 17.2 Usuario crea segunda provider
+### 17.2 User creates second provider
 
 ```
 Dashboard:
 1. Click "Add Provider"
-2. Completa datos de Anthropic Claude
+2. Fill in Anthropic Claude details
 3. Click "Create"
-4. Provider se crea con order_position = 1 ("Fallback 1")
+4. Provider created with order_position = 1 ("Fallback 1")
 ```
 
-### 17.3 Usuario genera API Key
+### 17.3 User generates API Key
 
 ```
 Dashboard:
 1. Click "Manage API Keys"
 2. Click "Create New Key"
-3. Nombre: "My AI Agent"
+3. Name: "My AI Agent"
 4. Click "Create"
-5. Muestra: "llm_pk_abc123def456..."
-6. Mensaje: "Save this key now, you won't see it again"
-7. Usuario copia la key
+5. Shows: "llm_pk_abc123def456..."
+6. Message: "Save this key now, you won't see it again"
+7. User copies the key
 ```
 
-### 17.4 Agente AI usa API Key
+### 17.4 AI Agent uses API Key
 
 ```javascript
-// En el agente/app
 const response = await fetch('http://localhost:3000/v1/chat/completions', {
   method: 'POST',
   headers: {
@@ -1156,31 +1138,27 @@ const response = await fetch('http://localhost:3000/v1/chat/completions', {
   body: JSON.stringify({
     model: 'gpt-4',
     messages: [
-      { role: 'user', content: 'Hola, ¿cómo estás?' }
+      { role: 'user', content: 'Hello, how are you?' }
     ]
   })
 });
 
-// Response es idéntica a OpenAI API
 const data = await response.json();
 console.log(data.choices[0].message.content);
 ```
 
-### 17.5 Failover en Acción
+### 17.5 Failover in Action
 
 ```
-Agente hace request a /v1/chat/completions
+Agent requests /v1/chat/completions
 
-Relio intenta en orden:
+Relio tries in order:
 1. OpenAI (order_position=0, "Main")
-   └─> Falla: rate limit exceeded
+   └─> Fails: rate limit exceeded
 
 2. Anthropic Claude (order_position=1, "Fallback 1")
-   └─> OK: Retorna respuesta + cachea
+   └─> OK: Returns response + caches
 
-Agente recibe respuesta idéntica a OpenAI API
-(No sabe que vino de Anthropic)
+Agent receives OpenAI-identical response
+(Does not know it came from Anthropic)
 ```
-
----
-

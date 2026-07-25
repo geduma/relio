@@ -5,8 +5,9 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
+    "build": "cd frontend && npm run build",
+    "dev": "npm run build && node --watch src/index.js",
+    "start": "npm run build && node src/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

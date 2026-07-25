@@ -1,59 +1,59 @@
 # AGENTS.md — Relio
 
-Instrucciones para asistentes AI que trabajen en este código.
+Instructions for AI assistants working on this codebase.
 
 ## Stack
 
 - **Runtime:** Node.js 18+ (ESM — `"type": "module"`)
 - **Backend:** Express.js 4.x
-- **DB:** better-sqlite3 (síncrono, sin ORM)
-- **Frontend:** React 18 + Vite 5 (sin TypeScript)
+- **DB:** better-sqlite3 (synchronous, no ORM)
+- **Frontend:** React 18 + Vite 5 (no TypeScript)
 - **HTTP:** Native `fetch` (no axios)
-- **Auth:** Geduma API (OAuth) + API Keys locales
+- **Auth:** Geduma API (OAuth) + local API Keys
 - **Testing:** Vitest
-- **Docker:** multi-stage en `docker/`
+- **Docker:** multi-stage in `docker/`
 
-## Convenciones de Código
+## Code Conventions
 
-- **Sin comentarios** en código fuente (salvo jsdocs si es necesario)
-- **ESM** — usar `import`/`export`, no `require`
-- **Nombres de archivos:** kebab-case (`auth.routes.js`, `cacheManager.js`)
-- **Nombres de componentes React:** PascalCase (`Login.jsx`, `ProvidersList.jsx`)
-- **Variables y funciones:** camelCase
-- **Constantes en mayúscula** solo para valores mágicos exportados
-- **Sin TypeScript** — JS plano con JSDoc opcional para tipos complejos
+- **No comments** in source code (JSDoc allowed where needed)
+- **ESM** — use `import`/`export`, never `require`
+- **Filenames:** kebab-case (`auth.routes.js`, `cacheManager.js`)
+- **React component names:** PascalCase (`Login.jsx`, `ProvidersList.jsx`)
+- **Variables and functions:** camelCase
+- **Constants:** UPPER_CASE only for exported magic values
+- **No TypeScript** — plain JS with optional JSDoc for complex types
 
-## Base de Datos
+## Database
 
-Se usa `better-sqlite3` con helpers en `src/db.js`:
+Uses `better-sqlite3` with helper functions in `src/db.js`:
 
 ```js
 import { dbAll, dbGet, dbRun, dbExec, dbTransaction } from '../db.js'
 
-// Consultas
+// Queries
 const rows = dbAll('SELECT * FROM providers WHERE type = ?', ['chat'])
 const row  = dbGet('SELECT * FROM providers WHERE id = ?', [id])
 const result = dbRun('UPDATE providers SET name = ? WHERE id = ?', [name, id])
 ```
 
-- **No** usar `db.prepare().all()` directamente — siempre usar helpers
-- **Transacciones** con `dbTransaction(fn)`
-- **WAL mode** activado por defecto
-- **`:memory:`** para tests
+- **Never** use `db.prepare().all()` directly — always use helpers
+- **Transactions** via `dbTransaction(fn)`
+- **WAL mode** enabled by default
+- **`:memory:`** for tests
 
-## Arquitectura
+## Architecture
 
 ```
 src/
-├── index.js              # Express setup, rutas, static, error handler
-├── config.js             # Getters lazy de env vars
-├── db.js                 # Helpers SQLite + migraciones
-├── services/             # Lógica pura (sin Express)
-│   ├── authService.js    # Geduma login, sesiones, API keys
-│   ├── failoverEngine.js # Selección de providers, rate/daily limit
-│   ├── circuitBreaker.js # Estados healthy/cooldown/paused
+├── index.js              # Express setup, routes, static, error handler
+├── config.js             # Lazy env var getters
+├── db.js                 # SQLite helpers + migrations
+├── services/             # Pure logic (no Express)
+│   ├── authService.js    # Geduma login, sessions, API keys
+│   ├── failoverEngine.js # Provider selection, rate/daily limits
+│   ├── circuitBreaker.js # healthy/cooldown/paused states
 │   ├── cacheManager.js   # Hash + TTL cache
-│   └── metricsLogger.js  # Logging + métricas diarias
+│   └── metricsLogger.js  # Logging + daily metrics
 ├── middleware/
 │   └── authMiddleware.js # Cookie session + API Key validation
 ├── routes/               # Express routers
@@ -66,129 +66,129 @@ src/
 │   ├── requestHandler.js # Cache → failover → response
 │   └── dashboardHandler.js
 ├── external/
-│   └── gedumaClient.js   # Native fetch a Geduma API
+│   └── gedumaClient.js   # Native fetch to Geduma API
 └── utils/
-    ├── logger.js         # App logger a archivo
+    ├── logger.js         # File app logger
     └── validators.js     # URL, type, sanitize
 ```
 
-### Flujo de un Request Proxy
+### Proxy Request Flow
 
-1. `proxy.routes.js` recibe POST → `authMiddleware.requireApiKey`
+1. `proxy.routes.js` receives POST → `authMiddleware.requireApiKey`
 2. `requestHandler.processRequest()`:
-   - Calcula `queryHash` → busca en cache
-   - Cache hit → retorna inmediatamente
-   - Cache miss → `selectProviders(modelType)` ordenados por `order_position`
-   - Para cada provider: verifica `isProviderAvailable()`, `isRateLimitExceeded()`, `isDailyLimitExceeded()`
-   - `callProvider()` con timeout 30s
-   - Éxito → `recordSuccess()`, `setCache()`, `logRequest()`, `updateMetrics()`
-   - Falla → `recordFailure()`, siguiente provider
-3. Todos fallan → 503
+   - Computes `queryHash` → checks cache
+   - Cache hit → returns immediately
+   - Cache miss → `selectProviders(modelType)` ordered by `order_position`
+   - For each provider: checks `isProviderAvailable()`, `isRateLimitExceeded()`, `isDailyLimitExceeded()`
+   - `callProvider()` with 30s timeout
+   - Success → `recordSuccess()`, `setCache()`, `logRequest()`, `updateMetrics()`
+   - Failure → `recordFailure()`, next provider
+3. All failed → 503
 
-### Flujo de Login
+### Login Flow
 
-1. `GET /admin/api/auth/providers` → Geduma API → botones OAuth
-2. Usuario click → redirect a OAuth provider → callback a `/admin/api/auth/callback`
-3. `POST /admin/api/auth/login` (o callback) → Geduma API → `loginWithGeduma()`
-4. Crea sesión local, setea cookie `relio_session`, redirige a dashboard
+1. `GET /admin/api/auth/providers` → Geduma API → OAuth buttons
+2. User clicks → redirect to OAuth provider → callback to `/admin/api/auth/callback`
+3. `POST /admin/api/auth/login` (or callback) → Geduma API → `loginWithGeduma()`
+4. Creates local session, sets `relio_session` cookie, redirects to dashboard
 
-## Variables de Entorno
+## Environment Variables
 
-Todas se leen lazy via getters en `src/config.js`. Agregar nuevas variables así:
+All read lazily via getters in `src/config.js`. Add new variables like this:
 
 ```js
 export const config = {
-  nuevoModulo: {
-    get nuevaVar() { return env('NUEVA_VAR', 'default') },
+  newModule: {
+    get newVar() { return env('NEW_VAR', 'default') },
   },
 }
 ```
 
-Siempre agregar a `.env.example` y a la tabla de `README.md`.
+Always add to `.env.example` and the README table.
 
 ## Tests
 
 ```bash
-npm test                  # Una vez
-npm run test:watch        # Modo watch
+npm test                  # Run once
+npm run test:watch        # Watch mode
 ```
 
-- Tests en `tests/` con Vitest
-- Usar `:memory:` para DB en tests (configurar en `beforeAll` vía `process.env.DB_PATH`)
-- Import dinámico `await import(...)` en tests para que env vars se seteen antes
-- Mockear Geduma API con `vi.mock` o interceptando fetch
+- Tests in `tests/` with Vitest
+- Use `:memory:` for DB in tests (set in `beforeAll` via `process.env.DB_PATH`)
+- Use dynamic `await import(...)` in tests so env vars are set before import
+- Mock Geduma API with `vi.mock` or by intercepting fetch
 
-Patrón de test:
+Test pattern:
 
 ```js
 import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 
 beforeAll(async () => {
   process.env.DB_PATH = ':memory:'
-  // ... imports dinámicos
+  // ... dynamic imports
 })
 ```
 
 ## Frontend
 
-- React 18 con React Router v6
-- Vite con proxy a Express en dev (`vite.config.js`)
-- Build output en `frontend/dist/` — Express lo sirve como static
-- Sin TypeScript, sin CSS framework, sin librerías externas (solo react + react-router-dom)
-- Estilos en `frontend/src/style.css` (CSS plano, sin módulos)
+- React 18 with React Router v6
+- Vite with proxy to Express in dev (`vite.config.js`)
+- Build output in `frontend/dist/` — served as static by Express
+- No TypeScript, no CSS framework, no external libs (only react + react-router-dom)
+- Styles in `frontend/src/style.css` (plain CSS, no modules)
 
-### Componentes
+### Components
 
-| Componente | Ruta | Propósito |
+| Component | Route | Purpose |
 |---|---|---|
-| `Login.jsx` | `/admin/login` | Botones OAuth |
-| `Dashboard.jsx` | `/admin/dashboard/*` | Layout + routing interno |
-| `ProvidersList.jsx` | `/admin/dashboard/providers` | Lista con reorder |
-| `ProviderForm.jsx` | Modal | Crear/editar provider |
-| `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + tabla |
+| `Login.jsx` | `/admin/login` | OAuth login buttons |
+| `Dashboard.jsx` | `/admin/dashboard/*` | Layout + internal routing |
+| `ProvidersList.jsx` | `/admin/dashboard/providers` | List with reorder |
+| `ProviderForm.jsx` | Modal | Create/edit provider |
+| `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + table |
 | `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys |
-| `Logs.jsx` | `/admin/dashboard/logs` | Tabla de requests |
+| `Logs.jsx` | `/admin/dashboard/logs` | Requests table |
 
 ## Docker
 
 ```bash
-# Build y run
+# Build and run
 docker compose -f docker/docker-compose.yml up --build
 
-# Estructura
+# Structure
 docker/
 ├── Dockerfile            # Multi-stage build
-├── docker-compose.yml    # Puerto 3000, volúmenes para db/logs
+├── docker-compose.yml    # Port 3000, volumes for db/logs
 └── .dockerignore
 ```
 
-## Tareas Comunes
+## Common Tasks
 
-### Agregar un endpoint
+### Add an endpoint
 
-1. Crear/editar route en `src/routes/`
-2. Agregar middleware de auth si aplica
-3. Si tiene lógica nueva, crear servicio en `src/services/`
-4. Registrar en `src/index.js`
-5. Agregar test en `tests/`
+1. Create/edit route in `src/routes/`
+2. Add auth middleware if needed
+3. If new logic required, create service in `src/services/`
+4. Register in `src/index.js`
+5. Add test in `tests/`
 
-### Agregar una tabla
+### Add a table
 
-1. Agregar `CREATE TABLE IF NOT EXISTS` en `src/db.js > initDb()`
-2. Agregar índices en `createIndexes()`
-3. Actualizar tests de DB
+1. Add `CREATE TABLE IF NOT EXISTS` in `src/db.js > initDb()`
+2. Add indexes in `createIndexes()`
+3. Update DB tests
 
-### Agregar un provider de LLM
+### Add an LLM provider
 
 1. Dashboard → Add Provider
-2. Completar: nombre, API URL, API Key, modelo, tipo, costos
-3. Se ordena automáticamente como siguiente fallback
+2. Fill in: name, API URL, API Key, model, type, costs
+3. Auto-ordered as the next fallback
 
-## Comandos
+## Commands
 
 ```bash
-npm run dev        # Backend con watch
-npm start          # Producción
+npm run dev        # Backend with watch + frontend auto-build
+npm start          # Production
 npm test           # Tests
-npm run build      # Build frontend
+npm run build      # Build frontend only
 ```
