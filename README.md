@@ -64,12 +64,22 @@ cd frontend && npm run dev
 
 In dev mode, the frontend runs on `http://localhost:5173` and proxies API requests to the backend.
 
+## Authentication
+
+Relio uses a pluggable auth provider system. Set `AUTH_PROVIDER` in `.env`:
+
+- **`geduma`** (default) — OAuth via Geduma API. Requires `GEDUMA_API_TOKEN`.
+- **`none`** — anonymous session, no login page shown.
+
+To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `GEDUMA_API_URL` | `https://geduma-api.com` | Geduma API base URL |
-| `GEDUMA_API_TOKEN` | — | Geduma integration token |
+| `AUTH_PROVIDER` | `geduma` | Auth provider: `geduma` / `none` / custom |
+| `GEDUMA_API_URL` | `https://geduma-api.com` | Geduma API base URL (only for `geduma` provider) |
+| `GEDUMA_API_TOKEN` | — | Geduma integration token (only for `geduma` provider) |
 | `APP_BASE_URL` | `http://localhost:3000` | Base URL for OAuth callbacks |
 | `DB_PATH` | `./db/db.sqlite` | SQLite database path |
 | `CACHE_TTL_SECONDS` | `2592000` (30 days) | Cache TTL |
@@ -157,12 +167,16 @@ relio/
 │   ├── index.js            # Entry point
 │   ├── config.js           # Env var config
 │   ├── db.js               # SQLite setup + queries
+│   ├── auth/               # Pluggable auth providers
+│   │   ├── base.js         # AuthProvider interface
+│   │   ├── geduma.js       # Geduma OAuth provider
+│   │   ├── none.js         # Anonymous session provider
+│   │   └── index.js        # Factory
 │   ├── services/           # Business logic
 │   ├── middleware/          # Auth middleware
 │   ├── routes/             # API routes
 │   ├── handlers/           # Request processing
-│   ├── utils/              # Logger, validators
-│   └── external/           # Geduma client
+│   └── utils/              # Logger, validators
 ├── frontend/               # Frontend (React + Vite)
 │   ├── src/components/     # React components
 │   ├── index.html

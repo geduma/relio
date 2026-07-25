@@ -1,61 +1,38 @@
 import { v4 as uuidv4 } from 'uuid'
-import crypto from 'crypto'
 import { dbAll, dbGet, dbRun } from '../db.js'
-import { login as gedumaLogin } from '../external/gedumaClient.js'
+import { getAuthProvider } from '../auth/index.js'
 
-const SESSION_DURATION_MS = 24 * 60 * 60 * 1000 // 24h
-
-function hash(token) {
-  return crypto.createHash('sha256').update(token).digest('hex')
+export async function login(credentials) {
+  const provider = await getAuthProvider()
+  return provider.login(credentials)
 }
 
-export async function loginWithGeduma(provider, code) {
-  const data = await gedumaLogin(provider, code)
-
-  const sessionId = uuidv4()
-  const tokenHash = hash(data.token)
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS).toISOString()
-
-
-  dbRun(
-    `INSERT INTO sessions (id, token_hash, user_email, user_name, user_avatar, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [sessionId, tokenHash, data.user.email, data.user.name, data.user.avatar, expiresAt]
-  )
-
-  dbRun(
-    `INSERT INTO login_history (id, email, method, provider, status)
-     VALUES (?, ?, ?, ?, ?)`,
-    [uuidv4(), data.user.email, 'geduma_oauth', provider, 'success']
-  )
-
-  return { sessionId, user: data.user }
+export async function logout(sessionId) {
+  const provider = await getAuthProvider()
+  return provider.logout(sessionId)
 }
 
-export function logout(sessionId) {
-
-  const session = dbGet('SELECT * FROM sessions WHERE id = ?', [sessionId])
-  if (session) {
-    dbRun('DELETE FROM sessions WHERE id = ?', [sessionId])
-    dbRun(
-      `INSERT INTO login_history (id, email, method, provider, status)
-       VALUES (?, ?, ?, ?, ?)`,
-      [uuidv4(), session.user_email, 'logout', null, 'success']
-    )
-  }
+export async function getSession(sessionId) {
+  const provider = await getAuthProvider()
+  return provider.getSession(sessionId)
 }
 
-export function getSession(sessionId) {
+export async function getLoginConfig() {
+  const provider = await getAuthProvider()
+  return provider.getLoginConfig()
+}
 
-  const session = dbGet(
-    `SELECT * FROM sessions WHERE id = ? AND expires_at > datetime('now')`,
-    [sessionId]
-  )
-  return session || null
+export async function getLoginView() {
+  const provider = await getAuthProvider()
+  return provider.loginView
+}
+
+export async function autoLogin() {
+  const provider = await getAuthProvider()
+  return provider.login({})
 }
 
 export function createApiKey(name) {
-
   const key = `llm_pk_${uuidv4().replace(/-/g, '')}${uuidv4().replace(/-/g, '')}`
   const id = uuidv4()
   dbRun('INSERT INTO api_keys (id, key, name) VALUES (?, ?, ?)', [id, key, name])
@@ -63,7 +40,6 @@ export function createApiKey(name) {
 }
 
 export function validateApiKey(key) {
-
   const row = dbGet(
     `SELECT * FROM api_keys WHERE key = ? AND revoked = 0`,
     [key]
@@ -75,7 +51,6 @@ export function validateApiKey(key) {
 }
 
 export function listApiKeys() {
-
   const rows = dbAll(
     `SELECT id, key, name, created_at, last_used_at, revoked FROM api_keys ORDER BY created_at DESC`
   )
@@ -90,7 +65,6 @@ export function listApiKeys() {
 }
 
 export function revokeApiKey(keyPreview) {
-
   const result = dbRun(
     `UPDATE api_keys SET revoked = 1, revoked_at = datetime('now')
      WHERE key LIKE ? AND revoked = 0`,

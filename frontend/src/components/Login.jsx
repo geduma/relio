@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 export default function Login() {
-  const [providers, setProviders] = useState([])
+  const [loginConfig, setLoginConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
@@ -14,13 +14,37 @@ export default function Login() {
 
     fetch('/admin/api/auth/providers')
       .then(r => r.json())
-      .then(data => setProviders(data.providers || []))
-      .catch(() => setProviders([]))
+      .then(data => {
+        setLoginConfig(data)
+        if (data.autoLogin) {
+          navigate('/admin/dashboard', { replace: true })
+        }
+      })
+      .catch(() => setLoginConfig({ loginView: 'oauth', providers: [] }))
       .finally(() => setLoading(false))
   }, [])
 
   function handleLogin(oauthUrl) {
     window.location.href = oauthUrl
+  }
+
+  const providers = loginConfig?.providers || []
+  const loginView = loginConfig?.loginView || 'oauth'
+
+  if (loading) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <h1>Relio</h1>
+          <p>LLM Relay Dashboard</p>
+          <p>Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loginView === 'none') {
+    return null
   }
 
   return (
@@ -29,9 +53,7 @@ export default function Login() {
         <h1>Relio</h1>
         <p>LLM Relay Dashboard</p>
         {error && <div className="alert alert-error">{error}</div>}
-        {loading ? (
-          <p>Loading providers...</p>
-        ) : providers.length === 0 ? (
+        {providers.length === 0 ? (
           <p>No authentication providers available.</p>
         ) : (
           <div className="providers-list">

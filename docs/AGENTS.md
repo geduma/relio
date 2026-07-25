@@ -9,7 +9,7 @@ Instructions for AI assistants working on this codebase.
 - **DB:** better-sqlite3 (synchronous, no ORM)
 - **Frontend:** React 18 + Vite 5 (no TypeScript)
 - **HTTP:** Native `fetch` (no axios)
-- **Auth:** Geduma API (OAuth) + local API Keys
+- **Auth:** Pluggable auth providers (default: Geduma OAuth) + local API Keys
 - **Testing:** Vitest
 - **Docker:** multi-stage in `docker/`
 
@@ -65,8 +65,11 @@ src/
 ├── handlers/
 │   ├── requestHandler.js # Cache → failover → response
 │   └── dashboardHandler.js
-├── external/
-│   └── gedumaClient.js   # Native fetch to Geduma API
+├── auth/                 # Pluggable auth providers
+│   ├── base.js           # AuthProvider abstract class (documented)
+│   ├── geduma.js         # Geduma OAuth provider
+│   ├── none.js           # Anonymous session provider
+│   └── index.js          # Factory (loads provider from AUTH_PROVIDER env)
 └── utils/
     ├── logger.js         # File app logger
     └── validators.js     # URL, type, sanitize
@@ -87,10 +90,17 @@ src/
 
 ### Login Flow
 
-1. `GET /admin/api/auth/providers` → Geduma API → OAuth buttons
+Depends on the active auth provider (set via `AUTH_PROVIDER` env var):
+
+**geduma** (default):
+1. `GET /admin/api/auth/providers` → returns OAuth buttons
 2. User clicks → redirect to OAuth provider → callback to `/admin/api/auth/callback`
-3. `POST /admin/api/auth/login` (or callback) → Geduma API → `loginWithGeduma()`
-4. Creates local session, sets `relio_session` cookie, redirects to dashboard
+3. Backend calls provider.login() → creates local session → sets cookie
+
+**none** (anonymous):
+1. `GET /admin/api/auth/providers` → `{ autoLogin: true }`
+2. Frontend auto-redirects to dashboard (no login page shown)
+3. Backend creates anonymous session automatically
 
 ## Environment Variables
 
@@ -183,6 +193,46 @@ docker/
 1. Dashboard → Add Provider
 2. Fill in: name, API URL, API Key, model, type, costs
 3. Auto-ordered as the next fallback
+
+### Create a custom AuthProvider
+
+The auth system is pluggable. To add your own authentication:
+
+1. Create `src/auth/yourprovider.js` that extends `AuthProvider` (from `src/auth/base.js`):
+
+```js
+import AuthProvider from './base.js'
+
+export default class MyProvider extends AuthProvider {
+  static get type() { return 'myprovider' }
+
+  get loginView() { return 'oauth' }   // 'oauth' | 'none'
+
+  async getLoginConfig() {
+    // Return data for the login UI
+    // For 'oauth': { providers: [{ id, name, icon, oauth_url }] }
+    return { providers: [...] }
+  }
+
+  async login(credentials) {
+    // Authenticate and return { sessionId, user }
+    return { sessionId, user: { email, name, avatar } }
+  }
+
+  async logout(sessionId) {
+    // Destroy session (delete from DB, log history)
+  }
+
+  async getSession(sessionId) {
+    // Return session object or null
+  }
+}
+```
+
+2. Set `AUTH_PROVIDER=myprovider` in `.env`
+3. The factory in `src/auth/index.js` loads it automatically
+
+Interface reference: `src/auth/base.js` has full JSDoc documentation.
 
 ## Commands
 

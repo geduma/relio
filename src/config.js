@@ -3,6 +3,9 @@ function env(key, fallback) {
 }
 
 export const config = {
+  auth: {
+    get provider() { return env('AUTH_PROVIDER', 'geduma') },
+  },
   geduma: {
     get apiUrl() { return env('GEDUMA_API_URL', 'https://geduma-api.com') },
     get apiToken() { return env('GEDUMA_API_TOKEN', '') },

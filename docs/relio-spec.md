@@ -86,22 +86,53 @@
 
 | Component | Responsibility | Technology |
 |------------|----------------|-----------|
-| **authService** | Geduma login, API Key validation | Node.js |
+| **authService** | Auth provider abstraction, API Key validation | Node.js |
 | **authMiddleware** | Validate incoming requests | Express |
+| **AuthProvider** (base) | Pluggable auth interface | Node.js |
+| **GedumaAuthProvider** | Geduma OAuth implementation | Node.js |
+| **NoneAuthProvider** | Anonymous session provider | Node.js |
 | **failoverEngine** | Select provider by order | Node.js |
 | **circuitBreaker** | Manage provider states | SQLite + memory |
 | **cacheManager** | Deduplicate responses | SQLite |
 | **metricsLogger** | Log requests + calculate metrics | SQLite |
 | **dashboard** | Provider management UI | React + Vite (self-served) |
-| **gedumaClient** | HTTP client for Geduma API | Native fetch |
 
 ---
 
-## 3. AUTHENTICATION: GEDUMA API
+## 3. AUTHENTICATION: PLUGGABLE PROVIDERS
 
-Relio consumes **3 Geduma API endpoints**. It does not manage users internally.
+Relio uses a pluggable auth provider system. The active provider is selected via the `AUTH_PROVIDER` env var. This allows anyone to implement their own authentication by creating a class that extends `AuthProvider` (see `src/auth/base.js`).
 
-### 3.1 The 3 Geduma Endpoints
+### 3.1 Built-in Providers
+
+| Provider | `AUTH_PROVIDER` | Login UI | Description |
+|---|---|---|---|
+| **Geduma** (default) | `geduma` | OAuth buttons | OAuth via Geduma API (3 endpoints) |
+| **None** | `none` | None (auto-login) | Anonymous session, no authentication |
+
+### 3.2 Implementing a Custom Provider
+
+Create a file in `src/auth/` that extends the `AuthProvider` base class:
+
+```js
+// src/auth/myprovider.js
+import AuthProvider from './base.js'
+
+export default class MyProvider extends AuthProvider {
+  static get type() { return 'myprovider' }
+  get loginView() { return 'oauth' } // or 'none'
+  async getLoginConfig() { ... }
+  async login(credentials) { ... }
+  async logout(sessionId) { ... }
+  async getSession(sessionId) { ... }
+}
+```
+
+Set `AUTH_PROVIDER=myprovider` in `.env`. The factory (`src/auth/index.js`) loads it automatically.
+
+### 3.3 The 3 Geduma Endpoints (for `geduma` provider)
+
+Relio consumes **3 Geduma API endpoints** when `AUTH_PROVIDER=geduma`.
 
 #### 1. GET /api/auth/providers
 List of available login providers.
@@ -795,8 +826,13 @@ relio/
 │   ├── index.js                    # Entry point (Express)
 │   ├── config.js                   # Env var config
 │   ├── db.js                       # SQLite setup + migrations
+│   ├── auth/                       # Pluggable auth providers
+│   │   ├── base.js                 # AuthProvider abstract class
+│   │   ├── geduma.js               # Geduma OAuth provider
+│   │   ├── none.js                 # Anonymous session provider
+│   │   └── index.js                # Factory (loads from AUTH_PROVIDER)
 │   ├── services/
-│   │   ├── authService.js          # Geduma API + local sessions
+│   │   ├── authService.js          # Auth provider abstraction + API Keys
 │   │   ├── failoverEngine.js       # Provider selection
 │   │   ├── circuitBreaker.js       # States and cooldown
 │   │   ├── cacheManager.js         # Deduplication with TTL
@@ -812,11 +848,9 @@ relio/
 │   ├── handlers/
 │   │   ├── requestHandler.js       # Proxy request processing
 │   │   └── dashboardHandler.js     # Dashboard endpoints
-│   ├── utils/
-│   │   ├── logger.js               # File logging
-│   │   └── validators.js           # Input validation
-│   └── external/
-│       └── gedumaClient.js         # Geduma API client (native fetch)
+│   └── utils/
+│       ├── logger.js               # File logging
+│       └── validators.js           # Input validation
 ├── frontend/
 │   ├── src/
 │   │   ├── main.jsx                # React entry point
