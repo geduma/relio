@@ -1,0 +1,13 @@
+services:
+  relio:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - ./db:/app/db
+      - ./logs:/app/logs
+    env_file:
+      - ../.env
+    restart: unless-stopped
