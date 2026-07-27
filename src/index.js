@@ -1,4 +1,3 @@
-import 'dotenv/config'
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import path from 'path'
@@ -8,6 +7,7 @@ import { initDb } from './db.js'
 import { runMaintenance } from './maintenance.js'
 import { requireDashboardSession } from './middleware/authMiddleware.js'
 import { getSummary } from './handlers/dashboardHandler.js'
+import { config } from './config.js'
 
 import authRoutes from './routes/auth.routes.js'
 import providersRoutes from './routes/providers.routes.js'
@@ -18,8 +18,8 @@ import proxyRoutes from './routes/proxy.routes.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
-const PORT = process.env.PORT || 3000
-const HOST = process.env.HOST || '0.0.0.0'
+const PORT = config.server.port
+const HOST = config.server.host
 
 app.use(express.json())
 app.use(cookieParser())

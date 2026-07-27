@@ -101,13 +101,13 @@
 
 ## 3. AUTHENTICATION: PLUGGABLE PROVIDERS
 
-Relio uses a pluggable auth provider system. The active provider is selected via the `AUTH_PROVIDER` env var. This allows anyone to implement their own authentication by creating a class that extends `AuthProvider` (see `src/auth/base.js`).
+Relio uses a pluggable auth provider system. The active provider is selected via `auth.provider` in `config.json`. This allows anyone to implement their own authentication by creating a class that extends `AuthProvider` (see `src/auth/base.js`).
 
 ### 3.1 Built-in Providers
 
-| Provider | `AUTH_PROVIDER` | Login UI | Description |
+| Provider | `auth.provider` | Login UI | Description |
 |---|---|---|---|
-| **Geduma** (default) | `geduma` | OAuth buttons | OAuth via Geduma API (3 endpoints) |
+| **Geduma** (default) | `geduma` | OAuth buttons | OAuth via Geduma API (3 endpoints, no API token needed) |
 | **None** | `none` | None (auto-login) | Anonymous session, no authentication |
 
 ### 3.2 Implementing a Custom Provider
@@ -122,74 +122,91 @@ export default class MyProvider extends AuthProvider {
   static get type() { return 'myprovider' }
   get loginView() { return 'oauth' } // or 'none'
   async getLoginConfig() { ... }
+  async initiateLogin({ provider }) { return { redirect: '...' } }
   async login(credentials) { ... }
   async logout(sessionId) { ... }
   async getSession(sessionId) { ... }
 }
 ```
 
-Set `AUTH_PROVIDER=myprovider` in `.env`. The factory (`src/auth/index.js`) loads it automatically.
+Set `auth.provider` in `config.json` to the provider type. The factory (`src/auth/index.js`) loads it automatically.
 
-### 3.3 The 3 Geduma Endpoints (for `geduma` provider)
+### 3.3 Geduma Auth Flow
 
-Relio consumes **3 Geduma API endpoints** when `AUTH_PROVIDER=geduma`.
+Relio uses the **Geduma Auth** module (`/auth` endpoints on `api.geduma.com`). No API token is required — only an `appId` registered on the platform.
 
-#### 1. GET /api/auth/providers
-List of available login providers.
+#### 3.3.1 Endpoints Consumed
 
-```
-Request:
-GET https://geduma-api.com/api/auth/providers
-Authorization: Bearer GEDUMA_API_TOKEN
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/auth/providers/:appId` | List OAuth providers enabled for the app |
+| POST | `/auth/login/:appId/:provider` | Initiate OAuth login, returns redirect URL |
+| GET | `/auth/session/:sessionToken` | Exchange session token for user data |
 
-Response:
-{
-  "providers": [
-    { "id": "google", "name": "Google", "icon": "https://..." },
-    { "id": "github", "name": "GitHub", "icon": "https://..." }
-  ]
-}
-```
-
-#### 2. POST /api/auth/login
-Initiates login with a specific provider.
+#### 3.3.2 Login Flow (Step by Step)
 
 ```
-Request:
-POST https://geduma-api.com/api/auth/login
-Authorization: Bearer GEDUMA_API_TOKEN
-{
-  "provider": "google",
-  "code": "authorization_code_from_oauth"
-}
-
-Response:
-{
-  "success": true,
-  "token": "geduma_session_token",
-  "user": {
-    "email": "user@example.com",
-    "name": "User Name",
-    "avatar": "https://..."
-  }
-}
+Relio Frontend          Relio Backend           Geduma API          OAuth Provider
+     │                       │                      │                    │
+     │  GET /providers        │                      │                    │
+     │──────────────────────►│                      │                    │
+     │                       │  GET /auth/providers/:appId               │
+     │                       │─────────────────────►│                    │
+     │                       │◄─────────────────────┤                    │
+     │◄──────────────────────┤  { providers }       │                    │
+     │                       │                      │                    │
+     │  POST /login          │                      │                    │
+     │  { provider }         │                      │                    │
+     │──────────────────────►│                      │                    │
+     │                       │  POST /auth/login/:appId/:provider       │
+     │                       │─────────────────────►│                    │
+     │                       │◄─────────────────────┤                    │
+     │◄──────────────────────┤  { redirect }        │                    │
+     │                       │                      │                    │
+     │──── redirect ────────────────────────────────│──── OAuth ────────►│
+     │                       │                      │                    │
+     │                       │                      │◄── callback ──────┤
+     │                       │                      │ (code + state)    │
+     │                       │                      │                    │
+     │                       │                      │  ── HTML ──►      │
+     │◄─── redirect#session_token=xxx ──────────────┤  (redirect)       │
+     │                       │                      │                    │
+     │  POST /callback       │                      │                    │
+     │  { sessionToken }     │                      │                    │
+     │──────────────────────►│                      │                    │
+     │                       │  GET /auth/session/:sessionToken          │
+     │                       │─────────────────────►│                    │
+     │                       │◄─────────────────────┤  { user }         │
+     │                       │  create session      │                    │
+     │◄──────────────────────┤  set cookie          │                    │
+     │                       │                      │                    │
+     │── dashboard ─────────►│                      │                    │
 ```
 
-#### 3. GET /api/auth/user
-Gets authenticated user data.
+#### 3.3.3 Request/Response Examples
+
+**1. GET /auth/providers/:appId**
 
 ```
-Request:
-GET https://geduma-api.com/api/auth/user
-Authorization: Bearer geduma_session_token
+GET https://api.geduma.com/auth/providers/app_mrjlwiq7sdny2i
 
-Response:
-{
-  "email": "user@example.com",
-  "name": "User Name",
-  "avatar": "https://...",
-  "createdAt": "2024-01-15T10:00:00Z"
-}
+Response: { ok: true, data: [{ providerId: "google", name: "google", displayName: "Google" }] }
+```
+
+**2. POST /auth/login/:appId/:provider**
+
+```
+POST https://api.geduma.com/auth/login/app_mrjlwiq7sdny2i/google
+
+Response: { ok: true, data: { redirect: "https://accounts.google.com/o/oauth2/..." } }
+```
+
+**3. GET /auth/session/:sessionToken**
+
+```
+GET https://api.geduma.com/auth/session/550e8400-e29b-41d4-a716-446655440000
+
+Response: { ok: true, data: { email: "user@example.com", displayName: "User", picture: "...", provider: "google", allowed: true } }
 ```
 
 ---
@@ -791,30 +808,26 @@ OpenAI-compatible embeddings.
 
 ---
 
-## 8. ENVIRONMENT VARIABLES
+## 8. CONFIGURATION
 
-```env
-# Geduma API Integration
-GEDUMA_API_URL=https://geduma-api.com
-GEDUMA_API_TOKEN=your_geduma_api_token_here
-APP_BASE_URL=http://localhost:3000
+All configuration lives in `config.json` at the project root. Copy `config.example.json` and edit.
 
-# SQLite Database
-DB_PATH=./db/db.sqlite
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `auth.provider` | string | `geduma` | Auth provider: `geduma` or `none` |
+| `geduma.apiUrl` | string | `https://api.geduma.com` | Geduma API base URL |
+| `geduma.appId` | string | `app_...` | App ID registered on geduma-auth |
+| `db.path` | string | `./db/db.sqlite` | SQLite database path |
+| `cache.ttlSeconds` | number | `2592000` | Cache TTL in seconds (30 days) |
+| `server.port` | number | `3000` | Server port |
+| `server.host` | string | `0.0.0.0` | Server host |
+| `server.baseUrl` | string | `http://localhost:3000` | Public URL for OAuth redirects |
+| `server.nodeEnv` | string | `development` | `development` or `production` |
+| `cookie.secure` | boolean | `false` | Secure cookie flag |
+| `cookie.sameSite` | string | `strict` | SameSite cookie policy |
+| `cookie.httpOnly` | boolean | `true` | HTTP-only cookie flag |
 
-# Cache TTL (seconds, default 30 days = 2592000)
-CACHE_TTL_SECONDS=2592000
-
-# Node Environment
-NODE_ENV=development
-PORT=3000
-HOST=0.0.0.0
-
-# Cookies
-COOKIE_SECURE=true
-COOKIE_SAME_SITE=strict
-COOKIE_HTTP_ONLY=true
-```
+Env var overrides (for testing): `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, `CONFIG_PATH`.
 
 ---
 
@@ -824,7 +837,7 @@ COOKIE_HTTP_ONLY=true
 relio/
 ├── src/
 │   ├── index.js                    # Entry point (Express)
-│   ├── config.js                   # Env var config
+│   ├── config.js                   # Reads config.json
 │   ├── db.js                       # SQLite setup + migrations
 │   ├── auth/                       # Pluggable auth providers
 │   │   ├── base.js                 # AuthProvider abstract class

@@ -46,7 +46,7 @@ const result = dbRun('UPDATE providers SET name = ? WHERE id = ?', [name, id])
 ```
 src/
 ├── index.js              # Express setup, routes, static, error handler
-├── config.js             # Lazy env var getters
+├── config.js             # Reads config.json
 ├── db.js                 # SQLite helpers + migrations
 ├── services/             # Pure logic (no Express)
 │   ├── authService.js    # Geduma login, sessions, API keys
@@ -90,31 +90,28 @@ src/
 
 ### Login Flow
 
-Depends on the active auth provider (set via `AUTH_PROVIDER` env var):
+Depends on the active auth provider (set via `auth.provider` in `config.json`):
 
 **geduma** (default):
-1. `GET /admin/api/auth/providers` → returns OAuth buttons
-2. User clicks → redirect to OAuth provider → callback to `/admin/api/auth/callback`
-3. Backend calls provider.login() → creates local session → sets cookie
+1. `GET /admin/api/auth/providers` → returns OAuth provider buttons
+2. User clicks a provider → `POST /admin/api/auth/login { provider }` → returns `{ redirect: oauth_url }`
+3. Browser redirects to OAuth provider (Google, GitHub, etc.)
+4. User authenticates → OAuth callback goes to Geduma API (`/auth?code=xxx&state=yyy`)
+5. Geduma returns HTML that redirects to Relio with `#session_token=xxx` in the URL hash
+6. Frontend detects the hash → `POST /admin/api/auth/callback { sessionToken }` → backend exchanges token via Geduma `GET /auth/session/:sessionToken` → creates local session → sets cookie
 
 **none** (anonymous):
 1. `GET /admin/api/auth/providers` → `{ autoLogin: true }`
 2. Frontend auto-redirects to dashboard (no login page shown)
 3. Backend creates anonymous session automatically
 
-## Environment Variables
+## Configuration
 
-All read lazily via getters in `src/config.js`. Add new variables like this:
+All settings live in `config.json` at the project root. `src/config.js` reads this file at startup and exposes the parsed object as `config`.
 
-```js
-export const config = {
-  newModule: {
-    get newVar() { return env('NEW_VAR', 'default') },
-  },
-}
-```
+To add a new key, add it to `config.json`, `config.example.json`, and update the README table.
 
-Always add to `.env.example` and the README table.
+`process.env` overrides are supported for testing: `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, and `CONFIG_PATH`.
 
 ## Tests
 
@@ -124,9 +121,10 @@ npm run test:watch        # Watch mode
 ```
 
 - Tests in `tests/` with Vitest
-- Use `:memory:` for DB in tests (set in `beforeAll` via `process.env.DB_PATH`)
+- Set `process.env.DB_PATH = ':memory:'` in `beforeAll` for in-memory DB
+- Use `process.env.CONFIG_PATH` to point to a test config file if needed
 - Use dynamic `await import(...)` in tests so env vars are set before import
-- Mock Geduma API with `vi.mock` or by intercepting fetch
+- Mock external APIs with `vi.mock` or by intercepting fetch
 
 Test pattern:
 
@@ -151,7 +149,7 @@ beforeAll(async () => {
 
 | Component | Route | Purpose |
 |---|---|---|
-| `Login.jsx` | `/admin/login` | OAuth login buttons |
+| `Login.jsx` | `/admin/login` | Captures session_token hash, initiates OAuth login |
 | `Dashboard.jsx` | `/admin/dashboard/*` | Layout + internal routing |
 | `ProvidersList.jsx` | `/admin/dashboard/providers` | List with reorder |
 | `ProviderForm.jsx` | Modal | Create/edit provider |
@@ -210,11 +208,18 @@ export default class MyProvider extends AuthProvider {
 
   async getLoginConfig() {
     // Return data for the login UI
-    // For 'oauth': { providers: [{ id, name, icon, oauth_url }] }
+    // For 'oauth': { providers: [{ id, name, providerId }] }
     return { providers: [...] }
   }
 
+  async initiateLogin({ provider }) {
+    // Called when user clicks a provider button
+    // Return { redirect: url } to send the browser there
+    return { redirect: 'https://...' }
+  }
+
   async login(credentials) {
+    // Called with the result of the OAuth flow
     // Authenticate and return { sessionId, user }
     return { sessionId, user: { email, name, avatar } }
   }
@@ -229,8 +234,7 @@ export default class MyProvider extends AuthProvider {
 }
 ```
 
-2. Set `AUTH_PROVIDER=myprovider` in `.env`
-3. The factory in `src/auth/index.js` loads it automatically
+2. Set `auth.provider` in `config.json` to the provider type name
 
 Interface reference: `src/auth/base.js` has full JSDoc documentation.
 

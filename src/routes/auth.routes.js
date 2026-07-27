@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { login, logout, getLoginConfig, getLoginView, autoLogin } from '../services/authService.js'
+import { login, logout, initiateLogin, getLoginConfig, getLoginView, autoLogin } from '../services/authService.js'
+import { config } from '../config.js'
 
 const router = Router()
 
@@ -21,21 +22,30 @@ router.get('/providers', async (req, res) => {
 
 function setSessionCookie(res, sessionId) {
   res.cookie('relio_session', sessionId, {
-    httpOnly: true,
-    secure: process.env.COOKIE_SECURE === 'true',
-    sameSite: process.env.COOKIE_SAME_SITE || 'strict',
+    httpOnly: config.cookie.httpOnly,
+    secure: config.cookie.secure,
+    sameSite: config.cookie.sameSite,
     maxAge: 24 * 60 * 60 * 1000,
   })
 }
 
+router.post('/login', async (req, res) => {
+  try {
+    const result = await initiateLogin(req.body)
+    res.json(result)
+  } catch (err) {
+    res.status(401).json({ error: 'Login failed', message: err.message })
+  }
+})
+
 router.get('/callback', async (req, res) => {
   try {
-    const { provider, code } = req.query
-    if (!provider || !code) {
-      return res.status(400).send('Missing provider or code parameter')
+    const { sessionToken } = req.query
+    if (!sessionToken) {
+      return res.status(400).send('Missing sessionToken parameter')
     }
 
-    const result = await login({ provider, code })
+    const result = await login({ sessionToken })
     setSessionCookie(res, result.sessionId)
     res.redirect('/admin/dashboard')
   } catch (err) {
@@ -43,13 +53,18 @@ router.get('/callback', async (req, res) => {
   }
 })
 
-router.post('/login', async (req, res) => {
+router.post('/callback', async (req, res) => {
   try {
-    const result = await login(req.body)
+    const { sessionToken } = req.body
+    if (!sessionToken) {
+      return res.status(400).json({ error: 'Missing sessionToken' })
+    }
+
+    const result = await login({ sessionToken })
     setSessionCookie(res, result.sessionId)
     res.json({ user: result.user })
   } catch (err) {
-    res.status(401).json({ error: 'Login failed', message: err.message })
+    res.status(401).json({ error: 'Authentication failed', message: err.message })
   }
 })
 

@@ -4,6 +4,6 @@ db/backups/
 logs/
 frontend/dist/
 frontend/node_modules/
-.env
+config.json
 *.log
 .DS_Store

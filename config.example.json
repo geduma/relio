@@ -1,0 +1,26 @@
+{
+  "auth": {
+    "provider": "geduma"
+  },
+  "geduma": {
+    "apiUrl": "https://api.geduma.com",
+    "appId": "app_replace_with_your_app_id"
+  },
+  "db": {
+    "path": "./db/db.sqlite"
+  },
+  "cache": {
+    "ttlSeconds": 2592000
+  },
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "baseUrl": "http://localhost:3000",
+    "nodeEnv": "development"
+  },
+  "cookie": {
+    "secure": false,
+    "sameSite": "strict",
+    "httpOnly": true
+  }
+}

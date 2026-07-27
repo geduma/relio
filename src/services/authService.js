@@ -22,6 +22,11 @@ export async function getLoginConfig() {
   return provider.getLoginConfig()
 }
 
+export async function initiateLogin(credentials) {
+  const provider = await getAuthProvider()
+  return provider.initiateLogin(credentials)
+}
+
 export async function getLoginView() {
   const provider = await getAuthProvider()
   return provider.loginView

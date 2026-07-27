@@ -1,6 +1,6 @@
 # Relio — LLM Relay
 
-> **Personal-use, self-hosted LLM proxy.** Relio is designed for individual developers who want to centralize multiple LLM providers behind a single OpenAI-compatible API, with automatic failover, caching, audit logging, and a management dashboard.
+> **Personal-use, self-hosted LLM proxy.** Relio centralizes multiple LLM providers behind a single OpenAI-compatible API, with automatic failover, caching, audit logging, and a management dashboard.
 
 ## Stack
 
@@ -10,7 +10,7 @@
 | Database | SQLite (better-sqlite3) |
 | Frontend | React + Vite (self-served by Express) |
 | HTTP Client | Native fetch (Node 18+) |
-| Auth | Geduma API (OAuth) + local API Keys |
+| Auth | Pluggable (Geduma OAuth / none) + local API Keys |
 | Testing | Vitest |
 | Infra | Docker multi-stage (`docker/`) |
 
@@ -39,8 +39,8 @@
 git clone <repo> relio
 cd relio
 
-cp .env.example .env
-# Edit .env — set GEDUMA_API_TOKEN and other secrets
+cp config.example.json config.json
+# Edit config.json — set your Geduma appId or change authProvider
 
 npm install
 cd frontend && npm install && cd ..
@@ -49,6 +49,45 @@ npm run dev
 ```
 
 Open `http://localhost:3000/admin` and log in via OAuth.
+
+## Configuration
+
+All settings are in `config.json` at the project root. Copy `config.example.json` and edit:
+
+```json
+{
+  "auth": { "provider": "geduma" },
+  "geduma": {
+    "apiUrl": "https://api.geduma.com",
+    "appId": "app_replace_with_your_app_id"
+  },
+  "db": { "path": "./db/db.sqlite" },
+  "cache": { "ttlSeconds": 2592000 },
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "baseUrl": "http://localhost:3000",
+    "nodeEnv": "development"
+  },
+  "cookie": {
+    "secure": false,
+    "sameSite": "strict",
+    "httpOnly": true
+  }
+}
+```
+
+| Key | Description |
+|---|---|
+| `auth.provider` | `geduma` (OAuth) or `none` (anonymous) |
+| `geduma.apiUrl` | Geduma API base URL (only for `geduma` provider) |
+| `geduma.appId` | App ID registered on geduma-auth (only for `geduma` provider) |
+| `db.path` | SQLite database file path |
+| `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
+| `server.port` | Server port |
+| `server.host` | Server host |
+| `server.baseUrl` | Public URL for OAuth redirects |
+| `server.nodeEnv` | `development` or `production` |
 
 ## Development
 
@@ -66,33 +105,27 @@ In dev mode, the frontend runs on `http://localhost:5173` and proxies API reques
 
 ## Authentication
 
-Relio uses a pluggable auth provider system. Set `AUTH_PROVIDER` in `.env`:
+Relio uses a pluggable auth provider system. Set `auth.provider` in `config.json`:
 
-- **`geduma`** (default) — OAuth via Geduma API. Requires `GEDUMA_API_TOKEN`.
+- **`geduma`** (default) — OAuth via Geduma API. Requires a registered `appId`.
 - **`none`** — anonymous session, no login page shown.
 
+### Geduma Auth Flow
+
+1. Login page fetches available OAuth providers from Geduma
+2. User clicks a provider → Relio redirects to Geduma's OAuth initiation endpoint
+3. User authenticates (Google, GitHub, etc.) → Geduma handles the OAuth callback
+4. Geduma redirects back to Relio with a session token in the URL hash
+5. Relio exchanges the session token for user data and creates a local session
+
 To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `AUTH_PROVIDER` | `geduma` | Auth provider: `geduma` / `none` / custom |
-| `GEDUMA_API_URL` | `https://geduma-api.com` | Geduma API base URL (only for `geduma` provider) |
-| `GEDUMA_API_TOKEN` | — | Geduma integration token (only for `geduma` provider) |
-| `APP_BASE_URL` | `http://localhost:3000` | Base URL for OAuth callbacks |
-| `DB_PATH` | `./db/db.sqlite` | SQLite database path |
-| `CACHE_TTL_SECONDS` | `2592000` (30 days) | Cache TTL |
-| `PORT` | `3000` | Server port |
-| `HOST` | `0.0.0.0` | Server host |
-| `COOKIE_SECURE` | `true` | Secure cookies (HTTPS) |
-| `COOKIE_SAME_SITE` | `strict` | SameSite policy |
-| `NODE_ENV` | `development` | Environment |
 
 ## Docker
 
 ```bash
-cp .env.example .env
+cp config.example.json config.json
+# Edit config.json
+
 docker compose -f docker/docker-compose.yml up -d
 ```
 
@@ -102,7 +135,7 @@ docker compose -f docker/docker-compose.yml up -d
 
 Open `http://localhost:3000/admin`:
 
-1. Log in via OAuth (Google, GitHub, etc.)
+1. Log in via OAuth
 2. Add providers (OpenAI, Anthropic, Groq...)
 3. Order them: Main, Fallback 1, Fallback 2...
 4. Generate API Keys for your AI agents
@@ -126,8 +159,8 @@ curl http://localhost:3000/v1/chat/completions \
 | Method | Route | Auth | Description |
 |---|---|---|---|
 | GET | `/admin/api/auth/providers` | No | List login providers |
-| POST | `/admin/api/auth/login` | No | Login via Geduma |
-| GET | `/admin/api/auth/callback` | No | OAuth callback |
+| POST | `/admin/api/auth/login` | No | Initiate OAuth login |
+| POST | `/admin/api/auth/callback` | No | Exchange session token |
 | POST | `/admin/api/auth/logout` | Cookie | Logout |
 
 ### Dashboard
@@ -165,7 +198,7 @@ npm test
 relio/
 ├── src/                    # Backend (Express)
 │   ├── index.js            # Entry point
-│   ├── config.js           # Env var config
+│   ├── config.js           # Config loader (reads config.json)
 │   ├── db.js               # SQLite setup + queries
 │   ├── auth/               # Pluggable auth providers
 │   │   ├── base.js         # AuthProvider interface
@@ -184,6 +217,8 @@ relio/
 ├── docker/                 # Docker multi-stage
 │   ├── Dockerfile
 │   └── docker-compose.yml
+├── config.json             # Configuration (gitignored)
+├── config.example.json     # Configuration template
 ├── db/                     # Database (gitignored)
 ├── tests/                  # Vitest tests
 └── docs/                   # Documentation
