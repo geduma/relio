@@ -54,21 +54,18 @@ export function validateApiKey(key) {
 
 export function listApiKeys() {
   const rows = dbAll(
-    'SELECT id, key, name, created_at, last_used_at FROM api_keys ORDER BY created_at DESC'
+    'SELECT id, substr(key, 1, 10) AS key_prefix, name, created_at, last_used_at FROM api_keys ORDER BY created_at DESC'
   )
   return rows.map(r => ({
     id: r.id,
-    key_preview: r.key.slice(0, 10) + '...' + r.key.slice(-6),
+    key_preview: r.key_prefix + '...',
     name: r.name,
     created_at: r.created_at,
     last_used_at: r.last_used_at,
   }))
 }
 
-export function revokeApiKey(keyPreview) {
-  const result = dbRun(
-    'DELETE FROM api_keys WHERE key LIKE ?',
-    [`${keyPreview.slice(0, 10)}%`]
-  )
+export function revokeApiKey(id) {
+  const result = dbRun('DELETE FROM api_keys WHERE id = ?', [id])
   return result.changes > 0
 }

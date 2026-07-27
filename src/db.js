@@ -164,7 +164,6 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(query_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(endpoint, expires_at);',
     'CREATE INDEX IF NOT EXISTS idx_keys_key ON api_keys(key);',
-    'CREATE INDEX IF NOT EXISTS idx_keys_revoked ON api_keys(revoked, created_at);',
     'CREATE INDEX IF NOT EXISTS idx_login_email ON login_history(email, timestamp);',
     'CREATE INDEX IF NOT EXISTS idx_login_ts ON login_history(timestamp);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',

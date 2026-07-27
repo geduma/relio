@@ -24,9 +24,9 @@ router.get('/', (req, res) => {
   res.json(keys)
 })
 
-router.delete('/:keyPreview', (req, res) => {
-  const { keyPreview } = req.params
-  const revoked = revokeApiKey(keyPreview)
+router.delete('/:id', (req, res) => {
+  const { id } = req.params
+  const revoked = revokeApiKey(id)
   if (!revoked) {
     return res.status(404).json({ error: 'API key not found' })
   }

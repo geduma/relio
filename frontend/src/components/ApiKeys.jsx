@@ -5,7 +5,7 @@ export default function ApiKeys() {
   const [keys, setKeys] = useState([])
   const [name, setName] = useState('')
   const [newKey, setNewKey] = useState(null)
-  const [revokeTarget, setRevokeTarget] = useState(null)
+  const [revokeTarget, setRevokeTarget] = useState(null) // { id, name }
   const toast = useToast()
 
   useEffect(() => {
@@ -34,8 +34,8 @@ export default function ApiKeys() {
     toast('API key created', 'success')
   }
 
-  async function handleRevoke(keyPreview) {
-    await fetch(`/admin/api/auth/api-keys/${encodeURIComponent(keyPreview)}`, { method: 'DELETE' })
+  async function handleRevoke(id) {
+    await fetch(`/admin/api/auth/api-keys/${id}`, { method: 'DELETE' })
     const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
     setKeys(updated)
     toast('API key revoked', 'success')
@@ -81,7 +81,7 @@ export default function ApiKeys() {
               <td>{new Date(k.created_at).toLocaleDateString()}</td>
               <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : '-'}</td>
               <td>
-                <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k.key_preview)}>
+                <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k)}>
                   Revoke
                 </button>
               </td>
@@ -94,10 +94,10 @@ export default function ApiKeys() {
         <div className="modal-overlay" onClick={() => setRevokeTarget(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h3>Revoke API key</h3>
-            <p>Revoke this API key? This action cannot be undone.</p>
+            <p>Revoke API key <strong>{revokeTarget.name}</strong>? This action cannot be undone.</p>
             <div className="modal-actions">
               <button className="btn" onClick={() => setRevokeTarget(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => { handleRevoke(revokeTarget); setRevokeTarget(null) }}>Revoke</button>
+              <button className="btn btn-danger" onClick={() => { handleRevoke(revokeTarget.id); setRevokeTarget(null) }}>Revoke</button>
             </div>
           </div>
         </div>
