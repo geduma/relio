@@ -17,8 +17,6 @@ body {
 }
 .login-card h1 { font-size: 2rem; color: #1a1a2e; margin-bottom: 0.25rem; }
 .login-card p { color: #666; margin-bottom: 1.5rem; }
-.provider-btn { width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 1rem; }
-.provider-icon { width: 20px; height: 20px; }
 .alert-error { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
 
 /* Dashboard */
@@ -46,6 +44,14 @@ body {
 .btn-outline { background: transparent; border-color: #555; color: #ccc; }
 .btn-outline:hover { color: #fff; border-color: #fff; }
 .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+
+.provider-btn { width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-size: 1rem; cursor: pointer; }
+.provider-icon { width: 24px; height: 24px; flex-shrink: 0; }
+.provider-icon--img { border-radius: 4px; object-fit: contain; }
+.provider-icon--letter {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: #fff; font-size: 0.75rem; font-weight: 600;
+}
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }

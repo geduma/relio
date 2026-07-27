@@ -30,6 +30,7 @@ export default class GedumaAuthProvider extends AuthProvider {
     const providers = (data.data || []).map(p => ({
       id: p.providerId,
       name: p.displayName || p.name,
+      icon: p.icon || null,
       providerId: p.providerId,
     }))
     return { providers }

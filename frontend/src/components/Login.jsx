@@ -1,6 +1,37 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+const FALLBACK_COLORS = {
+  google: '#4285F4',
+  github: '#24292F',
+  microsoft: '#00A4EF',
+}
+
+function ProviderIcon({ provider }) {
+  const [imgError, setImgError] = useState(false)
+  const id = (provider.id || '').toLowerCase()
+
+  if (provider.icon && !imgError) {
+    return (
+      <img
+        src={provider.icon}
+        alt=""
+        className="provider-icon provider-icon--img"
+        onError={() => setImgError(true)}
+      />
+    )
+  }
+
+  const bg = FALLBACK_COLORS[id] || '#6b7280'
+  const letter = (provider.name || id).charAt(0).toUpperCase()
+
+  return (
+    <span className="provider-icon provider-icon--letter" style={{ background: bg }}>
+      {letter}
+    </span>
+  )
+}
+
 export default function Login() {
   const [loginConfig, setLoginConfig] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -103,6 +134,7 @@ export default function Login() {
                 className="btn provider-btn"
                 onClick={() => handleLogin(p.id)}
               >
+                <ProviderIcon provider={p} />
                 {p.name}
               </button>
             ))}
