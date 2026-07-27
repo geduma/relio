@@ -27,16 +27,21 @@ export default function Dashboard() {
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
-        <h2>Relio</h2>
+        <div className="sidebar-header">
+          <h2>Relio <span className="subtitle">LLM Relay</span></h2>
+        </div>
         <nav>
           <Link to="/admin/dashboard/providers">Providers</Link>
           <Link to="/admin/dashboard/metrics">Metrics</Link>
           <Link to="/admin/dashboard/keys">API Keys</Link>
           <Link to="/admin/dashboard/logs">Logs</Link>
         </nav>
-        <button className="btn btn-outline" onClick={handleLogout}>
-          Logout
-        </button>
+        <div className="sidebar-footer">
+          <button className="btn btn-outline" onClick={handleLogout}>
+            Logout
+          </button>
+          <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by Geduma</a>
+        </div>
       </aside>
       <main className="main-content">
         <Routes>

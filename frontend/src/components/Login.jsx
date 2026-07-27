@@ -106,8 +106,7 @@ export default function Login() {
     return (
       <div className="login-page">
         <div className="login-card">
-          <h1>Relio</h1>
-          <p>LLM Relay Dashboard</p>
+          <h1>Relio <span className="subtitle">LLM Relay</span></h1>
           <p>{loggingIn ? 'Redirecting to provider...' : 'Loading...'}</p>
         </div>
       </div>
@@ -121,8 +120,7 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Relio</h1>
-        <p>LLM Relay Dashboard</p>
+        <h1>Relio <span className="subtitle">LLM Relay</span></h1>
         {error && <div className="alert alert-error">{error}</div>}
         {providers.length === 0 ? (
           <p>No authentication providers available.</p>
@@ -140,6 +138,7 @@ export default function Login() {
             ))}
           </div>
         )}
+        <p className="login-footer">by <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">Geduma</a></p>
       </div>
     </div>
   )

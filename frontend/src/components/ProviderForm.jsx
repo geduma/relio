@@ -48,10 +48,10 @@ export default function ProviderForm() {
   return (
     <div>
       <h2>{isEdit ? 'Edit Provider' : 'New Provider'}</h2>
-      <form onSubmit={handleSubmit} className="form">
-        <label>Name <input name="name" value={form.name} onChange={handleChange} required /></label>
-        <label>API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
-        <label>API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
+      <form onSubmit={handleSubmit} className="form-grid">
+        <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
+        <label className="field-full">API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
+        <label className="field-full">API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
         <label>Model <input name="model" value={form.model} onChange={handleChange} required /></label>
         <label>Type
           <select name="type" value={form.type} onChange={handleChange}>
@@ -61,13 +61,13 @@ export default function ProviderForm() {
           </select>
         </label>
         <label>Rate Limit (req/min) <input name="rate_limit_req_per_min" type="number" value={form.rate_limit_req_per_min} onChange={handleChange} /></label>
-        <label>Tokens/day (0 = no limit) <input name="tokens_per_day" type="number" value={form.tokens_per_day} onChange={handleChange} /></label>
-        <label>Cost per 1K input tokens <input name="cost_per_input_token" type="number" step="0.000001" value={form.cost_per_input_token} onChange={handleChange} /></label>
-        <label>Cost per 1K output tokens <input name="cost_per_output_token" type="number" step="0.000001" value={form.cost_per_output_token} onChange={handleChange} /></label>
-        <label>Cooldown after failures <input name="cooldown_after_failures" type="number" value={form.cooldown_after_failures} onChange={handleChange} /></label>
+        <label>Tokens/day <input name="tokens_per_day" type="number" value={form.tokens_per_day} onChange={handleChange} /></label>
+        <label>Cost /1K in tokens <input name="cost_per_input_token" type="number" step="0.000001" value={form.cost_per_input_token} onChange={handleChange} /></label>
+        <label>Cost /1K out tokens <input name="cost_per_output_token" type="number" step="0.000001" value={form.cost_per_output_token} onChange={handleChange} /></label>
+        <label>Cooldown failures <input name="cooldown_after_failures" type="number" value={form.cooldown_after_failures} onChange={handleChange} /></label>
         <label>Cooldown duration (s) <input name="cooldown_duration_seconds" type="number" value={form.cooldown_duration_seconds} onChange={handleChange} /></label>
-        <label>Notes <textarea name="notes" value={form.notes} onChange={handleChange} /></label>
-        <div className="form-actions">
+        <label className="field-full">Notes <textarea name="notes" value={form.notes} onChange={handleChange} /></label>
+        <div className="form-actions field-full">
           <button type="submit" className="btn btn-primary">{isEdit ? 'Update' : 'Create'}</button>
           <button type="button" className="btn" onClick={() => navigate('/admin/dashboard/providers')}>Cancel</button>
         </div>
