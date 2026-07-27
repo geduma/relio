@@ -59,8 +59,7 @@ export function initDb() {
       last_failure_at DATETIME,
       cooldown_until DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      notes TEXT
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS requests_log (

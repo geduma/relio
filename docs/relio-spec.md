@@ -253,7 +253,6 @@ CREATE TABLE providers (
   -- Audit
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  notes TEXT,
 
   INDEX(order_position, status),
   INDEX(type, order_position),

@@ -7,7 +7,7 @@ const emptyForm = {
   rate_limit_req_per_min: 60, tokens_per_day: 0,
   cost_per_input_token: 0, cost_per_output_token: 0,
   cooldown_after_failures: 5, cooldown_duration_seconds: 300,
-  notes: '',
+  status: 'active',
 }
 
 export default function ProviderForm() {
@@ -74,7 +74,13 @@ export default function ProviderForm() {
         <label>Cost /1K out tokens <input name="cost_per_output_token" type="number" step="0.000001" value={form.cost_per_output_token} onChange={handleChange} /></label>
         <label>Cooldown failures <input name="cooldown_after_failures" type="number" value={form.cooldown_after_failures} onChange={handleChange} /></label>
         <label>Cooldown duration (s) <input name="cooldown_duration_seconds" type="number" value={form.cooldown_duration_seconds} onChange={handleChange} /></label>
-        <label className="field-full">Notes <textarea name="notes" value={form.notes} onChange={handleChange} /></label>
+        <div className="field-full toggle-row">
+          <span>Status</span>
+          <label className="switch">
+            <input type="checkbox" checked={form.status === 'active'} onChange={e => setForm(prev => ({ ...prev, status: e.target.checked ? 'active' : 'paused' }))} />
+            <span className="switch-slider"></span>
+          </label>
+        </div>
         <div className="form-actions field-full">
           <button type="submit" className="btn btn-primary">{isEdit ? 'Update' : 'Create'}</button>
           <button type="button" className="btn" onClick={() => navigate('/admin/dashboard/providers')}>Cancel</button>

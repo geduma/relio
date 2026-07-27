@@ -29,7 +29,7 @@ router.post('/', (req, res) => {
     name, api_url, api_key, model, type,
     rate_limit_req_per_min, tokens_per_day,
     cost_per_input_token, cost_per_output_token,
-    cooldown_after_failures, cooldown_duration_seconds, notes,
+    cooldown_after_failures, cooldown_duration_seconds, status,
   } = req.body
 
   if (!name || !api_url || !api_key || !model || !type) {
@@ -47,13 +47,13 @@ router.post('/', (req, res) => {
      (id, name, api_url, api_key, model, type, order_position, order_label,
       rate_limit_req_per_min, tokens_per_day,
       cost_per_input_token, cost_per_output_token,
-      cooldown_after_failures, cooldown_duration_seconds, notes)
+      cooldown_after_failures, cooldown_duration_seconds, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, name, api_url, api_key, model, type, nextPos, label,
       rate_limit_req_per_min ?? 60, tokens_per_day ?? 0,
       cost_per_input_token ?? 0, cost_per_output_token ?? 0,
-      cooldown_after_failures ?? 5, cooldown_duration_seconds ?? 300, notes ?? null,
+      cooldown_after_failures ?? 5, cooldown_duration_seconds ?? 300, status ?? 'active',
     ]
   )
 
@@ -83,12 +83,17 @@ router.patch('/reorder', (req, res) => {
 })
 
 router.patch('/:id', (req, res) => {
+  const db = getDb()
   const { id } = req.params
+
+  const provider = dbGet('SELECT * FROM providers WHERE id = ?', [id])
+  if (!provider) return res.status(404).json({ error: 'Provider not found' })
+
   const allowed = [
     'name', 'api_url', 'api_key', 'model', 'type',
     'status', 'rate_limit_req_per_min', 'tokens_per_day',
     'cost_per_input_token', 'cost_per_output_token',
-    'cooldown_after_failures', 'cooldown_duration_seconds', 'notes',
+    'cooldown_after_failures', 'cooldown_duration_seconds',
   ]
 
   const updates = []
@@ -105,10 +110,45 @@ router.patch('/:id', (req, res) => {
     return res.status(400).json({ error: 'No valid fields to update' })
   }
 
-  updates.push("updated_at = datetime('now')")
-  values.push(id)
+  const isPausing = req.body.status === 'paused' && provider.status !== 'paused'
 
-  dbRun(`UPDATE providers SET ${updates.join(', ')} WHERE id = ?`, values)
+  const doUpdate = () => {
+    updates.push("updated_at = datetime('now')")
+    values.push(id)
+    dbRun(`UPDATE providers SET ${updates.join(', ')} WHERE id = ?`, values)
+  }
+
+  const isReactivating = req.body.status === 'active' && provider.status === 'paused'
+
+  if (isPausing || isReactivating) {
+    const tx = db.transaction(() => {
+      doUpdate()
+
+      const activeOnes = dbAll(
+        `SELECT id FROM providers WHERE type = ? AND status = 'active' AND id != ? ORDER BY order_position ASC`,
+        [provider.type, id]
+      )
+
+      activeOnes.forEach((p, index) => {
+        const label = ORDER_LABELS[index] || `Fallback ${index}`
+        dbRun(
+          'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
+          [index, label, p.id]
+        )
+      })
+
+      const lastPos = activeOnes.length
+      const label = isPausing ? 'Paused' : ORDER_LABELS[lastPos] || `Fallback ${lastPos}`
+      dbRun(
+        'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
+        [lastPos, label, id]
+      )
+    })
+    tx()
+  } else {
+    doUpdate()
+  }
+
   res.json({ success: true })
 })
 
@@ -121,15 +161,19 @@ router.delete('/:id', (req, res) => {
     return res.status(404).json({ error: 'Provider not found' })
   }
 
+  if (provider.order_label === 'Main' && provider.status !== 'paused') {
+    return res.status(400).json({ error: 'Cannot delete a Main provider. Move it to a fallback position first.' })
+  }
+
   const tx = db.transaction(() => {
     dbRun('DELETE FROM providers WHERE id = ?', [id])
     dbRun('DELETE FROM circuit_breaker_state WHERE provider_id = ?', [id])
 
-    const remaining = dbAll(
-      'SELECT id FROM providers WHERE type = ? ORDER BY order_position ASC',
+    const activeOnes = dbAll(
+      `SELECT id FROM providers WHERE type = ? AND status = 'active' ORDER BY order_position ASC`,
       [provider.type]
     )
-    remaining.forEach((r, index) => {
+    activeOnes.forEach((r, index) => {
       const label = ORDER_LABELS[index] || `Fallback ${index}`
       dbRun(
         'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
