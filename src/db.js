@@ -34,14 +34,6 @@ export function dbRun(sql, params = []) {
   return getDb().prepare(sql).run(...params)
 }
 
-export function dbExec(sql) {
-  return getDb().exec(sql)
-}
-
-export function dbTransaction(fn) {
-  return getDb().transaction(fn)
-}
-
 export function initDb() {
   const d = getDb()
 

@@ -8,6 +8,7 @@ import { runMaintenance } from './maintenance.js'
 import { requireDashboardSession } from './middleware/authMiddleware.js'
 import { getSummary } from './handlers/dashboardHandler.js'
 import { config } from './config.js'
+import { logger } from './utils/logger.js'
 
 import authRoutes from './routes/auth.routes.js'
 import providersRoutes from './routes/providers.routes.js'
@@ -46,7 +47,7 @@ app.get('/admin/*', (_, res) => {
 })
 
 app.use((err, _req, res, _next) => {
-  console.error('Unhandled error:', err)
+  logger.error('Unhandled error', { error: err.message })
   res.status(500).json({ error: 'Internal server error' })
 })
 
@@ -55,7 +56,7 @@ app.use((_req, res) => {
 })
 
 app.listen(PORT, HOST, () => {
-  console.log(`Relio running on http://${HOST}:${PORT}`)
+  logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
 
 export default app

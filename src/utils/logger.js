@@ -12,7 +12,7 @@ if (!fs.existsSync(logDir)) {
 
 const logFile = path.join(logDir, 'app.log')
 
-export function log(level, message, data = null) {
+function log(level, message, data = null) {
   const timestamp = new Date().toISOString()
   const line = `[${timestamp}] [${level.toUpperCase()}] ${message}${data ? ' ' + JSON.stringify(data) : ''}`
   fs.appendFile(logFile, line + '\n', () => {})

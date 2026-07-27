@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun, getDb } from '../db.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
 
+const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
+
 const router = Router()
 
 router.use(requireDashboardSession)
@@ -38,8 +40,7 @@ router.post('/', (req, res) => {
   const nextPos = (maxPos?.max ?? -1) + 1
 
   const id = uuidv4()
-  const labels = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
-  const label = labels[nextPos] || `Fallback ${nextPos}`
+  const label = ORDER_LABELS[nextPos] || `Fallback ${nextPos}`
 
   dbRun(
     `INSERT INTO providers
@@ -69,8 +70,7 @@ router.patch('/reorder', (req, res) => {
 
   const tx = db.transaction(() => {
     provider_ids.forEach((id, index) => {
-      const labels = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
-      const label = labels[index] || `Fallback ${index}`
+      const label = ORDER_LABELS[index] || `Fallback ${index}`
       dbRun(
         'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
         [index, label, id]
@@ -130,8 +130,7 @@ router.delete('/:id', (req, res) => {
       [provider.type]
     )
     remaining.forEach((r, index) => {
-      const labels = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
-      const label = labels[index] || `Fallback ${index}`
+      const label = ORDER_LABELS[index] || `Fallback ${index}`
       dbRun(
         'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
         [index, label, r.id]

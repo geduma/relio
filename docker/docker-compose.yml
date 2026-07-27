@@ -8,6 +8,5 @@ services:
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-    env_file:
-      - ../.env
+      - ../config.json:/app/config.json
     restart: unless-stopped

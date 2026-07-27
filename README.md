@@ -124,10 +124,12 @@ To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
 
 ```bash
 cp config.example.json config.json
-# Edit config.json
+# Edit config.json — set your Geduma appId or change authProvider
 
 docker compose -f docker/docker-compose.yml up -d
 ```
+
+The compose file mounts `config.json`, `db/`, and `logs/` from the host so data persists across restarts.
 
 ## Usage
 

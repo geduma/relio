@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { dbRun } from './db.js'
+import { cleanExpiredCache } from './services/cacheManager.js'
 import { logger } from './utils/logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -40,16 +41,12 @@ function backupDb() {
 }
 
 function cleanOldData() {
-
-
   const deletedRequests = dbRun(
     `DELETE FROM requests_log WHERE request_at < datetime('now', ?)`,
     [`-${RETENTION.requestsLog} days`]
   ).changes
 
-  const deletedCache = dbRun(
-    `DELETE FROM cache WHERE expires_at < datetime('now')`
-  ).changes
+  const deletedCache = cleanExpiredCache()
 
   const deletedLoginHistory = dbRun(
     `DELETE FROM login_history WHERE timestamp < datetime('now', ?)`,

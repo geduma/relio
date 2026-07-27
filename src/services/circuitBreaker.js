@@ -1,7 +1,6 @@
 import { dbGet, dbRun } from '../db.js'
 
-export function getProviderState(providerId) {
-
+function getProviderState(providerId) {
   const state = dbGet(
     'SELECT * FROM circuit_breaker_state WHERE provider_id = ?',
     [providerId]
@@ -10,7 +9,6 @@ export function getProviderState(providerId) {
 }
 
 export function recordSuccess(providerId) {
-
   dbRun(
     `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, updated_at)
      VALUES (?, 'healthy', 0, datetime('now'))
@@ -23,7 +21,6 @@ export function recordSuccess(providerId) {
 }
 
 export function recordFailure(providerId, cooldownAfter, cooldownDuration) {
-
   const state = getProviderState(providerId)
   const newCount = state.failure_count + 1
 

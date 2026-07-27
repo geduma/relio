@@ -8,7 +8,6 @@ export function generateHash(body) {
 }
 
 export function getCache(queryHash) {
-
   const entry = dbGet(
     `SELECT * FROM cache
      WHERE query_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'))`,
@@ -24,7 +23,6 @@ export function getCache(queryHash) {
 }
 
 export function setCache(endpoint, requestBody, responseBody) {
-
   const id = uuidv4()
   const queryHash = generateHash(requestBody)
   const expiresAt = new Date(Date.now() + config.cache.ttlSeconds * 1000).toISOString()
@@ -36,13 +34,7 @@ export function setCache(endpoint, requestBody, responseBody) {
   )
 }
 
-export function invalidateCache(queryHash) {
-
-  dbRun('DELETE FROM cache WHERE query_hash = ?', [queryHash])
-}
-
 export function cleanExpiredCache() {
-
   const result = dbRun("DELETE FROM cache WHERE expires_at < datetime('now')")
   return result.changes
 }

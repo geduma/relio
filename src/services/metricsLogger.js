@@ -7,7 +7,6 @@ export function logRequest({
   inputTokens, outputTokens, estimatedCost,
   responseTimeMs, authenticatedVia, cacheHit, wasRetry, retryCount,
 }) {
-
   const totalTokens = (inputTokens || 0) + (outputTokens || 0)
 
   dbRun(
@@ -28,7 +27,6 @@ export function logRequest({
 }
 
 export function updateMetrics(providerId, { inputTokens, outputTokens, cost, responseTimeMs, cacheHit, error }) {
-
   const today = new Date().toISOString().slice(0, 10)
   const id = `${providerId}_${today}`
 
@@ -56,7 +54,6 @@ export function updateMetrics(providerId, { inputTokens, outputTokens, cost, res
 }
 
 export function getMetrics(from, to) {
-
   const rows = dbAll(
     `SELECT m.provider_id, p.name AS provider_name,
             SUM(m.total_requests) AS total_requests,
@@ -95,7 +92,6 @@ export function getMetrics(from, to) {
 }
 
 export function getLogs(limit = 50, offset = 0) {
-
   return dbAll(
     `SELECT id, provider_id, endpoint, status_code, input_tokens, output_tokens,
             response_time_ms, cache_hit, authenticated_via, request_at, error_message
@@ -107,7 +103,6 @@ export function getLogs(limit = 50, offset = 0) {
 }
 
 export function getHealth() {
-
   const healthy = dbGet("SELECT COUNT(*) AS count FROM providers WHERE status = 'active'").count
   const cooldown = dbGet("SELECT COUNT(*) AS count FROM providers WHERE status = 'cooldown'").count
   const paused = dbGet("SELECT COUNT(*) AS count FROM providers WHERE status = 'paused'").count

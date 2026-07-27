@@ -34,7 +34,3 @@ export async function getAuthProvider() {
   PROVIDER_CACHE.set(type, instance)
   return instance
 }
-
-export function clearProviderCache() {
-  PROVIDER_CACHE.clear()
-}

@@ -71,8 +71,7 @@ src/
 │   ├── none.js           # Anonymous session provider
 │   └── index.js          # Factory (loads provider from AUTH_PROVIDER env)
 └── utils/
-    ├── logger.js         # File app logger
-    └── validators.js     # URL, type, sanitize
+    └── logger.js         # File app logger
 ```
 
 ### Proxy Request Flow
@@ -160,15 +159,17 @@ beforeAll(async () => {
 ## Docker
 
 ```bash
-# Build and run
+# Build and run (config.json must exist in project root)
 docker compose -f docker/docker-compose.yml up --build
 
 # Structure
 docker/
-├── Dockerfile            # Multi-stage build
-├── docker-compose.yml    # Port 3000, volumes for db/logs
+├── Dockerfile            # Multi-stage build, copies config.example.json as default
+├── docker-compose.yml    # Port 3000, volumes for db/logs/config.json
 └── .dockerignore
 ```
+
+Before Docker deployment, ensure you have `config.json` with your settings (mounts override the default `config.example.json`).
 
 ## Common Tasks
 

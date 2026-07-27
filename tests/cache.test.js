@@ -1,4 +1,3 @@
-import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 
 let generateHash, getCache, setCache, cleanExpiredCache
 

@@ -618,12 +618,22 @@ Gets available login providers.
 ```
 
 #### POST /admin/api/auth/login
-Initiates login with Geduma.
+Initiates OAuth login. Returns the URL to redirect the user to.
 
 ```javascript
 // No auth required
-// Body: { "provider": "google", "code": "..." }
-// Returns: { user: { email, name, ... } }
+// Body: { "provider": "google" }
+// Returns: { redirect: "https://accounts.google.com/o/oauth2/..." }
+```
+
+#### POST /admin/api/auth/callback
+Exchanges a session token (from Geduma redirect) for a local session.
+
+```javascript
+// No auth required
+// Body: { "sessionToken": "550e8400-e29b-41d4-a716-446655440000" }
+// Returns: { user: { email, name, avatar } }
+// Sets: relio_session cookie
 ```
 
 #### POST /admin/api/auth/logout
@@ -862,8 +872,7 @@ relio/
 │   │   ├── requestHandler.js       # Proxy request processing
 │   │   └── dashboardHandler.js     # Dashboard endpoints
 │   └── utils/
-│       ├── logger.js               # File logging
-│       └── validators.js           # Input validation
+│       └── logger.js               # File logging
 ├── frontend/
 │   ├── src/
 │   │   ├── main.jsx                # React entry point
@@ -891,7 +900,8 @@ relio/
 ├── logs/
 │   ├── app.log                     # Application logs
 │   └── archive/                    # Compressed old logs
-├── .env.example                    # Template variables
+├── config.json                     # Configuration (git-ignored)
+├── config.example.json             # Configuration template
 ├── .gitignore
 ├── package.json                    # Backend dependencies
 └── README.md
@@ -902,34 +912,36 @@ relio/
 ## 10. COMPLETE LOGIN FLOW
 
 ```
-1. User at http://localhost:3000/admin
+1. User opens http://localhost:3000/admin
    └─> GET /admin/api/auth/providers
-       └─> Backend calls Geduma
-       └─> Frontend shows buttons (Google, GitHub, etc)
+       └─> Backend calls GET /auth/providers/:appId (Geduma API)
+       └─> Frontend shows OAuth provider buttons
 
-2. User: "Login with Google"
-   └─> OAuth flow → authorization_code
+2. User clicks "Google"
+   └─> Frontend: POST /admin/api/auth/login { provider: "google" }
+       └─> Backend calls POST /auth/login/:appId/google (Geduma API)
+       └─> Returns { redirect: "https://accounts.google.com/o/oauth2/..." }
 
-3. Frontend: POST /admin/api/auth/login
-   { "provider": "google", "code": "..." }
+3. Browser redirects to Google OAuth
+   └─> User authenticates
 
-4. Backend:
-   └─> POST https://geduma-api.com/api/auth/login
-   └─> Geduma validates
-   └─> Returns { success: true, token, user }
+4. Google redirects to Geduma API: /auth?code=xxx&state=yyy
+   └─> Geduma processes OAuth callback, creates session
+   └─> Geduma returns HTML that redirects to Relio's redirectUrl#session_token=xxx
 
-5. Backend:
-   ├─ Store session in httpOnly cookie
-   ├─ Log login in SQLite
-   └─ Return { user }
+5. Browser arrives at Relio with #session_token=xxx
+   └─> Frontend detects hash → POST /admin/api/auth/callback { sessionToken }
 
-6. Frontend:
-   └─> Redirect to /admin/dashboard
+6. Backend:
+   └─> Calls GET /auth/session/:sessionToken (Geduma API)
+   └─> Gets user data (email, name, avatar)
+   └─> Creates local session in SQLite
+   └─> Sets httpOnly cookie (relio_session)
+   └─> Returns { user }
 
-7. Subsequent requests:
-   GET /admin/api/summary
-   Cookie: relio_session=... (automatic)
-   └─> Backend validates, processes
+7. Frontend navigates to /admin/dashboard
+
+8. Subsequent requests use relio_session cookie automatically
 ```
 
 ---
