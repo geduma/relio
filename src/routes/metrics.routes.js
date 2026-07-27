@@ -14,14 +14,14 @@ router.get('/', requireDashboardSession, (req, res) => {
 })
 
 router.get('/logs', requireDashboardSession, (req, res) => {
-  const limit = parseInt(req.query.limit, 10) || 50
-  const offset = parseInt(req.query.offset, 10) || 0
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 1000)
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
 
   const logs = getLogs(limit, offset)
   res.json(logs)
 })
 
-router.get('/health', (req, res) => {
+router.get('/health', requireDashboardSession, (req, res) => {
   const { healthy, cooldown, paused } = getHealth()
   res.json({
     status: healthy > 0 ? 'healthy' : 'unhealthy',

@@ -5,6 +5,7 @@ import { useToast } from './Toast.jsx'
 export default function ProvidersList() {
   const [providers, setProviders] = useState([])
   const [filter, setFilter] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -15,18 +16,20 @@ export default function ProvidersList() {
   }, [filter])
 
   async function handleDelete(id) {
-    if (!confirm('Delete this provider?')) return
     const res = await fetch(`/admin/api/providers/${id}`, { method: 'DELETE' })
     if (!res.ok) {
-      toast('Failed to delete provider', 'error')
+      const data = await res.json().catch(() => ({}))
+      toast(data.error || 'Failed to delete provider', 'error')
       return
     }
     setProviders(prev => prev.filter(p => p.id !== id))
     toast('Provider deleted', 'success')
   }
 
+  const activeProviders = providers.filter(p => p.status !== 'paused')
+
   async function handleReorder(dragId, targetId) {
-    const ids = providers.map(p => p.id)
+    const ids = activeProviders.map(p => p.id)
     const dragIdx = ids.indexOf(dragId)
     const targetIdx = ids.indexOf(targetId)
     ids.splice(dragIdx, 1)
@@ -40,11 +43,13 @@ export default function ProvidersList() {
 
     setProviders(prev => {
       const map = Object.fromEntries(prev.map(p => [p.id, p]))
-      return ids.map((id, i) => ({
+      const reordered = ids.map((id, i) => ({
         ...map[id],
         order_position: i,
         order_label: ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4'][i] || `Fallback ${i}`,
       }))
+      const pausedOnes = prev.filter(p => p.status === 'paused')
+      return [...reordered, ...pausedOnes]
     })
   }
 
@@ -64,7 +69,7 @@ export default function ProvidersList() {
           <option value="vision">Vision</option>
         </select>
       </div>
-      <table className="table">
+      <div className="table-wrapper"><table className="table">
         <thead>
           <tr>
             <th>Order</th>
@@ -76,18 +81,18 @@ export default function ProvidersList() {
           </tr>
         </thead>
         <tbody>
-          {providers.map((p, i) => (
+          {activeProviders.map((p, i) => (
             <tr key={p.id}>
               <td>
                 <span className="order-label">{p.order_label}</span>
                 <div className="order-arrows">
                   <button
                     disabled={i === 0}
-                    onClick={() => handleReorder(p.id, providers[i - 1]?.id)}
+                    onClick={() => handleReorder(p.id, activeProviders[i - 1]?.id)}
                   >&#9650;</button>
                   <button
-                    disabled={i === providers.length - 1}
-                    onClick={() => handleReorder(p.id, providers[i + 1]?.id)}
+                    disabled={i === activeProviders.length - 1}
+                    onClick={() => handleReorder(p.id, activeProviders[i + 1]?.id)}
                   >&#9660;</button>
                 </div>
               </td>
@@ -95,14 +100,44 @@ export default function ProvidersList() {
               <td>{p.model}</td>
               <td>{p.type}</td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td>
+              <td className="actions-cell">
                 <Link to={`/admin/dashboard/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(p.id)}>Delete</button>
+                {p.order_label === 'Main' && p.status !== 'paused' ? (
+                  <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
+                ) : (
+                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+                )}
+              </td>
+            </tr>
+          ))}
+          {providers.filter(p => p.status === 'paused').map(p => (
+            <tr key={p.id} className="row-paused">
+              <td><span className="order-label">--</span></td>
+              <td>{p.name}</td>
+              <td>{p.model}</td>
+              <td>{p.type}</td>
+              <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
+              <td className="actions-cell">
+                <Link to={`/admin/dashboard/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
               </td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
+
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Delete provider</h3>
+            <p>Are you sure you want to delete this provider?</p>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => { handleDelete(deleteTarget); setDeleteTarget(null) }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

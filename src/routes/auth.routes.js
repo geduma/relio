@@ -23,8 +23,8 @@ router.get('/providers', async (req, res) => {
 function setSessionCookie(res, sessionId) {
   res.cookie('relio_session', sessionId, {
     httpOnly: config.cookie.httpOnly,
-    secure: config.cookie.secure,
-    sameSite: config.cookie.sameSite,
+    secure: config.server.nodeEnv === 'production' ? true : config.cookie.secure,
+    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000,
   })
 }

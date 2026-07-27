@@ -12,7 +12,7 @@ export default function Logs() {
   return (
     <div>
       <h2>Request Logs</h2>
-      <table className="table">
+      <div className="table-wrapper"><table className="table">
         <thead>
           <tr>
             <th>Time</th>
@@ -39,7 +39,7 @@ export default function Logs() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   )
 }

@@ -52,7 +52,7 @@ export default function Metrics() {
               </div>
             </div>
           )}
-          <table className="table">
+          <div className="table-wrapper"><table className="table">
             <thead>
               <tr>
                 <th>Provider</th>
@@ -79,7 +79,7 @@ export default function Metrics() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </>
       )}
     </div>

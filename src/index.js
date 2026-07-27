@@ -1,4 +1,6 @@
 import express from 'express'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import cookieParser from 'cookie-parser'
 import path from 'path'
 import cron from 'node-cron'
@@ -22,18 +24,37 @@ const app = express()
 const PORT = config.server.port
 const HOST = config.server.host
 
-app.use(express.json())
+app.set('trust proxy', 1)
+app.use(helmet())
+app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts, try again later' },
+})
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, try again later' },
+})
+
+app.use('/admin/api/auth', authLimiter, authRoutes)
+app.use('/v1', apiLimiter, proxyRoutes)
 
 initDb()
 
 cron.schedule('0 2 * * *', runMaintenance)
 
-app.use('/admin/api/auth', authRoutes)
 app.use('/admin/api/providers', providersRoutes)
 app.use('/admin/api/metrics', metricsRoutes)
 app.use('/admin/api/auth/api-keys', keysRoutes)
-app.use('/v1', proxyRoutes)
 
 app.get('/admin/api/summary', requireDashboardSession, (req, res) => {
   const summary = getSummary()

@@ -59,8 +59,7 @@ export function initDb() {
       last_failure_at DATETIME,
       cooldown_until DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      notes TEXT
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS requests_log (
@@ -101,9 +100,7 @@ export function initDb() {
       key TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_used_at DATETIME,
-      revoked BOOLEAN DEFAULT FALSE,
-      revoked_at DATETIME
+      last_used_at DATETIME
     );
 
     CREATE TABLE IF NOT EXISTS login_history (
@@ -167,7 +164,6 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(query_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(endpoint, expires_at);',
     'CREATE INDEX IF NOT EXISTS idx_keys_key ON api_keys(key);',
-    'CREATE INDEX IF NOT EXISTS idx_keys_revoked ON api_keys(revoked, created_at);',
     'CREATE INDEX IF NOT EXISTS idx_login_email ON login_history(email, timestamp);',
     'CREATE INDEX IF NOT EXISTS idx_login_ts ON login_history(timestamp);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',
