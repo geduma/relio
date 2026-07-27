@@ -7,7 +7,7 @@ import ApiKeys from './ApiKeys.jsx'
 import Logs from './Logs.jsx'
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,11 +26,15 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-layout">
-      <aside className="sidebar">
+      <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>
+        <span></span><span></span><span></span>
+      </button>
+      {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
         <div className="sidebar-header">
           <h2>Relio <span className="subtitle">LLM Relay</span></h2>
         </div>
-        <nav>
+        <nav onClick={() => setSidebarOpen(false)}>
           <Link to="/admin/dashboard/providers">Providers</Link>
           <Link to="/admin/dashboard/metrics">Metrics</Link>
           <Link to="/admin/dashboard/keys">API Keys</Link>
@@ -43,7 +47,7 @@ export default function Dashboard() {
           <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by Geduma</a>
         </div>
       </aside>
-      <main className="main-content">
+      <main className="main-content" onClick={() => setSidebarOpen(false)}>
         <Routes>
           <Route index element={<ProvidersList />} />
           <Route path="providers" element={<ProvidersList />} />

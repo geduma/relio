@@ -100,9 +100,7 @@ export function initDb() {
       key TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      last_used_at DATETIME,
-      revoked BOOLEAN DEFAULT FALSE,
-      revoked_at DATETIME
+      last_used_at DATETIME
     );
 
     CREATE TABLE IF NOT EXISTS login_history (

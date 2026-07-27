@@ -69,7 +69,7 @@ export default function ProvidersList() {
           <option value="vision">Vision</option>
         </select>
       </div>
-      <table className="table">
+      <div className="table-wrapper"><table className="table">
         <thead>
           <tr>
             <th>Order</th>
@@ -124,7 +124,7 @@ export default function ProvidersList() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
 
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>

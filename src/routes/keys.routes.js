@@ -28,7 +28,7 @@ router.delete('/:keyPreview', (req, res) => {
   const { keyPreview } = req.params
   const revoked = revokeApiKey(keyPreview)
   if (!revoked) {
-    return res.status(404).json({ error: 'API key not found or already revoked' })
+    return res.status(404).json({ error: 'API key not found' })
   }
   res.json({ success: true })
 })
