@@ -25,7 +25,17 @@ const PORT = config.server.port
 const HOST = config.server.host
 
 app.set('trust proxy', 1)
-app.use(helmet())
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "*"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'"],
+    },
+  },
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
 

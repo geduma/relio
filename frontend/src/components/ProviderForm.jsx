@@ -50,7 +50,7 @@ export default function ProviderForm() {
     }
 
     toast(isEdit ? 'Provider updated' : 'Provider created', 'success')
-    navigate('/admin/dashboard/providers')
+    navigate('/admin/providers')
   }
 
   return (
@@ -83,7 +83,7 @@ export default function ProviderForm() {
         </div>
         <div className="form-actions field-full">
           <button type="submit" className="btn btn-primary">{isEdit ? 'Update' : 'Create'}</button>
-          <button type="button" className="btn" onClick={() => navigate('/admin/dashboard/providers')}>Cancel</button>
+          <button type="button" className="btn" onClick={() => navigate('/admin/providers')}>Cancel</button>
         </div>
       </form>
     </div>
