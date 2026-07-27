@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { useToast } from './Toast.jsx'
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
   const [name, setName] = useState('')
   const [newKey, setNewKey] = useState(null)
+  const toast = useToast()
 
   useEffect(() => {
     fetch('/admin/api/auth/api-keys')
@@ -18,11 +20,17 @@ export default function ApiKeys() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast(data.error || 'Failed to create key', 'error')
+      return
+    }
     const data = await res.json()
     setNewKey(data.apiKey)
     setName('')
     const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
     setKeys(updated)
+    toast('API key created', 'success')
   }
 
   async function handleRevoke(keyPreview) {
@@ -30,6 +38,7 @@ export default function ApiKeys() {
     await fetch(`/admin/api/auth/api-keys/${encodeURIComponent(keyPreview)}`, { method: 'DELETE' })
     const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
     setKeys(updated)
+    toast('API key revoked', 'success')
   }
 
   return (

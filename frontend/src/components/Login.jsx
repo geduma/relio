@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useToast } from './Toast.jsx'
 
 const FALLBACK_COLORS = {
   google: '#4285F4',
@@ -39,6 +40,7 @@ export default function Login() {
   const [loggingIn, setLoggingIn] = useState(false)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const toast = useToast()
 
   useEffect(() => {
     const urlError = searchParams.get('error')
@@ -74,7 +76,7 @@ export default function Login() {
       if (!res.ok) throw new Error('Login failed')
       navigate('/admin/dashboard', { replace: true })
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
       setLoading(false)
     }
   }
@@ -94,7 +96,7 @@ export default function Login() {
         throw new Error('No redirect URL received')
       }
     } catch (err) {
-      setError(err.message)
+      toast(err.message, 'error')
       setLoggingIn(false)
     }
   }

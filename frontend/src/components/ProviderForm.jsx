@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useToast } from './Toast.jsx'
 
 const emptyForm = {
   name: '', api_url: '', api_key: '', model: '', type: 'chat',
@@ -14,6 +15,7 @@ export default function ProviderForm() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [form, setForm] = useState(emptyForm)
+  const toast = useToast()
 
   useEffect(() => {
     if (isEdit) {
@@ -36,12 +38,18 @@ export default function ProviderForm() {
     const url = isEdit ? `/admin/api/providers/${id}` : '/admin/api/providers'
     const method = isEdit ? 'PATCH' : 'POST'
 
-    await fetch(url, {
+    const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
     })
 
+    if (!res.ok) {
+      toast('Failed to save provider', 'error')
+      return
+    }
+
+    toast(isEdit ? 'Provider updated' : 'Provider created', 'success')
     navigate('/admin/dashboard/providers')
   }
 

@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useToast } from './Toast.jsx'
 
 export default function ProvidersList() {
   const [providers, setProviders] = useState([])
   const [filter, setFilter] = useState('')
+  const toast = useToast()
 
   useEffect(() => {
     const query = filter ? `?type=${filter}` : ''
@@ -14,8 +16,13 @@ export default function ProvidersList() {
 
   async function handleDelete(id) {
     if (!confirm('Delete this provider?')) return
-    await fetch(`/admin/api/providers/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/admin/api/providers/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      toast('Failed to delete provider', 'error')
+      return
+    }
     setProviders(prev => prev.filter(p => p.id !== id))
+    toast('Provider deleted', 'success')
   }
 
   async function handleReorder(dragId, targetId) {

@@ -128,3 +128,19 @@ body {
 
 /* Error cell */
 .error-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: #999; }
+
+/* Toast */
+.toast-container {
+  position: fixed; bottom: 1rem; right: 1rem; z-index: 9999;
+  display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none;
+}
+.toast {
+  pointer-events: auto; padding: 0.75rem 1rem; border-radius: 6px;
+  font-size: 0.875rem; color: #fff; cursor: pointer;
+  animation: toast-in 0.25s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  max-width: 360px;
+}
+.toast--success { background: #059669; }
+.toast--error   { background: #dc2626; }
+.toast--info    { background: #2563eb; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
