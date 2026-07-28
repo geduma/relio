@@ -94,7 +94,7 @@ export default function Chat() {
               <span className="switch-slider"></span>
             </label>
           </label>
-          <button type="button" className="btn btn-sm" onClick={clearChat} disabled={messages.length === 0}>
+          <button type="button" className="btn" onClick={clearChat} disabled={messages.length === 0}>
             Clear
           </button>
         </div>
@@ -122,22 +122,24 @@ export default function Chat() {
       </div>
 
       <div className="chat-input-area">
-        <textarea
-          className="chat-input"
-          placeholder="Type a message..."
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={sending}
-          rows={2}
-        />
-        <button
-          className="btn btn-primary chat-send-btn"
-          onClick={sendMessage}
-          disabled={sending || !input.trim() || !selectedId}
-        >
-          {sending ? 'Sending...' : 'Send'}
-        </button>
+        <div className="chat-input-wrap">
+          <textarea
+            className="chat-input"
+            placeholder="Type a message..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={sending}
+            rows={2}
+          />
+          <button
+            className="btn btn-primary chat-input-btn"
+            onClick={sendMessage}
+            disabled={sending || !input.trim() || !selectedId}
+          >
+            {sending ? 'Sending...' : 'Send'}
+          </button>
+        </div>
       </div>
     </div>
   )

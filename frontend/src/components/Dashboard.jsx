@@ -9,9 +9,19 @@ import Chat from './Chat.jsx'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isDark, setIsDark] = useState(true)
   const navigate = useNavigate()
 
   useEffect(() => {
+    const stored = localStorage.getItem('relio-theme')
+    if (stored === 'light') {
+      setIsDark(false)
+      document.body.classList.add('light-mode')
+    } else {
+      setIsDark(true)
+      document.body.classList.remove('light-mode')
+    }
+
     fetch('/admin/api/metrics/health')
       .then(r => {
         if (r.status === 401) navigate('/admin/login')
@@ -19,6 +29,13 @@ export default function Dashboard() {
       })
       .catch(() => navigate('/admin/login'))
   }, [])
+
+  function toggleTheme() {
+    const next = !isDark
+    setIsDark(next)
+    document.body.classList.toggle('light-mode', !next)
+    localStorage.setItem('relio-theme', next ? 'dark' : 'light')
+  }
 
   async function handleLogout() {
     await fetch('/admin/api/auth/logout', { method: 'POST' })
@@ -40,10 +57,15 @@ export default function Dashboard() {
           <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
-          <button className="btn btn-outline" onClick={handleLogout}>
-            Logout
-          </button>
-          <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by Geduma</a>
+          <div className="sidebar-footer-row">
+            <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
+              {isDark ? '\u263C' : '\u263E'}
+            </button>
+            <button className="btn btn-outline" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+          <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by geduma</a>
         </div>
       </aside>
       <main className="main-content" onClick={() => setSidebarOpen(false)}>

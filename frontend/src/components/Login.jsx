@@ -38,9 +38,28 @@ export default function Login() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [loggingIn, setLoggingIn] = useState(false)
+  const [isDark, setIsDark] = useState(true)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const toast = useToast()
+
+  useEffect(() => {
+    const stored = localStorage.getItem('relio-theme')
+    if (stored === 'light') {
+      setIsDark(false)
+      document.body.classList.add('light-mode')
+    } else {
+      setIsDark(true)
+      document.body.classList.remove('light-mode')
+    }
+  }, [])
+
+  function toggleTheme() {
+    const next = !isDark
+    setIsDark(next)
+    document.body.classList.toggle('light-mode', !next)
+    localStorage.setItem('relio-theme', next ? 'dark' : 'light')
+  }
 
   useEffect(() => {
     const urlError = searchParams.get('error')
@@ -104,9 +123,18 @@ export default function Login() {
   const providers = loginConfig?.providers || []
   const loginView = loginConfig?.loginView || 'oauth'
 
+  function themeButton() {
+    return (
+      <button className="login-theme-btn" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
+        {isDark ? '\u263C' : '\u263E'}
+      </button>
+    )
+  }
+
   if (loading || loggingIn) {
     return (
       <div className="login-page">
+        {themeButton()}
         <div className="login-card">
           <h1>Relio <span className="subtitle">LLM Relay</span></h1>
           <p>{loggingIn ? 'Redirecting to provider...' : 'Loading...'}</p>
@@ -121,6 +149,7 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      {themeButton()}
       <div className="login-card">
         <h1>Relio <span className="subtitle">LLM Relay</span></h1>
         {error && <div className="alert alert-error">{error}</div>}
