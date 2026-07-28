@@ -26,9 +26,6 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-layout">
-      <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>
-        <span></span><span></span><span></span>
-      </button>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}>
         <div className="sidebar-header">
@@ -48,6 +45,11 @@ export default function Dashboard() {
         </div>
       </aside>
       <main className="main-content" onClick={() => setSidebarOpen(false)}>
+        <div className="mobile-topbar">
+          <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <span></span><span></span><span></span>
+          </button>
+        </div>
         <Routes>
           <Route index element={<Metrics />} />
           <Route path="providers" element={<ProvidersList />} />
