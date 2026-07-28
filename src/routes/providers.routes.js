@@ -41,7 +41,7 @@ async function testProviderConnection(apiUrl, apiKey) {
       const chatRes = await tryFetch(chatUrl, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [] }),
+        body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
       })
       if (chatRes.status === 401) {
         return { valid: false, error: 'API key is invalid (received 401)' }
