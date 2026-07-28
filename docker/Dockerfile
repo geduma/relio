@@ -16,7 +16,6 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY src/ ./src/
-COPY db/ ./db/
 COPY config.example.json ./config.json
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
