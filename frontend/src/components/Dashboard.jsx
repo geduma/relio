@@ -46,7 +46,7 @@ export default function Dashboard() {
       </aside>
       <main className="main-content" onClick={() => setSidebarOpen(false)}>
         <div className="mobile-topbar">
-          <button className="hamburger" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <button className="hamburger" onClick={e => { e.stopPropagation(); setSidebarOpen(!sidebarOpen); }}>
             <span></span><span></span><span></span>
           </button>
         </div>
