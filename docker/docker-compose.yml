@@ -1,3 +1,5 @@
+name: relio-app
+
 services:
   relio:
     build:
