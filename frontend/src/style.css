@@ -135,6 +135,13 @@ body {
 .switch input:checked + .switch-slider::before { transform: translateX(20px); }
 .form-inline { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .form-inline input { flex: 1; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px; }
+.input-row { display: flex; gap: 0.5rem; align-items: center; }
+.input-row input { flex: 1; }
+.input-row .btn { padding-top: 0.5rem; padding-bottom: 0.5rem; font-size: 0.875rem; }
+.conn-indicator { font-size: 1.1rem; font-weight: 700; }
+.conn-ok { color: #059669; }
+.conn-fail { color: #dc2626; cursor: help; }
+
 
 @media (max-width: 768px) {
   .hamburger { display: flex; }
@@ -181,6 +188,15 @@ body {
 
 /* Error cell */
 .error-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: #999; }
+.form-wide-error { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.btn-dismiss { background: none; border: none; cursor: pointer; font-size: 1.25rem; color: inherit; opacity: 0.6; line-height: 1; padding: 0; flex-shrink: 0; }
+.btn-dismiss:hover { opacity: 1; }
+.empty-state { color: #888; font-size: 0.9rem; padding: 2rem 0; }
+.empty-state--error { color: #e63946; }
+.empty-state code { background: #f0f0f0; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; }
+.empty-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 3rem 2rem; text-align: center; }
+.empty-card__title { font-size: 1.1rem; font-weight: 600; color: #555; margin-bottom: 0.5rem; }
+.empty-card__text { font-size: 0.9rem; color: #888; }
 
 /* Toast */
 .toast-container {

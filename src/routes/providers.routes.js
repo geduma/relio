@@ -2,8 +2,32 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun, getDb } from '../db.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
+import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
+
+async function testProviderConnection(apiUrl, apiKey) {
+  let base = apiUrl.replace(/\/+$/, '')
+  if (!base.endsWith('/v1')) base += '/v1'
+  const testUrl = `${base}/models`
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+
+    const res = await fetch(testUrl, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    logger.info('Connection test succeeded', { url: testUrl, status: res.status })
+    return { valid: true, status: res.status }
+  } catch (err) {
+    const msg = err.name === 'AbortError' ? 'Connection timed out' : `Cannot reach server: ${err.message}`
+    logger.warn('Connection test failed', { url: testUrl, error: err.message, code: err.code })
+    return { valid: false, error: msg }
+  }
+}
 
 const router = Router()
 
@@ -24,7 +48,19 @@ router.get('/', (req, res) => {
   res.json(rows.map(r => ({ ...r, api_key: r.api_key ? '***' : null })))
 })
 
-router.post('/', (req, res) => {
+router.post('/test-connection', async (req, res) => {
+  const { api_url, api_key } = req.body
+  if (!api_url || !api_key) {
+    return res.status(400).json({ valid: false, error: 'api_url and api_key are required' })
+  }
+  const result = await testProviderConnection(api_url, api_key)
+  if (!result.valid) {
+    logger.warn('Provider connection test from dashboard failed', { api_url, error: result.error })
+  }
+  res.json(result)
+})
+
+router.post('/', async (req, res) => {
   const {
     name, api_url, api_key, model, type,
     rate_limit_req_per_min, tokens_per_day,
@@ -34,6 +70,12 @@ router.post('/', (req, res) => {
 
   if (!name || !api_url || !api_key || !model || !type) {
     return res.status(400).json({ error: 'name, api_url, api_key, model, and type are required' })
+  }
+
+  const validation = await testProviderConnection(api_url, api_key)
+  if (!validation.valid) {
+    logger.warn('Provider creation rejected — connection test failed', { name, api_url, error: validation.error })
+    return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
   }
 
   const maxPos = dbGet('SELECT MAX(order_position) AS max FROM providers WHERE type = ?', [type])
@@ -82,7 +124,7 @@ router.patch('/reorder', (req, res) => {
   res.json({ success: true })
 })
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', async (req, res) => {
   const db = getDb()
   const { id } = req.params
 
@@ -108,6 +150,18 @@ router.patch('/:id', (req, res) => {
 
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No valid fields to update' })
+  }
+
+  const urlChanged = 'api_url' in req.body || 'api_key' in req.body
+
+  if (urlChanged) {
+    const testUrl = req.body.api_url || provider.api_url
+    const testKey = req.body.api_key || provider.api_key
+    const validation = await testProviderConnection(testUrl, testKey)
+    if (!validation.valid) {
+      logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })
+      return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
+    }
   }
 
   const isPausing = req.body.status === 'paused' && provider.status !== 'paused'

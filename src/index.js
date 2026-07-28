@@ -86,8 +86,21 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
 })
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
+
+function shutdown(signal) {
+  logger.info(`${signal} received — shutting down gracefully`)
+  cron.getTasks().forEach(t => t.stop())
+  server.close(() => {
+    logger.info('Server closed')
+    process.exit(0)
+  })
+  setTimeout(() => process.exit(1), 5000)
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
 
 export default app
