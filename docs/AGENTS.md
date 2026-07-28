@@ -61,6 +61,7 @@ src/
 │   ├── providers.routes.js
 │   ├── metrics.routes.js
 │   ├── keys.routes.js
+│   ├── chat.routes.js    # /admin/api/chat/* (dashboard chat test)
 │   └── proxy.routes.js   # /v1/*
 ├── handlers/
 │   ├── requestHandler.js # Cache → failover → response
@@ -73,6 +74,19 @@ src/
 └── utils/
     └── logger.js         # File app logger
 ```
+
+### Chat Flow (Dashboard)
+
+1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `type = 'chat'`)
+2. User selects a provider, types a message, and optionally enables the Relio proxy toggle
+3. `POST /admin/api/chat/send` with `{ provider_id, messages, use_proxy }`:
+   - **Proxy disabled (default):** Calls `callProvider()` directly — bypasses failover, cache, metrics, and rate limiting
+   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics)
+4. Response is rendered as a chat bubble
+
+### Provider Connection Test
+
+`testProviderConnection()` in `providers.routes.js` now validates both URL reachability and API key correctness by checking `res.ok` after calling `{api_url}/v1/models` with the API key. A 401 status returns `{ valid: false, error: '...invalid API key' }`.
 
 ### Proxy Request Flow
 
@@ -155,6 +169,7 @@ beforeAll(async () => {
 | `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + table |
 | `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys |
 | `Logs.jsx` | `/admin/dashboard/logs` | Requests table |
+| `Chat.jsx` | `/admin/chat` | Chat interface to test providers |
 
 ## Docker
 

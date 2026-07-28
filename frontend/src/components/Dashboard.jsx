@@ -5,6 +5,7 @@ import ProviderForm from './ProviderForm.jsx'
 import Metrics from './Metrics.jsx'
 import ApiKeys from './ApiKeys.jsx'
 import Logs from './Logs.jsx'
+import Chat from './Chat.jsx'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -35,6 +36,7 @@ export default function Dashboard() {
           <Link to="/admin/providers">Providers</Link>
           <Link to="/admin">Metrics</Link>
           <Link to="/admin/keys">API Keys</Link>
+          <Link to="/admin/chat">Chat</Link>
           <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
@@ -57,6 +59,7 @@ export default function Dashboard() {
           <Route path="providers/:id/edit" element={<ProviderForm />} />
           <Route path="keys" element={<ApiKeys />} />
           <Route path="logs" element={<Logs />} />
+          <Route path="chat" element={<Chat />} />
         </Routes>
       </main>
     </div>

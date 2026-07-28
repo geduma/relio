@@ -20,6 +20,9 @@ async function testProviderConnection(apiUrl, apiKey) {
       signal: controller.signal,
     })
     clearTimeout(timeout)
+    if (!res.ok) {
+      return { valid: false, error: `Provider returned status ${res.status}${res.status === 401 ? ' (invalid API key)' : ''}` }
+    }
     logger.info('Connection test succeeded', { url: testUrl, status: res.status })
     return { valid: true, status: res.status }
   } catch (err) {

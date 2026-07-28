@@ -105,16 +105,7 @@ export default function ProviderForm() {
       )}
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
-        <label className="field-full">API URL
-          <div className="input-row">
-            <input name="api_url" value={form.api_url} onChange={handleChange} required />
-            <button type="button" className="btn btn-sm" onClick={testConnection} disabled={connStatus === 'testing'}>
-              {connStatus === 'testing' ? 'Testing...' : 'Test'}
-            </button>
-            {connStatus === 'success' && <span className="conn-indicator conn-ok">&#10003;</span>}
-            {connStatus === 'fail' && <span className="conn-indicator conn-fail">&#10007;</span>}
-          </div>
-        </label>
+        <label className="field-full">API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
         <label className="field-full">API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
         <label>Model <input name="model" value={form.model} onChange={handleChange} required /></label>
         <label>Type
@@ -138,6 +129,11 @@ export default function ProviderForm() {
           </label>
         </div>
         <div className="form-actions field-full">
+          <button type="button" className="btn" onClick={testConnection} disabled={connStatus === 'testing'}>
+            {connStatus === 'testing' ? 'Testing...' : 'Test'}
+          </button>
+          {connStatus === 'success' && <span className="conn-indicator conn-ok">&#10003;</span>}
+          {connStatus === 'fail' && <span className="conn-indicator conn-fail">&#10007;</span>}
           <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</button>
           <button type="button" className="btn" onClick={() => navigate('/admin/providers')}>Cancel</button>
         </div>

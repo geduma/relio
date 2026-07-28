@@ -17,6 +17,7 @@ import providersRoutes from './routes/providers.routes.js'
 import metricsRoutes from './routes/metrics.routes.js'
 import keysRoutes from './routes/keys.routes.js'
 import proxyRoutes from './routes/proxy.routes.js'
+import chatRoutes from './routes/chat.routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -68,6 +69,7 @@ cron.schedule('0 2 * * *', runMaintenance)
 app.use('/admin/api/providers', providersRoutes)
 app.use('/admin/api/metrics', metricsRoutes)
 app.use('/admin/api/auth/api-keys', keysRoutes)
+app.use('/admin/api/chat', chatRoutes)
 
 app.get('/admin/api/summary', requireDashboardSession, (req, res) => {
   const summary = getSummary()
