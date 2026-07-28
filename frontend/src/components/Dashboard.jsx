@@ -35,10 +35,10 @@ export default function Dashboard() {
           <h2>Relio <span className="subtitle">LLM Relay</span></h2>
         </div>
         <nav onClick={() => setSidebarOpen(false)}>
-          <Link to="/admin/dashboard/providers">Providers</Link>
-          <Link to="/admin/dashboard/metrics">Metrics</Link>
-          <Link to="/admin/dashboard/keys">API Keys</Link>
-          <Link to="/admin/dashboard/logs">Logs</Link>
+          <Link to="/admin/providers">Providers</Link>
+          <Link to="/admin">Metrics</Link>
+          <Link to="/admin/keys">API Keys</Link>
+          <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
           <button className="btn btn-outline" onClick={handleLogout}>
@@ -49,11 +49,10 @@ export default function Dashboard() {
       </aside>
       <main className="main-content" onClick={() => setSidebarOpen(false)}>
         <Routes>
-          <Route index element={<ProvidersList />} />
+          <Route index element={<Metrics />} />
           <Route path="providers" element={<ProvidersList />} />
           <Route path="providers/new" element={<ProviderForm />} />
           <Route path="providers/:id/edit" element={<ProviderForm />} />
-          <Route path="metrics" element={<Metrics />} />
           <Route path="keys" element={<ApiKeys />} />
           <Route path="logs" element={<Logs />} />
         </Routes>

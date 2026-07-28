@@ -47,7 +47,7 @@ router.get('/callback', async (req, res) => {
 
     const result = await login({ sessionToken })
     setSessionCookie(res, result.sessionId)
-    res.redirect('/admin/dashboard')
+    res.redirect('/admin')
   } catch (err) {
     res.redirect(`/admin/login?error=${encodeURIComponent('Authentication failed')}`)
   }

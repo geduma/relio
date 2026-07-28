@@ -25,7 +25,17 @@ const PORT = config.server.port
 const HOST = config.server.host
 
 app.set('trust proxy', 1)
-app.use(helmet())
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "*"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'"],
+    },
+  },
+}))
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
 
@@ -76,8 +86,21 @@ app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' })
 })
 
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
+
+function shutdown(signal) {
+  logger.info(`${signal} received — shutting down gracefully`)
+  cron.getTasks().forEach(t => t.stop())
+  server.close(() => {
+    logger.info('Server closed')
+    process.exit(0)
+  })
+  setTimeout(() => process.exit(1), 5000)
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'))
+process.on('SIGINT', () => shutdown('SIGINT'))
 
 export default app

@@ -59,7 +59,7 @@ export default function Login() {
       .then(data => {
         setLoginConfig(data)
         if (data.autoLogin) {
-          navigate('/admin/dashboard', { replace: true })
+          navigate('/admin', { replace: true })
         }
       })
       .catch(() => setLoginConfig({ loginView: 'oauth', providers: [] }))
@@ -74,7 +74,7 @@ export default function Login() {
         body: JSON.stringify({ sessionToken }),
       })
       if (!res.ok) throw new Error('Login failed')
-      navigate('/admin/dashboard', { replace: true })
+      navigate('/admin', { replace: true })
     } catch (err) {
       toast(err.message, 'error')
       setLoading(false)

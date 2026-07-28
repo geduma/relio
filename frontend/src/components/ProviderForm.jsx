@@ -15,6 +15,9 @@ export default function ProviderForm() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [form, setForm] = useState(emptyForm)
+  const [connStatus, setConnStatus] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -31,10 +34,44 @@ export default function ProviderForm() {
   function handleChange(e) {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
+    if (name === 'api_url' || name === 'api_key') {
+      setConnStatus(null)
+      setFormError(null)
+    }
+  }
+
+  async function testConnection() {
+    if (!form.api_url || !form.api_key) {
+      toast('Enter API URL and Key first', 'error')
+      return
+    }
+    setConnStatus('testing')
+    try {
+      const res = await fetch('/admin/api/providers/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_url: form.api_url, api_key: form.api_key }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setConnStatus('success')
+        setFormError(null)
+        toast('Connection successful', 'success')
+      } else {
+        setConnStatus('fail')
+        setFormError(data.error || 'Connection failed')
+        toast(data.error || 'Connection failed', 'error')
+      }
+    } catch {
+      setConnStatus('fail')
+      setFormError('Connection test request failed')
+      toast('Connection test request failed', 'error')
+    }
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setSaving(true)
     const url = isEdit ? `/admin/api/providers/${id}` : '/admin/api/providers'
     const method = isEdit ? 'PATCH' : 'POST'
 
@@ -45,20 +82,39 @@ export default function ProviderForm() {
     })
 
     if (!res.ok) {
-      toast('Failed to save provider', 'error')
+      const data = await res.json().catch(() => ({}))
+      const msg = data.error || 'Failed to save provider'
+      setFormError(msg)
+      toast(msg, 'error')
+      setSaving(false)
       return
     }
 
     toast(isEdit ? 'Provider updated' : 'Provider created', 'success')
-    navigate('/admin/dashboard/providers')
+    navigate('/admin/providers')
   }
 
   return (
     <div>
       <h2>{isEdit ? 'Edit Provider' : 'New Provider'}</h2>
+      {formError && (
+        <div className="alert alert-error form-wide-error">
+          {formError}
+          <button type="button" className="btn-dismiss" onClick={() => setFormError(null)}>&times;</button>
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
-        <label className="field-full">API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
+        <label className="field-full">API URL
+          <div className="input-row">
+            <input name="api_url" value={form.api_url} onChange={handleChange} required />
+            <button type="button" className="btn btn-sm" onClick={testConnection} disabled={connStatus === 'testing'}>
+              {connStatus === 'testing' ? 'Testing...' : 'Test'}
+            </button>
+            {connStatus === 'success' && <span className="conn-indicator conn-ok">&#10003;</span>}
+            {connStatus === 'fail' && <span className="conn-indicator conn-fail">&#10007;</span>}
+          </div>
+        </label>
         <label className="field-full">API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
         <label>Model <input name="model" value={form.model} onChange={handleChange} required /></label>
         <label>Type
@@ -82,8 +138,8 @@ export default function ProviderForm() {
           </label>
         </div>
         <div className="form-actions field-full">
-          <button type="submit" className="btn btn-primary">{isEdit ? 'Update' : 'Create'}</button>
-          <button type="button" className="btn" onClick={() => navigate('/admin/dashboard/providers')}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</button>
+          <button type="button" className="btn" onClick={() => navigate('/admin/providers')}>Cancel</button>
         </div>
       </form>
     </div>

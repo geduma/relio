@@ -8,8 +8,7 @@ export default function App() {
     <ToastProvider>
       <Routes>
         <Route path="/admin/login" element={<Login />} />
-        <Route path="/admin/dashboard/*" element={<Dashboard />} />
-        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/*" element={<Dashboard />} />
         <Route path="*" element={<Navigate to="/admin/login" replace />} />
       </Routes>
     </ToastProvider>

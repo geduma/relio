@@ -2,12 +2,54 @@ import { useState, useEffect } from 'react'
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     fetch('/admin/api/metrics/logs?limit=100')
-      .then(r => r.json())
-      .then(setLogs)
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load logs')
+        return r.json()
+      })
+      .then(data => {
+        if (Array.isArray(data)) setLogs(data)
+        setLoading(false)
+      })
+      .catch(e => {
+        setError(e.message)
+        setLoading(false)
+      })
   }, [])
+
+  if (loading) {
+    return (
+      <div>
+        <h2>Request Logs</h2>
+        <p className="empty-state">Loading logs...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div>
+        <h2>Request Logs</h2>
+        <p className="empty-state empty-state--error">{error}</p>
+      </div>
+    )
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div>
+        <h2>Request Logs</h2>
+        <div className="empty-card">
+          <p className="empty-card__title">No requests logged yet</p>
+          <p className="empty-card__text">Make a request to <code>/v1/chat/completions</code> or <code>/v1/embeddings</code> to see logs here.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>

@@ -57,7 +57,7 @@ export default function ProvidersList() {
     <div>
       <div className="header-row">
         <h2>Providers</h2>
-        <Link to="/admin/dashboard/providers/new" className="btn btn-primary">
+        <Link to="/admin/providers/new" className="btn btn-primary">
           + Add Provider
         </Link>
       </div>
@@ -101,7 +101,7 @@ export default function ProvidersList() {
               <td>{p.type}</td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
               <td className="actions-cell">
-                <Link to={`/admin/dashboard/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
                 {p.order_label === 'Main' && p.status !== 'paused' ? (
                   <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
                 ) : (
@@ -118,7 +118,7 @@ export default function ProvidersList() {
               <td>{p.type}</td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
               <td className="actions-cell">
-                <Link to={`/admin/dashboard/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
                 <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
               </td>
             </tr>
