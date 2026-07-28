@@ -33,6 +33,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       connectSrc: ["'self'"],
+      upgradeInsecureRequests: null,
     },
   },
 }))
