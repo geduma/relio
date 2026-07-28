@@ -60,8 +60,10 @@ body {
 .btn-outline:hover { color: #fff; border-color: #fff; }
 .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
 .btn-disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-.hamburger { display: none; position: fixed; top: 0.5rem; left: 0.5rem; z-index: 110; background: #1a1a2e; border: none; border-radius: 4px; padding: 0.5rem; cursor: pointer; flex-direction: column; gap: 3px; }
+.hamburger { display: flex; align-items: center; justify-content: center; background: transparent; border: none; border-radius: 4px; padding: 0.5rem; cursor: pointer; flex-direction: column; gap: 3px; }
 .hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 1px; }
+
+.mobile-topbar { display: none; }
 
 .provider-btn { width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-size: 1rem; cursor: pointer; }
 .provider-icon { width: 24px; height: 24px; flex-shrink: 0; }
@@ -144,7 +146,11 @@ body {
 
 
 @media (max-width: 768px) {
-  .hamburger { display: flex; }
+  .mobile-topbar {
+    display: flex; align-items: center; position: fixed; top: 0; left: 0; right: 0;
+    height: 48px; background: #1a1a2e; z-index: 110; padding: 0 0.5rem;
+  }
+  .hamburger { background: transparent; border: none; padding: 0.5rem; }
   .sidebar {
     position: fixed; left: -260px; top: 0; bottom: 0; z-index: 100;
     width: 240px; transition: left 0.25s;

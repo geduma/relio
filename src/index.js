@@ -26,6 +26,8 @@ const HOST = config.server.host
 
 app.set('trust proxy', 1)
 app.use(helmet({
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false,
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
