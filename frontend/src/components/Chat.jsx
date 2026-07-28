@@ -60,8 +60,14 @@ export default function Chat() {
     }
   }
 
+  const selectedProvider = providers.find(p => p.id === selectedId)
+
   function clearChat() {
     setMessages([])
+  }
+
+  function providerLabel() {
+    return selectedProvider ? `${selectedProvider.name} (${selectedProvider.model})` : 'Assistant'
   }
 
   return (
@@ -102,13 +108,13 @@ export default function Chat() {
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-            <div className="chat-msg-role">{msg.role === 'user' ? 'You' : 'Assistant'}</div>
+            <div className="chat-msg-role">{msg.role === 'user' ? 'You' : providerLabel()}</div>
             <div className="chat-msg-content">{msg.content}</div>
           </div>
         ))}
         {sending && (
           <div className="chat-msg chat-msg--assistant">
-            <div className="chat-msg-role">Assistant</div>
+            <div className="chat-msg-role">{providerLabel()}</div>
             <div className="chat-msg-content chat-msg-thinking">Thinking...</div>
           </div>
         )}

@@ -9,25 +9,55 @@ const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallbac
 async function testProviderConnection(apiUrl, apiKey) {
   let base = apiUrl.replace(/\/+$/, '')
   if (!base.endsWith('/v1')) base += '/v1'
-  const testUrl = `${base}/models`
+  const modelsUrl = `${base}/models`
+  const chatUrl = `${base}/chat/completions`
 
-  try {
+  async function tryFetch(url, options) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
-
-    const res = await fetch(testUrl, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    if (!res.ok) {
-      return { valid: false, error: `Provider returned status ${res.status}${res.status === 401 ? ' (invalid API key)' : ''}` }
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal })
+      return res
+    } finally {
+      clearTimeout(timeout)
     }
-    logger.info('Connection test succeeded', { url: testUrl, status: res.status })
-    return { valid: true, status: res.status }
+  }
+
+  try {
+    const res = await tryFetch(modelsUrl, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    })
+
+    if (res.status === 200) {
+      logger.info('Connection test succeeded', { url: modelsUrl, status: res.status })
+      return { valid: true, status: res.status }
+    }
+
+    if (res.status === 401) {
+      return { valid: false, error: 'API key is invalid (received 401)' }
+    }
+
+    if (res.status === 404) {
+      const chatRes = await tryFetch(chatUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [] }),
+      })
+      if (chatRes.status === 401) {
+        return { valid: false, error: 'API key is invalid (received 401)' }
+      }
+      if (chatRes.status === 404) {
+        return { valid: false, error: `Endpoint not found at ${base}. Check the API URL.` }
+      }
+      logger.info('Connection test succeeded via chat completions fallback', { url: chatUrl, status: chatRes.status })
+      return { valid: true, status: chatRes.status }
+    }
+
+    logger.warn('Connection test failed', { url: modelsUrl, status: res.status })
+    return { valid: false, error: `Provider returned status ${res.status}` }
   } catch (err) {
     const msg = err.name === 'AbortError' ? 'Connection timed out' : `Cannot reach server: ${err.message}`
-    logger.warn('Connection test failed', { url: testUrl, error: err.message, code: err.code })
+    logger.warn('Connection test failed', { url: modelsUrl, error: err.message, code: err.code })
     return { valid: false, error: msg }
   }
 }
@@ -146,6 +176,7 @@ router.patch('/:id', async (req, res) => {
 
   for (const [key, value] of Object.entries(req.body)) {
     if (allowed.includes(key)) {
+      if (key === 'api_key' && value === '***') continue
       updates.push(`${key} = ?`)
       values.push(value)
     }
@@ -155,11 +186,12 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ error: 'No valid fields to update' })
   }
 
-  const urlChanged = 'api_url' in req.body || 'api_key' in req.body
+  const keyChanged = 'api_key' in req.body && req.body.api_key !== '***'
+  const urlChanged = 'api_url' in req.body || keyChanged
 
   if (urlChanged) {
     const testUrl = req.body.api_url || provider.api_url
-    const testKey = req.body.api_key || provider.api_key
+    const testKey = keyChanged ? req.body.api_key : provider.api_key
     const validation = await testProviderConnection(testUrl, testKey)
     if (!validation.valid) {
       logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })
