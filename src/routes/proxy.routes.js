@@ -1,8 +1,7 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, getProvider } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
-import { dbGet } from '../db.js'
 import { recordSuccess } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { pipeline } from 'stream/promises'
@@ -58,7 +57,7 @@ async function handleStreamingRequest(req, res) {
 
     let provider
     if (providerId) {
-      provider = dbGet('SELECT * FROM providers WHERE id = ?', [providerId])
+      provider = getProvider(providerId)
     } else {
       const providers = selectProviders('chat')
       provider = providers[0]

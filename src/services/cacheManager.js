@@ -4,7 +4,9 @@ import { dbGet, dbRun } from '../db.js'
 import { config } from '../config.js'
 
 const MEM_TTL_MS = 300_000
+const MEM_MAX = 1000
 const memCache = new Map()
+const memOrder = []
 
 function memGet(key) {
   const entry = memCache.get(key)
@@ -17,7 +19,16 @@ function memGet(key) {
 }
 
 function memSet(key, data) {
+  if (memCache.has(key)) {
+    const idx = memOrder.indexOf(key)
+    if (idx !== -1) memOrder.splice(idx, 1)
+  }
+  if (memCache.size >= MEM_MAX) {
+    const oldest = memOrder.shift()
+    memCache.delete(oldest)
+  }
   memCache.set(key, { data, expiresAt: Date.now() + MEM_TTL_MS })
+  memOrder.push(key)
 }
 
 export function generateHash(body) {

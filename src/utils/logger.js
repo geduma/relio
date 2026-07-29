@@ -15,7 +15,7 @@ const logFile = path.join(logDir, 'app.log')
 function log(level, message, data = null) {
   const timestamp = new Date().toISOString()
   const line = `[${timestamp}] [${level.toUpperCase()}] ${message}${data ? ' ' + JSON.stringify(data) : ''}`
-  fs.appendFile(logFile, line + '\n', () => {})
+  fs.appendFile(logFile, line + '\n', (err) => { if (err) console.error('Log write failed', err) })
   if (config.server.nodeEnv !== 'production') {
     console.log(line)
   }
