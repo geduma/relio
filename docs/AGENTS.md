@@ -9,7 +9,7 @@ Instructions for AI assistants working on this codebase.
 - **DB:** better-sqlite3 (synchronous, no ORM)
 - **Frontend:** React 18 + Vite 5 (no TypeScript)
 - **HTTP:** Native `fetch` (no axios)
-- **Auth:** Pluggable auth providers (default: Geduma OAuth) + local API Keys
+- **Auth:** Pluggable auth providers (default: none/anonymous) + local API Keys
 - **Testing:** Vitest
 - **Docker:** multi-stage in `docker/`
 
@@ -105,18 +105,18 @@ src/
 
 Depends on the active auth provider (set via `auth.provider` in `config.json`):
 
-**geduma** (default):
+**none** (default):
+1. `GET /admin/api/auth/providers` → `{ autoLogin: true }`
+2. Frontend auto-redirects to dashboard (no login page shown)
+3. Backend creates anonymous session automatically
+
+**geduma** (opt-in OAuth):
 1. `GET /admin/api/auth/providers` → returns OAuth provider buttons
 2. User clicks a provider → `POST /admin/api/auth/login { provider }` → returns `{ redirect: oauth_url }`
 3. Browser redirects to OAuth provider (Google, GitHub, etc.)
 4. User authenticates → OAuth callback goes to Geduma API (`/auth?code=xxx&state=yyy`)
 5. Geduma returns HTML that redirects to Relio with `#session_token=xxx` in the URL hash
 6. Frontend detects the hash → `POST /admin/api/auth/callback { sessionToken }` → backend exchanges token via Geduma `GET /auth/session/:sessionToken` → creates local session → sets cookie
-
-**none** (anonymous):
-1. `GET /admin/api/auth/providers` → `{ autoLogin: true }`
-2. Frontend auto-redirects to dashboard (no login page shown)
-3. Backend creates anonymous session automatically
 
 ## Configuration
 
