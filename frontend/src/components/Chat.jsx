@@ -40,7 +40,7 @@ export default function Chat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider_id: selectedId,
-          messages: [...messages, userMsg],
+          messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMsg],
           use_proxy: useProxy,
         }),
       })

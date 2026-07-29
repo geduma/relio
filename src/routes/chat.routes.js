@@ -24,18 +24,19 @@ router.post('/send', async (req, res) => {
 
   if (use_proxy) {
     try {
-      const provider = getProvider(provider_id)
-      if (!provider) {
-        return res.status(404).json(addTime({ error: 'Provider not found' }))
-      }
+      const selected = getProvider(provider_id)
+      const model = req.body.model || selected?.model
+      const requestBody = { messages }
+      if (model) requestBody.model = model
+
       const result = await processRequest({
         endpoint: '/v1/chat/completions',
-        requestBody: { messages, model: req.body.model || provider.model },
+        requestBody,
         originIp: req.ip,
         originHeader: req.headers['user-agent'],
         authenticatedVia: 'dashboard_chat',
         apiKey: null,
-        providerId: provider.id,
+        providerId: null,
       })
       return res.status(result.statusCode).json(addTime(result.body))
     } catch (err) {
