@@ -7,7 +7,8 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   buildUrl(baseUrl) {
     let url = baseUrl.replace(/\/+$/, '')
     if (!url.endsWith('/chat/completions')) {
-      const suffix = url.endsWith('/v1') ? '' : '/v1'
+      const hasVersion = /\/v\d[\w.]*(\/|$)/.test(url)
+      const suffix = hasVersion ? '' : '/v1'
       url += `${suffix}/chat/completions`
     }
     return url
@@ -15,7 +16,8 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
 
   buildUrlForModels(baseUrl) {
     let url = baseUrl.replace(/\/+$/, '')
-    if (!url.endsWith('/v1')) url += '/v1'
+    url = url.replace(/\/chat\/completions$/, '')
+    if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
     return `${url}/models`
   }
 
