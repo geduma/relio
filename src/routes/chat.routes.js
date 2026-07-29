@@ -39,7 +39,7 @@ router.post('/send', async (req, res) => {
       })
       return res.status(result.statusCode).json(addTime(result.body))
     } catch (err) {
-      return res.status(503).json(addTime({ error: err.message }))
+      return res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null }))
     }
   }
 

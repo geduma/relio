@@ -106,5 +106,8 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     authenticatedVia, cacheHit: false, retryCount,
   })
 
-  throw new Error(lastError?.message || 'All providers failed')
+  const finalErr = new Error(lastError?.message || 'All providers failed')
+  finalErr.status = lastError?.status || 503
+  finalErr.data = lastError?.data || null
+  throw finalErr
 }

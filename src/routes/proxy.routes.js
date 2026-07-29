@@ -18,7 +18,7 @@ router.post('/chat/completions', async (req, res) => {
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
-    res.status(503).json({ error: 'All providers failed', message: err.message })
+    res.status(err.status || 503).json({ error: err.message })
   }
 })
 
@@ -34,7 +34,7 @@ router.post('/embeddings', async (req, res) => {
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
-    res.status(503).json({ error: 'All providers failed', message: err.message })
+    res.status(err.status || 503).json({ error: err.message })
   }
 })
 
