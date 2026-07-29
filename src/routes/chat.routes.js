@@ -23,9 +23,10 @@ router.post('/send', async (req, res) => {
 
   if (use_proxy) {
     try {
+      const model = req.body.model || dbGet('SELECT model FROM providers WHERE id = ?', [provider_id])?.model
       const result = await processRequest({
         endpoint: '/v1/chat/completions',
-        requestBody: { messages, model: req.body.model },
+        requestBody: { messages, model },
         originIp: req.ip,
         originHeader: req.headers['user-agent'],
         authenticatedVia: 'dashboard_chat',
