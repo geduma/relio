@@ -3,6 +3,7 @@ import { dbGet, dbAll } from '../db.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
 import { callProvider } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
+import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { logger } from '../utils/logger.js'
 
 const router = Router()
@@ -45,9 +46,35 @@ router.post('/send', async (req, res) => {
 
   try {
     const data = await callProvider(provider, { messages, model: req.body.model || provider.model }, null)
+    const responseTimeMs = Date.now() - start
+    const inputTokens = data.usage?.prompt_tokens || 0
+    const outputTokens = data.usage?.completion_tokens || 0
+    const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
+
+    enqueueLog({
+      providerId: provider.id, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode: 200, responseBody: data,
+      inputTokens, outputTokens, estimatedCost,
+      responseTimeMs, authenticatedVia: 'dashboard_chat', cacheHit: false, retryCount: 0,
+    })
+
+    enqueueMetric(provider.id, { inputTokens, outputTokens, cost: estimatedCost, responseTimeMs, cacheHit: false })
+
     res.json(addTime(data))
   } catch (err) {
+    const responseTimeMs = Date.now() - start
     logger.warn('Chat test failed', { provider_id, error: err.message })
+
+    enqueueLog({
+      providerId: provider.id, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode: err.status || 503, errorMessage: err.message,
+      responseTimeMs, authenticatedVia: 'dashboard_chat', cacheHit: false, wasRetry: false, retryCount: 0,
+    })
+
+    enqueueMetric(provider.id, { error: true, responseTimeMs })
+
     res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null }))
   }
 })
