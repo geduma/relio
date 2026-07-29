@@ -88,7 +88,7 @@ app.get('/admin/api/summary', dashboardLimiter, requireDashboardSession, (req, r
 
 const frontendDist = path.join(__dirname, '../frontend/dist')
 app.use(express.static(frontendDist))
-app.get('/admin/*', (_, res) => {
+app.get(['/admin', '/admin/*'], (_, res) => {
   res.sendFile(path.join(frontendDist, 'index.html'))
 })
 

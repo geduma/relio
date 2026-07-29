@@ -3,7 +3,7 @@ import { dbAll, dbGet, dbRun } from '../db.js'
 export function selectProviders(modelType) {
   return dbAll(
     `SELECT * FROM providers
-     WHERE type = ? AND status = 'active'
+     WHERE type = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= datetime('now')))
      ORDER BY order_position ASC`,
     [modelType]
   )

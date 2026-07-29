@@ -2,8 +2,9 @@ import { getModelTypeFromBody, selectProviders, isProviderAvailable, isRateLimit
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
+import { dbGet } from '../db.js'
 
-export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey }) {
+export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId }) {
   const startTime = Date.now()
 
   const modelType = getModelTypeFromBody(requestBody)
@@ -21,10 +22,21 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       responseTimeMs: Date.now() - startTime,
       authenticatedVia, cacheHit: true,
     })
+    if (cached.provider_id) {
+      enqueueMetric(cached.provider_id, {
+        cacheHit: true, responseTimeMs: Date.now() - startTime,
+      })
+    }
     return { statusCode: 200, body: responseBody }
   }
 
-  const providers = selectProviders(modelType)
+  let providers
+  if (providerId) {
+    const p = dbGet('SELECT * FROM providers WHERE id = ?', [providerId])
+    providers = p ? [p] : []
+  } else {
+    providers = selectProviders(modelType)
+  }
 
   for (const provider of providers) {
     if (!isProviderAvailable(provider)) {
@@ -53,7 +65,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
       recordSuccess(provider.id)
-      setCache(endpoint, requestBody, data)
+      setCache(endpoint, requestBody, data, provider.id)
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
