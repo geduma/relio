@@ -29,6 +29,7 @@
 - **Chat dashboard** — test LLM providers directly from the UI with response time display
 - **Dark mode** — toggleable theme (dark by default) with localStorage persistence
 - **Auto-maintenance** — daily backups, data retention cleanup
+- **Provider Type Abstraction** — pluggable adapters for OpenAI-compatible, Anthropic, Gemini, and Azure OpenAI with canonical response normalization
 
 ## Requirements
 
@@ -118,6 +119,23 @@ Relio uses a pluggable auth provider system. Set `auth.provider` in `config.json
 
 To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
 
+## LLM Provider Adapters
+
+Relio normalizes all LLM providers to an OpenAI-compatible format using a pluggable adapter system at `src/adapters/`. Each adapter handles request transformation, response normalization, streaming, and connection testing.
+
+### Built-in adapters
+
+| Provider Type | Auth | Endpoint | Notes |
+|---|---|---|---|
+| `openai-compatible` | Bearer token | `/v1/chat/completions` | Passthrough — works with OpenAI, Groq, Together, etc. |
+| `anthropic` | x-api-key | `/v1/messages` | Transforms request/response, includes tool calls and streaming |
+| `gemini-native` | Bearer token | `/v1/models/{model}:generateContent` | Uses native Gemini API (not Vertex), supports streaming |
+| `azure-openai` | api-key header | `/chat/completions` | Appends `api-version` parameter automatically |
+
+### Adding a custom adapter
+
+Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register it in `src/adapters/index.js`. See `docs/AGENTS.md` for the full guide.
+
 ## Docker
 
 ```bash
@@ -135,10 +153,10 @@ The compose file mounts `config.json`, `db/`, and `logs/` from the host so data 
 
 Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dark/light mode, persisted in localStorage).
 
-1. Add providers (OpenAI, Anthropic, Groq...)
-3. Order them: Main, Fallback 1, Fallback 2...
-4. Generate API Keys for your AI agents
-5. Use the **Chat** tab to test providers interactively with response time display
+1. Add providers — select **provider type** (openai-compatible, anthropic, gemini-native, azure-openai) and **capability** (chat, embeddings, vision)
+2. Order them: Main, Fallback 1, Fallback 2...
+3. Generate API Keys for your AI agents
+4. Use the **Chat** tab to test providers interactively with response time display
 
 ### Proxy API
 
@@ -208,6 +226,13 @@ relio/
 │   │   ├── geduma.js       # Geduma OAuth provider
 │   │   ├── none.js         # Anonymous session provider
 │   │   └── index.js        # Factory
+│   ├── adapters/           # Pluggable LLM provider adapters
+│   │   ├── base.js         # ProviderAdapter interface
+│   │   ├── index.js        # Factory + registry (singleton cache)
+│   │   ├── openai-compatible.js
+│   │   ├── anthropic.js
+│   │   ├── gemini-native.js
+│   │   └── azure-openai.js
 │   ├── services/           # Business logic
 │   ├── middleware/          # Auth middleware
 │   ├── routes/             # API routes

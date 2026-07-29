@@ -2,82 +2,14 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun, getDb } from '../db.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
+import { getAdapter } from '../adapters/index.js'
 import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
 
-async function testProviderConnection(apiUrl, apiKey) {
-  let base = apiUrl.replace(/\/+$/, '')
-  if (!base.endsWith('/v1')) base += '/v1'
-  const modelsUrl = `${base}/models`
-  const chatUrl = `${base}/chat/completions`
-
-  async function tryFetch(url, options) {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
-    try {
-      const res = await fetch(url, { ...options, signal: controller.signal })
-      return res
-    } finally {
-      clearTimeout(timeout)
-    }
-  }
-
-  async function tryChatCompletions() {
-    const res = await tryFetch(chatUrl, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
-    })
-    if (res.status === 401 || res.status === 403) return 'invalid_key'
-    if (res.status === 404) return 'not_found'
-    let body
-    try { body = await res.json() } catch { body = null }
-    if (body?.error?.message) {
-      if (/invalid|unauthorized|auth|api.key/.test(body.error.message.toLowerCase())) {
-        return 'invalid_key'
-      }
-    }
-    return 'valid'
-  }
-
-  try {
-    const modelsRes = await tryFetch(modelsUrl, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    })
-
-    if (modelsRes.status === 401 || modelsRes.status === 403) {
-      return { valid: false, error: 'API key is invalid' }
-    }
-
-    if (modelsRes.status === 200) {
-      const chatResult = await tryChatCompletions()
-      if (chatResult === 'invalid_key') {
-        return { valid: false, error: 'API key is invalid' }
-      }
-      logger.info('Connection test succeeded', { url: modelsUrl, status: modelsRes.status })
-      return { valid: true, status: modelsRes.status }
-    }
-
-    if (modelsRes.status === 404) {
-      const chatResult = await tryChatCompletions()
-      if (chatResult === 'invalid_key') {
-        return { valid: false, error: 'API key is invalid' }
-      }
-      if (chatResult === 'not_found') {
-        return { valid: false, error: `Endpoint not found at ${base}. Check the API URL.` }
-      }
-      logger.info('Connection test succeeded via chat completions', { url: chatUrl })
-      return { valid: true }
-    }
-
-    logger.warn('Connection test failed', { url: modelsUrl, status: modelsRes.status })
-    return { valid: false, error: `Provider returned status ${modelsRes.status}` }
-  } catch (err) {
-    const msg = err.name === 'AbortError' ? 'Connection timed out' : `Cannot reach server: ${err.message}`
-    logger.warn('Connection test failed', { url: modelsUrl, error: err.message, code: err.code })
-    return { valid: false, error: msg }
-  }
+async function testProviderConnection(apiUrl, apiKey, providerType) {
+  const adapter = getAdapter(providerType)
+  return adapter.testConnection(apiUrl, apiKey)
 }
 
 const router = Router()
@@ -85,12 +17,12 @@ const router = Router()
 router.use(requireDashboardSession)
 
 router.get('/', (req, res) => {
-  const { type } = req.query
+  const { capability } = req.query
   let rows
-  if (type) {
+  if (capability) {
     rows = dbAll(
-      'SELECT * FROM providers WHERE type = ? ORDER BY order_position ASC',
-      [type]
+      'SELECT * FROM providers WHERE capability = ? ORDER BY order_position ASC',
+      [capability]
     )
   } else {
     rows = dbAll('SELECT * FROM providers ORDER BY order_position ASC')
@@ -100,7 +32,7 @@ router.get('/', (req, res) => {
 })
 
 router.post('/test-connection', async (req, res) => {
-  let { api_url, api_key, provider_id } = req.body
+  let { api_url, api_key, provider_type, provider_id } = req.body
 
   if (api_key === '***' && provider_id) {
     const provider = dbGet('SELECT api_key FROM providers WHERE id = ?', [provider_id])
@@ -110,32 +42,33 @@ router.post('/test-connection', async (req, res) => {
   if (!api_url || !api_key) {
     return res.status(400).json({ valid: false, error: 'api_url and api_key are required' })
   }
-  const result = await testProviderConnection(api_url, api_key)
+
+  const result = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
   if (!result.valid) {
-    logger.warn('Provider connection test from dashboard failed', { api_url, error: result.error })
+    logger.warn('Provider connection test from dashboard failed', { api_url, provider_type, error: result.error })
   }
   res.json(result)
 })
 
 router.post('/', async (req, res) => {
   const {
-    name, api_url, api_key, model, type,
+    name, api_url, api_key, model, capability, provider_type,
     rate_limit_req_per_min, tokens_per_day,
     cost_per_input_token, cost_per_output_token,
     cooldown_after_failures, cooldown_duration_seconds, status,
   } = req.body
 
-  if (!name || !api_url || !api_key || !model || !type) {
-    return res.status(400).json({ error: 'name, api_url, api_key, model, and type are required' })
+  if (!name || !api_url || !api_key || !model || !capability) {
+    return res.status(400).json({ error: 'name, api_url, api_key, model, and capability are required' })
   }
 
-  const validation = await testProviderConnection(api_url, api_key)
+  const validation = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
   if (!validation.valid) {
     logger.warn('Provider creation rejected — connection test failed', { name, api_url, error: validation.error })
     return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
   }
 
-  const maxPos = dbGet('SELECT MAX(order_position) AS max FROM providers WHERE type = ?', [type])
+  const maxPos = dbGet('SELECT MAX(order_position) AS max FROM providers WHERE capability = ?', [capability])
   const nextPos = (maxPos?.max ?? -1) + 1
 
   const id = uuidv4()
@@ -143,13 +76,13 @@ router.post('/', async (req, res) => {
 
   dbRun(
     `INSERT INTO providers
-     (id, name, api_url, api_key, model, type, order_position, order_label,
+     (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label,
       rate_limit_req_per_min, tokens_per_day,
       cost_per_input_token, cost_per_output_token,
       cooldown_after_failures, cooldown_duration_seconds, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      id, name, api_url, api_key, model, type, nextPos, label,
+      id, name, api_url, api_key, model, capability, provider_type || 'openai-compatible', nextPos, label,
       rate_limit_req_per_min ?? 60, tokens_per_day ?? 0,
       cost_per_input_token ?? 0, cost_per_output_token ?? 0,
       cooldown_after_failures ?? 5, cooldown_duration_seconds ?? 300, status ?? 'active',
@@ -189,7 +122,7 @@ router.patch('/:id', async (req, res) => {
   if (!provider) return res.status(404).json({ error: 'Provider not found' })
 
   const allowed = [
-    'name', 'api_url', 'api_key', 'model', 'type',
+    'name', 'api_url', 'api_key', 'model', 'capability', 'provider_type',
     'status', 'rate_limit_req_per_min', 'tokens_per_day',
     'cost_per_input_token', 'cost_per_output_token',
     'cooldown_after_failures', 'cooldown_duration_seconds',
@@ -216,7 +149,8 @@ router.patch('/:id', async (req, res) => {
   if (urlChanged) {
     const testUrl = req.body.api_url || provider.api_url
     const testKey = keyChanged ? req.body.api_key : provider.api_key
-    const validation = await testProviderConnection(testUrl, testKey)
+    const testProviderType = req.body.provider_type || provider.provider_type
+    const validation = await testProviderConnection(testUrl, testKey, testProviderType)
     if (!validation.valid) {
       logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })
       return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
@@ -238,8 +172,8 @@ router.patch('/:id', async (req, res) => {
       doUpdate()
 
       const activeOnes = dbAll(
-        `SELECT id FROM providers WHERE type = ? AND status = 'active' AND id != ? ORDER BY order_position ASC`,
-        [provider.type, id]
+        `SELECT id FROM providers WHERE capability = ? AND status = 'active' AND id != ? ORDER BY order_position ASC`,
+        [provider.capability, id]
       )
 
       activeOnes.forEach((p, index) => {
@@ -283,8 +217,8 @@ router.delete('/:id', (req, res) => {
     dbRun('DELETE FROM circuit_breaker_state WHERE provider_id = ?', [id])
 
     const activeOnes = dbAll(
-      `SELECT id FROM providers WHERE type = ? AND status = 'active' ORDER BY order_position ASC`,
-      [provider.type]
+      `SELECT id FROM providers WHERE capability = ? AND status = 'active' ORDER BY order_position ASC`,
+      [provider.capability]
     )
     activeOnes.forEach((r, index) => {
       const label = ORDER_LABELS[index] || `Fallback ${index}`

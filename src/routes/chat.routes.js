@@ -39,7 +39,7 @@ router.post('/send', async (req, res) => {
       })
       return res.status(result.statusCode).json(addTime(result.body))
     } catch (err) {
-      return res.status(503).json(addTime({ error: err.message }))
+      return res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null }))
     }
   }
 
@@ -85,7 +85,7 @@ router.post('/send', async (req, res) => {
 
 router.get('/providers', (req, res) => {
   const rows = dbAll(
-    "SELECT id, name, model, api_url FROM providers WHERE type = 'chat' ORDER BY order_position ASC"
+    "SELECT id, name, model, api_url, provider_type FROM providers WHERE capability = 'chat' ORDER BY order_position ASC"
   )
   res.json(rows)
 })
