@@ -1,6 +1,12 @@
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun } from '../db.js'
 import { getAuthProvider } from '../auth/index.js'
+import { enqueueApiKeyTouch } from './logQueue.js'
+
+const API_KEY_CACHE_TTL = 300_000
+const SESSION_CACHE_TTL = 60_000
+const apiKeyCache = new Map()
+const sessionCache = new Map()
 
 export async function login(credentials) {
   const provider = await getAuthProvider()
@@ -8,13 +14,21 @@ export async function login(credentials) {
 }
 
 export async function logout(sessionId) {
+  sessionCache.delete(sessionId)
   const provider = await getAuthProvider()
   return provider.logout(sessionId)
 }
 
 export async function getSession(sessionId) {
+  const cached = sessionCache.get(sessionId)
+  if (cached && Date.now() < cached.expiresAt) return cached.data
+
   const provider = await getAuthProvider()
-  return provider.getSession(sessionId)
+  const session = await provider.getSession(sessionId)
+  if (session) {
+    sessionCache.set(sessionId, { data: session, expiresAt: Date.now() + SESSION_CACHE_TTL })
+  }
+  return session || null
 }
 
 export async function getLoginConfig() {
@@ -45,9 +59,16 @@ export function createApiKey(name) {
 }
 
 export function validateApiKey(key) {
+  const cached = apiKeyCache.get(key)
+  if (cached && Date.now() < cached.expiresAt) {
+    enqueueApiKeyTouch(cached.id)
+    return cached.row
+  }
+
   const row = dbGet('SELECT * FROM api_keys WHERE key = ?', [key])
   if (row) {
-    dbRun('UPDATE api_keys SET last_used_at = datetime(\'now\') WHERE id = ?', [row.id])
+    apiKeyCache.set(key, { id: row.id, row, expiresAt: Date.now() + API_KEY_CACHE_TTL })
+    enqueueApiKeyTouch(row.id)
   }
   return row || null
 }
@@ -66,6 +87,9 @@ export function listApiKeys() {
 }
 
 export function revokeApiKey(id) {
+  for (const [key, entry] of apiKeyCache) {
+    if (entry.id === id) apiKeyCache.delete(key)
+  }
   const result = dbRun('DELETE FROM api_keys WHERE id = ?', [id])
   return result.changes > 0
 }

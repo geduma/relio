@@ -87,6 +87,9 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 | F-30 | View recent request logs | P0 |
 | F-31 | Manage API Keys (create, list, revoke) | P0 |
 | F-32 | Health check endpoint | P1 |
+| F-38 | Chat dashboard for interactive provider testing | P1 |
+| F-39 | Dark mode with toggle and localStorage persistence | P2 |
+| F-40 | Provider connection test with API key validation and masked key handling | P1 |
 
 ### 3.7 Audit & Metrics
 | ID | Requirement | Priority |
@@ -198,6 +201,42 @@ POST /v1/chat/completions
 
 ---
 
+### 6.3 Chat (Dashboard)
+
+```
+POST /admin/api/chat/send
+  { provider_id, messages, use_proxy }
+
+1. Chat.jsx loads providers from GET /admin/api/chat/providers
+2. User selects provider, types message, optionally enables proxy toggle
+3. Proxy disabled (default):
+   a. POST /admin/api/chat/send with { provider_id, messages }
+   b. Backend calls callProvider() directly — bypasses failover, cache, metrics
+4. Proxy enabled:
+   a. POST /admin/api/chat/send with { provider_id, messages, use_proxy: true }
+   b. Backend calls processRequest() — full pipeline (failover, cache, circuit breaker, metrics)
+5. Response includes response_time_ms displayed in each assistant message bubble
+```
+
+### 6.4 Provider Connection Test
+
+```
+POST /admin/api/providers/test-connection
+  { api_url, api_key } or { provider_id } for masked key resolution
+
+1. Primary: GET /v1/models with Authorization header
+   - 200 → also verify with POST /v1/chat/completions
+   - 401/403 → API key invalid
+   - 404 → fallback to POST /v1/chat/completions
+2. Fallback: POST /v1/chat/completions with fake model
+   - Check res.ok and response body for auth-related error messages
+3. Timeout: 5s per request via AbortController
+4. Security: PATCH ignores '***' api_key (no DB update);
+   test sends provider_id to resolve real key from DB
+```
+
+---
+
 ## 7. Success Metrics
 
 | Metric | Target |
@@ -220,6 +259,9 @@ POST /v1/chat/completions
 - Persistent cache with configurable TTL
 - Docker multi-stage
 - Per-provider rate limiting
+- Chat dashboard for interactive provider testing
+- Dark mode with toggle and localStorage persistence
+- Provider connection test with API key validation and masked key handling
 
 ### v2.0 (Future)
 - API key encryption at rest

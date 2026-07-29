@@ -1,7 +1,7 @@
 import { getModelTypeFromBody, selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
-import { logRequest, updateMetrics } from '../services/metricsLogger.js'
+import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 
 export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey }) {
   const startTime = Date.now()
@@ -15,7 +15,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   const cached = getCache(queryHash)
   if (cached) {
     const responseBody = JSON.parse(cached.response_body)
-    logRequest({
+    enqueueLog({
       endpoint, requestBody, originIp, originHeader,
       responseBody, statusCode: 200,
       responseTimeMs: Date.now() - startTime,
@@ -55,14 +55,14 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       recordSuccess(provider.id)
       setCache(endpoint, requestBody, data)
 
-      logRequest({
+      enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
         statusCode: 200, responseBody: data,
         inputTokens, outputTokens, estimatedCost,
         responseTimeMs, authenticatedVia, cacheHit: false, retryCount,
       })
 
-      updateMetrics(provider.id, {
+      enqueueMetric(provider.id, {
         inputTokens, outputTokens, cost: estimatedCost,
         responseTimeMs, cacheHit: false,
       })
@@ -74,20 +74,20 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
       recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
 
-      logRequest({
+      enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
         statusCode: err.status || 503, errorMessage: err.message,
         responseTimeMs: Date.now() - startTime,
         authenticatedVia, cacheHit: false, wasRetry: retryCount > 0, retryCount,
       })
 
-      updateMetrics(provider.id, {
+      enqueueMetric(provider.id, {
         error: true, responseTimeMs: Date.now() - startTime,
       })
     }
   }
 
-  logRequest({
+  enqueueLog({
     endpoint, requestBody, originIp, originHeader,
     statusCode: 503, errorMessage: lastError?.message || 'All providers unavailable',
     responseTimeMs: Date.now() - startTime,

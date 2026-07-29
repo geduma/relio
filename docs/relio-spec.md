@@ -1,5 +1,7 @@
 # Relio: LLM Relay — Full Technical Specification
 
+> **⚠️ Legacy document — covers the initial v1.0 release. For current feature documentation see [PRD.md](./PRD.md) (requirements) and [README.md](../README.md) (overview).**
+
 **Name:** Relio (LLM Relay)  
 **Version:** 1.0  
 **Stack:** Node.js + Express.js + SQLite (better-sqlite3)  

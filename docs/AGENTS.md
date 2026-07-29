@@ -61,6 +61,7 @@ src/
 │   ├── providers.routes.js
 │   ├── metrics.routes.js
 │   ├── keys.routes.js
+│   ├── chat.routes.js    # /admin/api/chat/* (dashboard chat test)
 │   └── proxy.routes.js   # /v1/*
 ├── handlers/
 │   ├── requestHandler.js # Cache → failover → response
@@ -73,6 +74,19 @@ src/
 └── utils/
     └── logger.js         # File app logger
 ```
+
+### Chat Flow (Dashboard)
+
+1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `type = 'chat'`)
+2. User selects a provider, types a message, and optionally enables the Relio proxy toggle
+3. `POST /admin/api/chat/send` with `{ provider_id, messages, use_proxy }`:
+   - **Proxy disabled (default):** Calls `callProvider()` directly — bypasses failover, cache, metrics, and rate limiting
+   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics)
+4. Response is rendered as a chat bubble
+
+### Provider Connection Test
+
+`testProviderConnection()` in `providers.routes.js` now validates both URL reachability and API key correctness by checking `res.ok` after calling `{api_url}/v1/models` with the API key. A 401 status returns `{ valid: false, error: '...invalid API key' }`.
 
 ### Proxy Request Flow
 
@@ -144,17 +158,50 @@ beforeAll(async () => {
 - No TypeScript, no CSS framework, no external libs (only react + react-router-dom)
 - Styles in `frontend/src/style.css` (plain CSS, no modules)
 
+### Theme
+
+- **Dark mode by default** using CSS custom properties on `:root`
+- `.light-mode` class on `body` overrides variables for light theme
+- Toggle in sidebar (Dashboard) and top-right (Login) persists to `localStorage('relio-theme')`
+- Login page uses `--login-bg` for background contrast
+
+### Provider Connection Test
+
+`testProviderConnection()` in `providers.routes.js` validates both URL reachability and API key correctness:
+
+1. **Primary:** `GET /v1/models` with `Authorization: Bearer <apiKey>`
+   - `200` → also verifies with `POST /v1/chat/completions` (catches providers that don't auth on `/models`)
+   - `401`/`403` → API key invalid
+   - `404` → falls back to `POST /v1/chat/completions`
+2. **Fallback:** `POST /v1/chat/completions` with fake model
+   - `401`/`403` → API key invalid
+   - `404` → endpoint not found
+   - Checks response body for auth-related error messages
+3. **Timeout:** 5 seconds per request via `AbortController`
+
+**Security:** When editing a provider, the API key is masked as `'***'` in the GET response. On save, `'***'` is ignored (key unchanged). On test, the frontend sends `provider_id` so the backend resolves the real key from DB.
+
+### Chat Flow (Dashboard)
+
+1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `type = 'chat'`)
+2. User selects a provider, types a message, and optionally enables the Relio proxy toggle
+3. `POST /admin/api/chat/send` with `{ provider_id, messages, use_proxy }`:
+   - **Proxy disabled (default):** Calls `callProvider()` directly — bypasses failover, cache, metrics, and rate limiting
+   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics)
+4. Response includes `response_time_ms` displayed next to the provider name in each message bubble
+
 ### Components
 
 | Component | Route | Purpose |
 |---|---|---|
-| `Login.jsx` | `/admin/login` | Captures session_token hash, initiates OAuth login |
-| `Dashboard.jsx` | `/admin/dashboard/*` | Layout + internal routing |
+| `Login.jsx` | `/admin/login` | Captures session_token hash, initiates OAuth login, theme toggle |
+| `Dashboard.jsx` | `/admin/dashboard/*` | Layout + internal routing + theme toggle |
 | `ProvidersList.jsx` | `/admin/dashboard/providers` | List with reorder |
 | `ProviderForm.jsx` | Modal | Create/edit provider |
 | `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + table |
 | `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys |
 | `Logs.jsx` | `/admin/dashboard/logs` | Requests table |
+| `Chat.jsx` | `/admin/chat` | Chat interface to test providers |
 
 ## Docker
 

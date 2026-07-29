@@ -9,22 +9,73 @@ const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallbac
 async function testProviderConnection(apiUrl, apiKey) {
   let base = apiUrl.replace(/\/+$/, '')
   if (!base.endsWith('/v1')) base += '/v1'
-  const testUrl = `${base}/models`
+  const modelsUrl = `${base}/models`
+  const chatUrl = `${base}/chat/completions`
 
-  try {
+  async function tryFetch(url, options) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal })
+      return res
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
 
-    const res = await fetch(testUrl, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      signal: controller.signal,
+  async function tryChatCompletions() {
+    const res = await tryFetch(chatUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
     })
-    clearTimeout(timeout)
-    logger.info('Connection test succeeded', { url: testUrl, status: res.status })
-    return { valid: true, status: res.status }
+    if (res.status === 401 || res.status === 403) return 'invalid_key'
+    if (res.status === 404) return 'not_found'
+    let body
+    try { body = await res.json() } catch { body = null }
+    if (body?.error?.message) {
+      if (/invalid|unauthorized|auth|api.key/.test(body.error.message.toLowerCase())) {
+        return 'invalid_key'
+      }
+    }
+    return 'valid'
+  }
+
+  try {
+    const modelsRes = await tryFetch(modelsUrl, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    })
+
+    if (modelsRes.status === 401 || modelsRes.status === 403) {
+      return { valid: false, error: 'API key is invalid' }
+    }
+
+    if (modelsRes.status === 200) {
+      const chatResult = await tryChatCompletions()
+      if (chatResult === 'invalid_key') {
+        return { valid: false, error: 'API key is invalid' }
+      }
+      logger.info('Connection test succeeded', { url: modelsUrl, status: modelsRes.status })
+      return { valid: true, status: modelsRes.status }
+    }
+
+    if (modelsRes.status === 404) {
+      const chatResult = await tryChatCompletions()
+      if (chatResult === 'invalid_key') {
+        return { valid: false, error: 'API key is invalid' }
+      }
+      if (chatResult === 'not_found') {
+        return { valid: false, error: `Endpoint not found at ${base}. Check the API URL.` }
+      }
+      logger.info('Connection test succeeded via chat completions', { url: chatUrl })
+      return { valid: true }
+    }
+
+    logger.warn('Connection test failed', { url: modelsUrl, status: modelsRes.status })
+    return { valid: false, error: `Provider returned status ${modelsRes.status}` }
   } catch (err) {
     const msg = err.name === 'AbortError' ? 'Connection timed out' : `Cannot reach server: ${err.message}`
-    logger.warn('Connection test failed', { url: testUrl, error: err.message, code: err.code })
+    logger.warn('Connection test failed', { url: modelsUrl, error: err.message, code: err.code })
     return { valid: false, error: msg }
   }
 }
@@ -49,7 +100,13 @@ router.get('/', (req, res) => {
 })
 
 router.post('/test-connection', async (req, res) => {
-  const { api_url, api_key } = req.body
+  let { api_url, api_key, provider_id } = req.body
+
+  if (api_key === '***' && provider_id) {
+    const provider = dbGet('SELECT api_key FROM providers WHERE id = ?', [provider_id])
+    if (provider) api_key = provider.api_key
+  }
+
   if (!api_url || !api_key) {
     return res.status(400).json({ valid: false, error: 'api_url and api_key are required' })
   }
@@ -143,6 +200,7 @@ router.patch('/:id', async (req, res) => {
 
   for (const [key, value] of Object.entries(req.body)) {
     if (allowed.includes(key)) {
+      if (key === 'api_key' && value === '***') continue
       updates.push(`${key} = ?`)
       values.push(value)
     }
@@ -152,11 +210,12 @@ router.patch('/:id', async (req, res) => {
     return res.status(400).json({ error: 'No valid fields to update' })
   }
 
-  const urlChanged = 'api_url' in req.body || 'api_key' in req.body
+  const keyChanged = 'api_key' in req.body && req.body.api_key !== '***'
+  const urlChanged = 'api_url' in req.body || keyChanged
 
   if (urlChanged) {
     const testUrl = req.body.api_url || provider.api_url
-    const testKey = req.body.api_key || provider.api_key
+    const testKey = keyChanged ? req.body.api_key : provider.api_key
     const validation = await testProviderConnection(testUrl, testKey)
     if (!validation.valid) {
       logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })

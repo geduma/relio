@@ -1,19 +1,6 @@
 import { dbAll, dbGet, dbRun } from '../db.js'
 
 export function selectProviders(modelType) {
-  dbRun(
-    `UPDATE providers SET status = 'active', cooldown_until = NULL
-     WHERE type = ? AND status = 'cooldown' AND cooldown_until IS NOT NULL AND cooldown_until <= datetime('now')`,
-    [modelType]
-  )
-
-  dbRun(
-    `UPDATE circuit_breaker_state SET state = 'healthy', failure_count = 0, cooldown_until = NULL, updated_at = datetime('now')
-     WHERE provider_id IN (SELECT id FROM providers WHERE type = ? AND status = 'active')
-     AND state = 'cooldown' AND cooldown_until <= datetime('now')`,
-    [modelType]
-  )
-
   return dbAll(
     `SELECT * FROM providers
      WHERE type = ? AND status = 'active'
@@ -65,17 +52,34 @@ export async function callProvider(provider, requestBody, signal) {
     url += `${suffix}/${isChat ? 'chat/completions' : 'embeddings'}`
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${provider.api_key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-    signal,
-  })
+  const controller = signal ? null : new AbortController()
+  const timeout = controller ? setTimeout(() => controller.abort(), 30000) : null
+  const actualSignal = signal || (controller ? controller.signal : null)
 
-  const data = await response.json()
+  let response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${provider.api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+      signal: actualSignal,
+    })
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+
+  let data
+  try {
+    data = await response.json()
+  } catch {
+    const err = new Error(`Provider returned non-JSON response (status ${response.status})`)
+    err.status = response.status
+    err.data = null
+    throw err
+  }
 
   if (!response.ok) {
     const err = new Error(data.error?.message || `Provider returned ${response.status}`)
