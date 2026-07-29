@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 function formatLogLine(log) {
   const time = new Date(log.request_at).toLocaleString()
@@ -14,7 +14,6 @@ export default function Logs() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('table')
-  const textRef = useRef(null)
 
   useEffect(() => {
     fetch('/admin/api/metrics/logs?limit=100')
@@ -124,7 +123,6 @@ export default function Logs() {
       ) : (
         <div>
           <textarea
-            ref={textRef}
             readOnly
             style={{
               width: '100%', height: '70vh', fontFamily: 'monospace', fontSize: '0.8rem',

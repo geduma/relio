@@ -255,12 +255,7 @@ body {
 .switch input:checked + .switch-slider::before { transform: translateX(20px); }
 .form-inline { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .form-inline input { flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); }
-.input-row { display: flex; gap: 0.5rem; align-items: center; }
-.input-row input { flex: 1; }
-.input-row .btn { padding-top: 0.5rem; padding-bottom: 0.5rem; font-size: 0.875rem; }
-.conn-indicator { font-size: 1.1rem; font-weight: 700; }
-.conn-ok { color: var(--success); }
-.conn-fail { color: var(--danger); cursor: help; }
+.providers-list { display: flex; flex-direction: column; gap: 0.5rem; }
 
 /* Chat */
 .chat-page {
@@ -409,10 +404,4 @@ body {
 .toast--info    { background: var(--toast-info); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: translateY(0); } }
 
-/* Theme toggle */
-.theme-btn {
-  background: transparent; border: 1px solid var(--text-muted); color: var(--sidebar-link);
-  border-radius: 4px; padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.8rem;
-  transition: color 0.15s, border-color 0.15s;
-}
-.theme-btn:hover { color: #fff; border-color: #fff; }
+
