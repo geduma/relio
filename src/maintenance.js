@@ -99,6 +99,21 @@ function archiveOldLogs() {
   }
 }
 
+export function recoverCooldowns() {
+  const recovered = dbRun(
+    `UPDATE providers SET status = 'active', cooldown_until = NULL
+     WHERE status = 'cooldown' AND cooldown_until IS NOT NULL AND cooldown_until <= datetime('now')`
+  ).changes
+
+  if (recovered > 0) {
+    dbRun(
+      `UPDATE circuit_breaker_state SET state = 'healthy', failure_count = 0, cooldown_until = NULL, updated_at = datetime('now')
+       WHERE state = 'cooldown' AND cooldown_until <= datetime('now')`
+    )
+    logger.info('Cooldowns recovered', { count: recovered })
+  }
+}
+
 export function runMaintenance() {
   logger.info('Starting maintenance')
   try {

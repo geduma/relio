@@ -6,11 +6,12 @@ import path from 'path'
 import cron from 'node-cron'
 import { fileURLToPath } from 'url'
 import { initDb } from './db.js'
-import { runMaintenance } from './maintenance.js'
+import { runMaintenance, recoverCooldowns } from './maintenance.js'
 import { requireDashboardSession } from './middleware/authMiddleware.js'
 import { getSummary } from './handlers/dashboardHandler.js'
 import { config } from './config.js'
 import { logger } from './utils/logger.js'
+import { startFlushTimer, flushAll } from './services/logQueue.js'
 
 import authRoutes from './routes/auth.routes.js'
 import providersRoutes from './routes/providers.routes.js'
@@ -59,19 +60,28 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, try again later' },
 })
 
+const dashboardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, try again later' },
+})
+
 app.use('/admin/api/auth', authLimiter, authRoutes)
 app.use('/v1', apiLimiter, proxyRoutes)
 
 initDb()
 
 cron.schedule('0 2 * * *', runMaintenance)
+cron.schedule('0 * * * *', recoverCooldowns)
 
-app.use('/admin/api/providers', providersRoutes)
-app.use('/admin/api/metrics', metricsRoutes)
-app.use('/admin/api/auth/api-keys', keysRoutes)
-app.use('/admin/api/chat', chatRoutes)
+app.use('/admin/api/providers', dashboardLimiter, providersRoutes)
+app.use('/admin/api/metrics', dashboardLimiter, metricsRoutes)
+app.use('/admin/api/auth/api-keys', dashboardLimiter, keysRoutes)
+app.use('/admin/api/chat', dashboardLimiter, chatRoutes)
 
-app.get('/admin/api/summary', requireDashboardSession, (req, res) => {
+app.get('/admin/api/summary', dashboardLimiter, requireDashboardSession, (req, res) => {
   const summary = getSummary()
   res.json(summary)
 })
@@ -92,12 +102,14 @@ app.use((_req, res) => {
 })
 
 const server = app.listen(PORT, HOST, () => {
+  startFlushTimer()
   logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
 
 function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`)
   cron.getTasks().forEach(t => t.stop())
+  flushAll()
   server.close(() => {
     logger.info('Server closed')
     process.exit(0)

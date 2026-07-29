@@ -1,19 +1,6 @@
 import { dbAll, dbGet, dbRun } from '../db.js'
 
 export function selectProviders(modelType) {
-  dbRun(
-    `UPDATE providers SET status = 'active', cooldown_until = NULL
-     WHERE type = ? AND status = 'cooldown' AND cooldown_until IS NOT NULL AND cooldown_until <= datetime('now')`,
-    [modelType]
-  )
-
-  dbRun(
-    `UPDATE circuit_breaker_state SET state = 'healthy', failure_count = 0, cooldown_until = NULL, updated_at = datetime('now')
-     WHERE provider_id IN (SELECT id FROM providers WHERE type = ? AND status = 'active')
-     AND state = 'cooldown' AND cooldown_until <= datetime('now')`,
-    [modelType]
-  )
-
   return dbAll(
     `SELECT * FROM providers
      WHERE type = ? AND status = 'active'
