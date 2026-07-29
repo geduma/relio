@@ -100,7 +100,13 @@ router.get('/', (req, res) => {
 })
 
 router.post('/test-connection', async (req, res) => {
-  const { api_url, api_key } = req.body
+  let { api_url, api_key, provider_id } = req.body
+
+  if (api_key === '***' && provider_id) {
+    const provider = dbGet('SELECT api_key FROM providers WHERE id = ?', [provider_id])
+    if (provider) api_key = provider.api_key
+  }
+
   if (!api_url || !api_key) {
     return res.status(400).json({ valid: false, error: 'api_url and api_key are required' })
   }

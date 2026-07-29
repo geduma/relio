@@ -47,10 +47,12 @@ export default function ProviderForm() {
     }
     setConnStatus('testing')
     try {
+      const body = { api_url: form.api_url, api_key: form.api_key }
+      if (isEdit && form.api_key === '***') body.provider_id = id
       const res = await fetch('/admin/api/providers/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_url: form.api_url, api_key: form.api_key }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (data.valid) {
