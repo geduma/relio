@@ -23,38 +23,56 @@ async function testProviderConnection(apiUrl, apiKey) {
     }
   }
 
+  async function tryChatCompletions() {
+    const res = await tryFetch(chatUrl, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
+    })
+    if (res.status === 401 || res.status === 403) return 'invalid_key'
+    if (res.status === 404) return 'not_found'
+    let body
+    try { body = await res.json() } catch { body = null }
+    if (body?.error?.message) {
+      if (/invalid|unauthorized|auth|api.key/.test(body.error.message.toLowerCase())) {
+        return 'invalid_key'
+      }
+    }
+    return 'valid'
+  }
+
   try {
-    const res = await tryFetch(modelsUrl, {
+    const modelsRes = await tryFetch(modelsUrl, {
       headers: { 'Authorization': `Bearer ${apiKey}` },
     })
 
-    if (res.status === 200) {
-      logger.info('Connection test succeeded', { url: modelsUrl, status: res.status })
-      return { valid: true, status: res.status }
+    if (modelsRes.status === 401 || modelsRes.status === 403) {
+      return { valid: false, error: 'API key is invalid' }
     }
 
-    if (res.status === 401) {
-      return { valid: false, error: 'API key is invalid (received 401)' }
-    }
-
-    if (res.status === 404) {
-      const chatRes = await tryFetch(chatUrl, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
-      })
-      if (chatRes.status === 401) {
-        return { valid: false, error: 'API key is invalid (received 401)' }
+    if (modelsRes.status === 200) {
+      const chatResult = await tryChatCompletions()
+      if (chatResult === 'invalid_key') {
+        return { valid: false, error: 'API key is invalid' }
       }
-      if (chatRes.status === 404) {
+      logger.info('Connection test succeeded', { url: modelsUrl, status: modelsRes.status })
+      return { valid: true, status: modelsRes.status }
+    }
+
+    if (modelsRes.status === 404) {
+      const chatResult = await tryChatCompletions()
+      if (chatResult === 'invalid_key') {
+        return { valid: false, error: 'API key is invalid' }
+      }
+      if (chatResult === 'not_found') {
         return { valid: false, error: `Endpoint not found at ${base}. Check the API URL.` }
       }
-      logger.info('Connection test succeeded via chat completions fallback', { url: chatUrl, status: chatRes.status })
-      return { valid: true, status: chatRes.status }
+      logger.info('Connection test succeeded via chat completions', { url: chatUrl })
+      return { valid: true }
     }
 
-    logger.warn('Connection test failed', { url: modelsUrl, status: res.status })
-    return { valid: false, error: `Provider returned status ${res.status}` }
+    logger.warn('Connection test failed', { url: modelsUrl, status: modelsRes.status })
+    return { valid: false, error: `Provider returned status ${modelsRes.status}` }
   } catch (err) {
     const msg = err.name === 'AbortError' ? 'Connection timed out' : `Cannot reach server: ${err.message}`
     logger.warn('Connection test failed', { url: modelsUrl, error: err.message, code: err.code })

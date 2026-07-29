@@ -46,7 +46,7 @@ export default function Chat() {
       })
       const data = await res.json()
       const content = data.choices?.[0]?.message?.content || data.error || JSON.stringify(data)
-      setMessages(prev => [...prev, { role: 'assistant', content }])
+      setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Request failed' }])
     }
@@ -108,7 +108,10 @@ export default function Chat() {
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
-            <div className="chat-msg-role">{msg.role === 'user' ? 'You' : providerLabel()}</div>
+            <div className="chat-msg-role">
+              {msg.role === 'user' ? 'You' : providerLabel()}
+              {msg.responseTimeMs != null && <span className="chat-msg-time">{msg.responseTimeMs}ms</span>}
+            </div>
             <div className="chat-msg-content">{msg.content}</div>
           </div>
         ))}

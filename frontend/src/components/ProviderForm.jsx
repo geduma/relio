@@ -132,8 +132,6 @@ export default function ProviderForm() {
           <button type="button" className="btn" onClick={testConnection} disabled={connStatus === 'testing'}>
             {connStatus === 'testing' ? 'Testing...' : 'Test'}
           </button>
-          {connStatus === 'success' && <span className="conn-indicator conn-ok">&#10003;</span>}
-          {connStatus === 'fail' && <span className="conn-indicator conn-fail">&#10007;</span>}
           <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</button>
           <button type="button" className="btn" onClick={() => navigate('/admin/providers')}>Cancel</button>
         </div>
