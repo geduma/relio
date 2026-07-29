@@ -26,6 +26,8 @@
 - **Local API Keys** — for AI agents, with revocation
 - **Dashboard** — visual provider management, metrics, logs, API keys
 - **Daily metrics** — requests, tokens, costs, errors, cache hits
+- **Chat dashboard** — test LLM providers directly from the UI with response time display
+- **Dark mode** — toggleable theme (dark by default) with localStorage persistence
 - **Auto-maintenance** — daily backups, data retention cleanup
 
 ## Requirements
@@ -135,12 +137,13 @@ The compose file mounts `config.json`, `db/`, and `logs/` from the host so data 
 
 ### Dashboard
 
-Open `http://localhost:3000/admin`:
+Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dark/light mode, persisted in localStorage).
 
 1. Log in via OAuth
 2. Add providers (OpenAI, Anthropic, Groq...)
 3. Order them: Main, Fallback 1, Fallback 2...
 4. Generate API Keys for your AI agents
+5. Use the **Chat** tab to test providers interactively with response time display
 
 ### Proxy API
 
@@ -174,9 +177,12 @@ curl http://localhost:3000/v1/chat/completions \
 | PATCH | `/admin/api/providers/:id` | Edit provider |
 | PATCH | `/admin/api/providers/reorder` | Reorder providers |
 | DELETE | `/admin/api/providers/:id` | Delete provider |
+| POST | `/admin/api/providers/test-connection` | Test provider URL + API key validation |
 | GET | `/admin/api/metrics` | Metrics by date range |
 | GET | `/admin/api/metrics/logs` | Recent requests |
 | GET | `/admin/api/metrics/health` | Health check |
+| GET | `/admin/api/chat/providers` | List chat-capable providers |
+| POST | `/admin/api/chat/send` | Send a message to a provider via Chat UI |
 | POST | `/admin/api/auth/api-keys` | Create API Key |
 | GET | `/admin/api/auth/api-keys` | List API Keys |
 | DELETE | `/admin/api/auth/api-keys/:keyPreview` | Revoke API Key |
@@ -210,10 +216,12 @@ relio/
 │   ├── services/           # Business logic
 │   ├── middleware/          # Auth middleware
 │   ├── routes/             # API routes
+│   │   └── chat.routes.js  # Dashboard chat API
 │   ├── handlers/           # Request processing
 │   └── utils/              # Logger, validators
 ├── frontend/               # Frontend (React + Vite)
 │   ├── src/components/     # React components
+│   │   └── Chat.jsx        # Chat testing interface
 │   ├── index.html
 │   └── vite.config.js
 ├── docker/                 # Docker multi-stage
