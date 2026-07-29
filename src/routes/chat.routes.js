@@ -24,14 +24,9 @@ router.post('/send', async (req, res) => {
 
   if (use_proxy) {
     try {
-      const selected = getProvider(provider_id)
-      const model = req.body.model || selected?.model
-      const requestBody = { messages }
-      if (model) requestBody.model = model
-
       const result = await processRequest({
         endpoint: '/v1/chat/completions',
-        requestBody,
+        requestBody: { messages },
         originIp: req.ip,
         originHeader: req.headers['user-agent'],
         authenticatedVia: 'dashboard_chat',
@@ -66,7 +61,7 @@ router.post('/send', async (req, res) => {
 
     enqueueMetric(provider.id, { inputTokens, outputTokens, cost: estimatedCost, responseTimeMs, cacheHit: false })
 
-    res.json(addTime(data))
+    res.json(addTime({ ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } }))
   } catch (err) {
     const responseTimeMs = Date.now() - start
     logger.warn('Chat test failed', { provider_id, error: err.message })

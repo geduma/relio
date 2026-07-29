@@ -26,7 +26,13 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         cacheHit: true, responseTimeMs: Date.now() - startTime,
       })
     }
-    return { statusCode: 200, body: responseBody }
+    const provider = cached.provider_id ? getProvider(cached.provider_id) : null
+    return {
+      statusCode: 200,
+      body: provider
+        ? { ...responseBody, _provider: { id: provider.id, name: provider.name, model: provider.model } }
+        : responseBody,
+    }
   }
 
   let providers
@@ -78,7 +84,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         responseTimeMs, cacheHit: false,
       })
 
-      return { statusCode: 200, body: data }
+      return { statusCode: 200, body: { ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } } }
     } catch (err) {
       lastError = err
       retryCount++
