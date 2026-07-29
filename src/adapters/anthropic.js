@@ -28,7 +28,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
     }
   }
 
-  transformRequest(body) {
+  transformRequest(body, provider) {
     const messages = []
     let systemPrompt = null
 
@@ -44,7 +44,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
     }
 
     const result = {
-      model: body.model,
+      model: body.model || provider?.model,
       max_tokens: body.max_tokens || 4096,
       messages,
     }
@@ -213,7 +213,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
   async chat(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const transformedBody = this.transformRequest(requestBody)
+    const transformedBody = this.transformRequest(requestBody, provider)
 
     const response = await fetch(url, {
       method: 'POST',
@@ -245,7 +245,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
   async stream(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const transformedBody = this.transformRequest(requestBody)
+    const transformedBody = this.transformRequest(requestBody, provider)
     const response = await fetch(url, {
       method: 'POST',
       headers: { ...headers, 'anthropic-beta': 'messages-2023-12-15' },

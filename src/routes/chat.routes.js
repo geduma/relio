@@ -24,14 +24,9 @@ router.post('/send', async (req, res) => {
 
   if (use_proxy) {
     try {
-      const selected = getProvider(provider_id)
-      const model = req.body.model || selected?.model
-      const requestBody = { messages }
-      if (model) requestBody.model = model
-
       const result = await processRequest({
         endpoint: '/v1/chat/completions',
-        requestBody,
+        requestBody: { messages },
         originIp: req.ip,
         originHeader: req.headers['user-agent'],
         authenticatedVia: 'dashboard_chat',

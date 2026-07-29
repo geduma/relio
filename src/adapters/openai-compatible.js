@@ -31,11 +31,13 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async chat(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
+    const body = { ...requestBody }
+    if (!body.model && provider.model) body.model = provider.model
 
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify(body),
       signal,
     })
 
@@ -62,11 +64,13 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async stream(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
+    const body = { ...requestBody }
+    if (!body.model && provider.model) body.model = provider.model
 
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ ...requestBody, stream: true }),
+      body: JSON.stringify({ ...body, stream: true }),
       signal,
     })
 
