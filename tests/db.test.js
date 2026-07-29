@@ -31,14 +31,22 @@ describe('Database', () => {
     expect(names).toContain('metrics')
   })
 
+  it('has provider_type and capability columns', () => {
+    const cols = dbAll("PRAGMA table_info('providers')").map(c => c.name)
+    expect(cols).toContain('provider_type')
+    expect(cols).toContain('capability')
+    expect(cols).not.toContain('type')
+  })
+
   it('inserts and reads a provider', () => {
     dbRun(
-      `INSERT INTO providers (id, name, api_url, api_key, model, type, order_position, order_label)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['test-1', 'Test Provider', 'https://api.test.com', 'sk-test', 'gpt-4', 'chat', 0, 'Main']
+      `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['test-1', 'Test Provider', 'https://api.test.com', 'sk-test', 'gpt-4', 'chat', 'openai-compatible', 0, 'Main']
     )
     const row = dbGet('SELECT * FROM providers WHERE id = ?', ['test-1'])
     expect(row.name).toBe('Test Provider')
-    expect(row.type).toBe('chat')
+    expect(row.capability).toBe('chat')
+    expect(row.provider_type).toBe('openai-compatible')
   })
 })

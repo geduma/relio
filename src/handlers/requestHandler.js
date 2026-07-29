@@ -1,4 +1,4 @@
-import { getModelTypeFromBody, selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider } from '../services/failoverEngine.js'
+import { getCapabilityFromBody, selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -7,7 +7,7 @@ import { dbGet } from '../db.js'
 export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId }) {
   const startTime = Date.now()
 
-  const modelType = getModelTypeFromBody(requestBody)
+  const capability = getCapabilityFromBody(requestBody)
 
   let lastError = null
   let retryCount = 0
@@ -35,7 +35,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     const p = dbGet('SELECT * FROM providers WHERE id = ?', [providerId])
     providers = p ? [p] : []
   } else {
-    providers = selectProviders(modelType)
+    providers = selectProviders(capability)
   }
 
   for (const provider of providers) {

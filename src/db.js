@@ -44,7 +44,8 @@ export function initDb() {
       api_url TEXT NOT NULL,
       api_key TEXT NOT NULL,
       model TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('chat', 'embeddings', 'vision')),
+      capability TEXT NOT NULL DEFAULT 'chat' CHECK(capability IN ('chat', 'embeddings', 'vision')),
+      provider_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(provider_type IN ('openai-compatible', 'anthropic', 'gemini-native', 'azure-openai')),
       order_position INT NOT NULL DEFAULT 0,
       order_label TEXT,
       status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'cooldown')),
@@ -150,13 +151,28 @@ export function initDb() {
     );
   `)
 
+  runMigrations(d)
   createIndexes(d)
+}
+
+function runMigrations(d) {
+  let columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
+
+  if (columns.includes('type') && !columns.includes('capability')) {
+    d.exec('ALTER TABLE providers RENAME COLUMN type TO capability')
+    columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
+  }
+
+  if (!columns.includes('provider_type')) {
+    d.exec("ALTER TABLE providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(provider_type IN ('openai-compatible', 'anthropic', 'gemini-native', 'azure-openai'))")
+    columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
+  }
 }
 
 function createIndexes(d) {
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_providers_order ON providers(order_position, status);',
-    'CREATE INDEX IF NOT EXISTS idx_providers_type ON providers(type, order_position);',
+    'CREATE INDEX IF NOT EXISTS idx_providers_capability ON providers(capability, order_position);',
     'CREATE INDEX IF NOT EXISTS idx_providers_status ON providers(status);',
     'CREATE INDEX IF NOT EXISTS idx_requests_provider ON requests_log(provider_id, request_at);',
     'CREATE INDEX IF NOT EXISTS idx_requests_at ON requests_log(request_at);',

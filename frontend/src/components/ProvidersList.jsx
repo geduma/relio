@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from './Toast.jsx'
 
+const TYPE_LABELS = {
+  'openai-compatible': 'OpenAI Compatible',
+  'anthropic': 'Anthropic',
+  'gemini-native': 'Gemini',
+  'azure-openai': 'Azure',
+}
+
 export default function ProvidersList() {
   const [providers, setProviders] = useState([])
   const [filter, setFilter] = useState('')
@@ -9,7 +16,7 @@ export default function ProvidersList() {
   const toast = useToast()
 
   useEffect(() => {
-    const query = filter ? `?type=${filter}` : ''
+    const query = filter ? `?capability=${filter}` : ''
     fetch(`/admin/api/providers${query}`)
       .then(r => r.json())
       .then(setProviders)
@@ -63,7 +70,7 @@ export default function ProvidersList() {
       </div>
       <div className="filter-bar">
         <select value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="">All types</option>
+          <option value="">All capabilities</option>
           <option value="chat">Chat</option>
           <option value="embeddings">Embeddings</option>
           <option value="vision">Vision</option>
@@ -76,6 +83,7 @@ export default function ProvidersList() {
             <th>Name</th>
             <th>Model</th>
             <th>Type</th>
+            <th>Capability</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -98,7 +106,8 @@ export default function ProvidersList() {
               </td>
               <td>{p.name}</td>
               <td>{p.model}</td>
-              <td>{p.type}</td>
+              <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
+              <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
               <td className="actions-cell">
                 <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
@@ -115,7 +124,8 @@ export default function ProvidersList() {
               <td><span className="order-label">--</span></td>
               <td>{p.name}</td>
               <td>{p.model}</td>
-              <td>{p.type}</td>
+              <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
+              <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
               <td className="actions-cell">
                 <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>

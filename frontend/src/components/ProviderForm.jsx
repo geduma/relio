@@ -2,8 +2,15 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useToast } from './Toast.jsx'
 
+const PROVIDER_TYPES = [
+  { value: 'openai-compatible', label: 'OpenAI Compatible', hint: 'https://api.openai.com/v1' },
+  { value: 'anthropic', label: 'Anthropic', hint: 'https://api.anthropic.com' },
+  { value: 'gemini-native', label: 'Gemini Native', hint: 'https://generativelanguage.googleapis.com' },
+  { value: 'azure-openai', label: 'Azure OpenAI', hint: 'https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT' },
+]
+
 const emptyForm = {
-  name: '', api_url: '', api_key: '', model: '', type: 'chat',
+  name: '', api_url: '', api_key: '', model: '', capability: 'chat', provider_type: 'openai-compatible',
   rate_limit_req_per_min: 60, tokens_per_day: 0,
   cost_per_input_token: 0, cost_per_output_token: 0,
   cooldown_after_failures: 5, cooldown_duration_seconds: 300,
@@ -31,10 +38,17 @@ export default function ProviderForm() {
     }
   }, [id])
 
+  useEffect(() => {
+    const selected = PROVIDER_TYPES.find(t => t.value === form.provider_type)
+    if (selected && !isEdit && !form.api_url) {
+      setForm(prev => ({ ...prev, api_url: selected.hint }))
+    }
+  }, [form.provider_type, isEdit])
+
   function handleChange(e) {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
-    if (name === 'api_url' || name === 'api_key') {
+    if (name === 'api_url' || name === 'api_key' || name === 'provider_type') {
       setConnStatus(null)
       setFormError(null)
     }
@@ -47,7 +61,7 @@ export default function ProviderForm() {
     }
     setConnStatus('testing')
     try {
-      const body = { api_url: form.api_url, api_key: form.api_key }
+      const body = { api_url: form.api_url, api_key: form.api_key, provider_type: form.provider_type }
       if (isEdit && form.api_key === '***') body.provider_id = id
       const res = await fetch('/admin/api/providers/test-connection', {
         method: 'POST',
@@ -107,11 +121,18 @@ export default function ProviderForm() {
       )}
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
+        <label>Provider Type
+          <select name="provider_type" value={form.provider_type} onChange={handleChange}>
+            {PROVIDER_TYPES.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </label>
         <label className="field-full">API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
         <label className="field-full">API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
         <label>Model <input name="model" value={form.model} onChange={handleChange} required /></label>
-        <label>Type
-          <select name="type" value={form.type} onChange={handleChange}>
+        <label>Capability
+          <select name="capability" value={form.capability} onChange={handleChange}>
             <option value="chat">Chat</option>
             <option value="embeddings">Embeddings</option>
             <option value="vision">Vision</option>

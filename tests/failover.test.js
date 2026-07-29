@@ -1,9 +1,10 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getModelTypeFromBody
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider
 
 beforeAll(async () => {
   process.env.DB_PATH = ':memory:'
   process.env.CACHE_TTL_SECONDS = '3600'
+  process.env.CONFIG_PATH = new URL('./test-config.json', import.meta.url).pathname
 
   const dbMod = await import('../src/db.js')
   dbMod.initDb()
@@ -13,23 +14,24 @@ beforeAll(async () => {
   isProviderAvailable = failMod.isProviderAvailable
   isRateLimitExceeded = failMod.isRateLimitExceeded
   isDailyLimitExceeded = failMod.isDailyLimitExceeded
-  getModelTypeFromBody = failMod.getModelTypeFromBody
+  getCapabilityFromBody = failMod.getCapabilityFromBody
+  callProvider = failMod.callProvider
 
   const { dbRun } = dbMod
   dbRun(
-    `INSERT INTO providers (id, name, api_url, api_key, model, type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p1', 'Main', 'https://api.openai.com/v1', 'sk-test', 'gpt-4', 'chat', 0, 'Main', 60, 10000]
+    `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['p1', 'Main', 'https://api.openai.com/v1', 'sk-test', 'gpt-4', 'chat', 'openai-compatible', 0, 'Main', 60, 10000]
   )
   dbRun(
-    `INSERT INTO providers (id, name, api_url, api_key, model, type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p2', 'Fallback', 'https://api.anthropic.com/v1', 'sk-test2', 'claude-3', 'chat', 1, 'Fallback 1', 60, 10000]
+    `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['p2', 'Fallback', 'https://api.anthropic.com/v1', 'sk-test2', 'claude-3', 'chat', 'openai-compatible', 1, 'Fallback 1', 60, 10000]
   )
   dbRun(
-    `INSERT INTO providers (id, name, api_url, api_key, model, type, order_position, order_label, status, cooldown_until)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p3', 'Cooldown', 'https://api.groq.com/v1', 'sk-test3', 'mixtral', 'chat', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
+    `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status, cooldown_until)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ['p3', 'Cooldown', 'https://api.groq.com/v1', 'sk-test3', 'mixtral', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
   )
 })
 
@@ -44,6 +46,11 @@ describe('FailoverEngine', () => {
     expect(providers).toHaveLength(2)
     expect(providers[0].id).toBe('p1')
     expect(providers[1].id).toBe('p2')
+  })
+
+  it('selects providers by capability', () => {
+    const providers = selectProviders('embeddings')
+    expect(providers).toHaveLength(0)
   })
 
   it('detects available provider', () => {
@@ -79,9 +86,19 @@ describe('FailoverEngine', () => {
     expect(exceeded).toBe(false)
   })
 
-  it('detects model type from body', () => {
-    expect(getModelTypeFromBody({ messages: [] })).toBe('chat')
-    expect(getModelTypeFromBody({ input: 'hello' })).toBe('embeddings')
-    expect(getModelTypeFromBody({})).toBe('chat')
+  it('detects capability from body', () => {
+    expect(getCapabilityFromBody({ messages: [] })).toBe('chat')
+    expect(getCapabilityFromBody({ input: 'hello' })).toBe('embeddings')
+    expect(getCapabilityFromBody({})).toBe('chat')
+  })
+
+  it('callProvider throws with no network (no actual HTTP)', async () => {
+    const provider = {
+      api_url: 'https://nonexistent.invalid/api',
+      api_key: 'sk-test',
+      provider_type: 'openai-compatible',
+    }
+    await expect(callProvider(provider, { messages: [{ role: 'user', content: 'hi' }] }, null))
+      .rejects.toThrow()
   })
 })

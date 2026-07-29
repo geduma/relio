@@ -1,11 +1,12 @@
 import { dbAll, dbGet, dbRun } from '../db.js'
+import { getAdapter } from '../adapters/index.js'
 
-export function selectProviders(modelType) {
+export function selectProviders(capability) {
   return dbAll(
     `SELECT * FROM providers
-     WHERE type = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= datetime('now')))
+     WHERE capability = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= datetime('now')))
      ORDER BY order_position ASC`,
-    [modelType]
+    [capability]
   )
 }
 
@@ -44,54 +45,16 @@ export function isDailyLimitExceeded(provider) {
 }
 
 export async function callProvider(provider, requestBody, signal) {
-  let url = provider.api_url.replace(/\/+$/, '')
-
-  const isChat = !!requestBody.messages
-  if (!url.endsWith('/chat/completions') && !url.endsWith('/embeddings')) {
-    const suffix = url.endsWith('/v1') ? '' : '/v1'
-    url += `${suffix}/${isChat ? 'chat/completions' : 'embeddings'}`
-  }
-
-  const controller = signal ? null : new AbortController()
-  const timeout = controller ? setTimeout(() => controller.abort(), 30000) : null
-  const actualSignal = signal || (controller ? controller.signal : null)
-
-  let response
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${provider.api_key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-      signal: actualSignal,
-    })
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-
-  let data
-  try {
-    data = await response.json()
-  } catch {
-    const err = new Error(`Provider returned non-JSON response (status ${response.status})`)
-    err.status = response.status
-    err.data = null
-    throw err
-  }
-
-  if (!response.ok) {
-    const err = new Error(data.error?.message || `Provider returned ${response.status}`)
-    err.status = response.status
-    err.data = data
-    throw err
-  }
-
-  return data
+  const adapter = getAdapter(provider.provider_type)
+  return adapter.chat(provider, requestBody, signal)
 }
 
-export function getModelTypeFromBody(body) {
+export async function streamProvider(provider, requestBody, signal) {
+  const adapter = getAdapter(provider.provider_type)
+  return adapter.stream(provider, requestBody, signal)
+}
+
+export function getCapabilityFromBody(body) {
   if (body.messages) return 'chat'
   if (body.input) return 'embeddings'
   return 'chat'
