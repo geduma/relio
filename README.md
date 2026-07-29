@@ -42,7 +42,7 @@ git clone <repo> relio
 cd relio
 
 cp config.example.json config.json
-# Edit config.json — set your Geduma appId or change authProvider
+# Edit config.json — set your provider settings
 
 npm install
 cd frontend && npm install && cd ..
@@ -50,7 +50,7 @@ cd frontend && npm install && cd ..
 npm run dev
 ```
 
-Open `http://localhost:3000/admin` and log in via OAuth.
+Open `http://localhost:3000/admin` — no login required by default.
 
 ## Configuration
 
@@ -58,11 +58,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 ```json
 {
-  "auth": { "provider": "geduma" },
-  "geduma": {
-    "apiUrl": "https://api.geduma.com",
-    "appId": "app_replace_with_your_app_id"
-  },
+  "auth": { "provider": "none" },
   "db": { "path": "./db/db.sqlite" },
   "cache": { "ttlSeconds": 2592000 },
   "server": {
@@ -81,9 +77,9 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 | Key | Description |
 |---|---|
-| `auth.provider` | `geduma` (OAuth) or `none` (anonymous) |
-| `geduma.apiUrl` | Geduma API base URL (only for `geduma` provider) |
-| `geduma.appId` | App ID registered on geduma-auth (only for `geduma` provider) |
+| `auth.provider` | `none` (anonymous, default) or `geduma` (OAuth) |
+| `geduma.apiUrl` | Geduma API base URL (only needed for `geduma` provider) |
+| `geduma.appId` | App ID registered on geduma-auth (only needed for `geduma` provider) |
 | `db.path` | SQLite database file path |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port |
@@ -109,8 +105,8 @@ In dev mode, the frontend runs on `http://localhost:5173` and proxies API reques
 
 Relio uses a pluggable auth provider system. Set `auth.provider` in `config.json`:
 
-- **`geduma`** (default) — OAuth via Geduma API. Requires a registered `appId`.
-- **`none`** — anonymous session, no login page shown.
+- **`none`** (default) — anonymous session, no login page shown.
+- **`geduma`** — OAuth via Geduma API. Requires a registered `appId` and setting `auth.provider` to `"geduma"`.
 
 ### Geduma Auth Flow
 
@@ -126,7 +122,7 @@ To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
 
 ```bash
 cp config.example.json config.json
-# Edit config.json — set your Geduma appId or change authProvider
+# Edit config.json — set your provider settings
 
 docker compose -f docker/docker-compose.yml up -d
 ```
@@ -139,8 +135,7 @@ The compose file mounts `config.json`, `db/`, and `logs/` from the host so data 
 
 Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dark/light mode, persisted in localStorage).
 
-1. Log in via OAuth
-2. Add providers (OpenAI, Anthropic, Groq...)
+1. Add providers (OpenAI, Anthropic, Groq...)
 3. Order them: Main, Fallback 1, Fallback 2...
 4. Generate API Keys for your AI agents
 5. Use the **Chat** tab to test providers interactively with response time display

@@ -1,6 +1,6 @@
 {
   "auth": {
-    "provider": "geduma"
+    "provider": "none"
   },
   "geduma": {
     "apiUrl": "https://api.geduma.com",
