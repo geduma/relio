@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useToast } from './Toast.jsx'
 
+function msgLabel(msg, providers) {
+  if (msg.role === 'user') return 'You'
+  if (msg._providerName) return msg._providerName
+  return 'Assistant'
+}
+
 export default function Chat() {
   const [providers, setProviders] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -46,7 +52,9 @@ export default function Chat() {
       })
       const data = await res.json()
       const content = data.choices?.[0]?.message?.content || data.error || JSON.stringify(data)
-      setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms }])
+      const prov = data._provider
+      const providerName = prov ? `${prov.name} (${prov.model})` : null
+      setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Request failed' }])
     }
@@ -66,7 +74,7 @@ export default function Chat() {
     setMessages([])
   }
 
-  function providerLabel() {
+  function loadingLabel() {
     return selectedProvider ? `${selectedProvider.name} (${selectedProvider.model})` : 'Assistant'
   }
 
@@ -109,7 +117,7 @@ export default function Chat() {
         {messages.map((msg, i) => (
           <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
             <div className="chat-msg-role">
-              {msg.role === 'user' ? 'You' : providerLabel()}
+              {msgLabel(msg, providers)}
               {msg.responseTimeMs != null && <span className="chat-msg-time">{msg.responseTimeMs}ms</span>}
             </div>
             <div className="chat-msg-content">{msg.content}</div>
@@ -117,7 +125,7 @@ export default function Chat() {
         ))}
         {sending && (
           <div className="chat-msg chat-msg--assistant">
-            <div className="chat-msg-role">{providerLabel()}</div>
+            <div className="chat-msg-role">{loadingLabel()}</div>
             <div className="chat-msg-content chat-msg-thinking">Thinking...</div>
           </div>
         )}

@@ -66,7 +66,7 @@ router.post('/send', async (req, res) => {
 
     enqueueMetric(provider.id, { inputTokens, outputTokens, cost: estimatedCost, responseTimeMs, cacheHit: false })
 
-    res.json(addTime(data))
+    res.json(addTime({ ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } }))
   } catch (err) {
     const responseTimeMs = Date.now() - start
     logger.warn('Chat test failed', { provider_id, error: err.message })
