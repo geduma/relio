@@ -5,8 +5,24 @@ import { enqueueApiKeyTouch } from './logQueue.js'
 
 const API_KEY_CACHE_TTL = 300_000
 const SESSION_CACHE_TTL = 60_000
+const CACHE_MAX = 500
 const apiKeyCache = new Map()
 const sessionCache = new Map()
+const apiKeyOrder = []
+const sessionOrder = []
+
+function boundedSet(map, order, key, value) {
+  if (map.has(key)) {
+    const idx = order.indexOf(key)
+    if (idx !== -1) order.splice(idx, 1)
+  }
+  if (map.size >= CACHE_MAX) {
+    const oldest = order.shift()
+    map.delete(oldest)
+  }
+  map.set(key, value)
+  order.push(key)
+}
 
 export async function login(credentials) {
   const provider = await getAuthProvider()
@@ -26,7 +42,7 @@ export async function getSession(sessionId) {
   const provider = await getAuthProvider()
   const session = await provider.getSession(sessionId)
   if (session) {
-    sessionCache.set(sessionId, { data: session, expiresAt: Date.now() + SESSION_CACHE_TTL })
+    boundedSet(sessionCache, sessionOrder, sessionId, { data: session, expiresAt: Date.now() + SESSION_CACHE_TTL })
   }
   return session || null
 }
@@ -67,7 +83,7 @@ export function validateApiKey(key) {
 
   const row = dbGet('SELECT * FROM api_keys WHERE key = ?', [key])
   if (row) {
-    apiKeyCache.set(key, { id: row.id, row, expiresAt: Date.now() + API_KEY_CACHE_TTL })
+    boundedSet(apiKeyCache, apiKeyOrder, key, { id: row.id, row, expiresAt: Date.now() + API_KEY_CACHE_TTL })
     enqueueApiKeyTouch(row.id)
   }
   return row || null

@@ -81,6 +81,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `auth.provider` | `none` (anonymous, default) or `geduma` (OAuth) |
 | `geduma.apiUrl` | Geduma API base URL (only needed for `geduma` provider) |
 | `geduma.appId` | App ID registered on geduma-auth (only needed for `geduma` provider) |
+| `security.encryptionKey` | AES-256-GCM key for API key encryption at rest (auto-derived if omitted) |
 | `db.path` | SQLite database file path |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port |

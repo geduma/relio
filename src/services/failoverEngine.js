@@ -1,5 +1,14 @@
-import { dbAll, dbGet } from '../db.js'
+import { dbAll, dbGet, decrypt } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
+
+function decryptProvider(p) {
+  return { ...p, api_key: decrypt(p.api_key) }
+}
+
+export function getProvider(id) {
+  const p = dbGet('SELECT * FROM providers WHERE id = ?', [id])
+  return p ? decryptProvider(p) : null
+}
 
 export function selectProviders(capability) {
   return dbAll(
@@ -7,7 +16,7 @@ export function selectProviders(capability) {
      WHERE capability = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= datetime('now')))
      ORDER BY order_position ASC`,
     [capability]
-  )
+  ).map(decryptProvider)
 }
 
 export function isProviderAvailable(provider) {

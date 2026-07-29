@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { dbAll, dbGet, dbRun, getDb } from '../db.js'
+import { dbAll, dbGet, dbRun, getDb, encrypt, decrypt } from '../db.js'
+import { getProvider } from '../services/failoverEngine.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
 import { getAdapter } from '../adapters/index.js'
 import { logger } from '../utils/logger.js'
@@ -35,7 +36,7 @@ router.post('/test-connection', async (req, res) => {
   let { api_url, api_key, provider_type, provider_id } = req.body
 
   if (api_key === '***' && provider_id) {
-    const provider = dbGet('SELECT api_key FROM providers WHERE id = ?', [provider_id])
+    const provider = getProvider(provider_id)
     if (provider) api_key = provider.api_key
   }
 
@@ -82,7 +83,7 @@ router.post('/', async (req, res) => {
       cooldown_after_failures, cooldown_duration_seconds, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      id, name, api_url, api_key, model, capability, provider_type || 'openai-compatible', nextPos, label,
+      id, name, api_url, encrypt(api_key), model, capability, provider_type || 'openai-compatible', nextPos, label,
       rate_limit_req_per_min ?? 60, tokens_per_day ?? 0,
       cost_per_input_token ?? 0, cost_per_output_token ?? 0,
       cooldown_after_failures ?? 5, cooldown_duration_seconds ?? 300, status ?? 'active',
@@ -118,7 +119,7 @@ router.patch('/:id', async (req, res) => {
   const db = getDb()
   const { id } = req.params
 
-  const provider = dbGet('SELECT * FROM providers WHERE id = ?', [id])
+  const provider = getProvider(id)
   if (!provider) return res.status(404).json({ error: 'Provider not found' })
 
   const allowed = [
@@ -135,7 +136,7 @@ router.patch('/:id', async (req, res) => {
     if (allowed.includes(key)) {
       if (key === 'api_key' && value === '***') continue
       updates.push(`${key} = ?`)
-      values.push(value)
+      values.push(key === 'api_key' ? encrypt(value) : value)
     }
   }
 

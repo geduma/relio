@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { dbGet, dbAll } from '../db.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
-import { callProvider } from '../services/failoverEngine.js'
+import { callProvider, getProvider } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { logger } from '../utils/logger.js'
@@ -24,7 +24,7 @@ router.post('/send', async (req, res) => {
 
   if (use_proxy) {
     try {
-      const provider = dbGet('SELECT * FROM providers WHERE id = ?', [provider_id])
+      const provider = getProvider(provider_id)
       if (!provider) {
         return res.status(404).json(addTime({ error: 'Provider not found' }))
       }
@@ -43,7 +43,7 @@ router.post('/send', async (req, res) => {
     }
   }
 
-  const provider = dbGet('SELECT * FROM providers WHERE id = ?', [provider_id])
+  const provider = getProvider(provider_id)
   if (!provider) {
     return res.status(404).json(addTime({ error: 'Provider not found' }))
   }
