@@ -21,6 +21,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       responseTimeMs: Date.now() - startTime,
       authenticatedVia, cacheHit: true,
     })
+    if (cached.provider_id) {
+      enqueueMetric(cached.provider_id, {
+        cacheHit: true, responseTimeMs: Date.now() - startTime,
+      })
+    }
     return { statusCode: 200, body: responseBody }
   }
 
@@ -53,7 +58,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
       recordSuccess(provider.id)
-      setCache(endpoint, requestBody, data)
+      setCache(endpoint, requestBody, data, provider.id)
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,

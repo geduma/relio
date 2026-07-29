@@ -46,18 +46,18 @@ export function getCache(queryHash) {
   return null
 }
 
-export function setCache(endpoint, requestBody, responseBody) {
+export function setCache(endpoint, requestBody, responseBody, providerId) {
   const id = uuidv4()
   const queryHash = generateHash(requestBody)
   const expiresAt = new Date(Date.now() + config.cache.ttlSeconds * 1000).toISOString()
 
-  const entry = { id, query_hash: queryHash, endpoint, request_body: JSON.stringify(requestBody), response_body: JSON.stringify(responseBody), expires_at: expiresAt }
+  const entry = { id, query_hash: queryHash, endpoint, request_body: JSON.stringify(requestBody), response_body: JSON.stringify(responseBody), provider_id: providerId, expires_at: expiresAt }
   memSet(queryHash, entry)
 
   dbRun(
-    `INSERT OR REPLACE INTO cache (id, query_hash, endpoint, request_body, response_body, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, queryHash, endpoint, JSON.stringify(requestBody), JSON.stringify(responseBody), expiresAt]
+    `INSERT OR REPLACE INTO cache (id, query_hash, endpoint, request_body, response_body, provider_id, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, queryHash, endpoint, JSON.stringify(requestBody), JSON.stringify(responseBody), providerId, expiresAt]
   )
 }
 

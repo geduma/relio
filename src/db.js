@@ -90,6 +90,7 @@ export function initDb() {
       endpoint TEXT NOT NULL,
       request_body TEXT NOT NULL,
       response_body TEXT NOT NULL,
+      provider_id TEXT REFERENCES providers(id),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       expires_at DATETIME,
       hit_count INT DEFAULT 1
