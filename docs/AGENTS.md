@@ -67,10 +67,17 @@ src/
 │   ├── requestHandler.js # Cache → failover → response
 │   └── dashboardHandler.js
 ├── auth/                 # Pluggable auth providers
-│   ├── base.js           # AuthProvider abstract class (documented)
+│   ├── base.js           # AuthProvider abstract class
 │   ├── geduma.js         # Geduma OAuth provider
 │   ├── none.js           # Anonymous session provider
 │   └── index.js          # Factory (loads provider from AUTH_PROVIDER env)
+├── adapters/             # Pluggable LLM provider adapters
+│   ├── base.js           # ProviderAdapter abstract class
+│   ├── index.js          # Factory + registry (singleton cache)
+│   ├── openai-compatible.js
+│   ├── anthropic.js
+│   ├── gemini-native.js
+│   └── azure-openai.js
 └── utils/
     └── logger.js         # File app logger
 ```
@@ -94,12 +101,21 @@ src/
 2. `requestHandler.processRequest()`:
    - Computes `queryHash` → checks cache
    - Cache hit → returns immediately
-   - Cache miss → `selectProviders(modelType)` ordered by `order_position`
+   - Cache miss → `selectProviders(capability)` ordered by `order_position`
    - For each provider: checks `isProviderAvailable()`, `isRateLimitExceeded()`, `isDailyLimitExceeded()`
-   - `callProvider()` with 30s timeout
+   - `callProvider()` → `getAdapter(provider.provider_type)` resolves adapter from registry (singleton cache) → `adapter.chat()` with 30s timeout
    - Success → `recordSuccess()`, `setCache()`, `logRequest()`, `updateMetrics()`
    - Failure → `recordFailure()`, next provider
 3. All failed → 503
+
+### Streaming Flow
+
+1. `proxy.routes.js` detects `stream: true` in request body → `handleStreamingRequest()`
+2. Resolves provider (by `provider_id` or first available for `chat` capability)
+3. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`
+4. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
+5. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
+6. On client disconnect: `AbortController` cancels upstream fetch, pipeline rejects gracefully
 
 ### Login Flow
 
@@ -234,11 +250,49 @@ Before Docker deployment, ensure you have `config.json` with your settings (moun
 2. Add indexes in `createIndexes()`
 3. Update DB tests
 
-### Add an LLM provider
+### Add an LLM provider (Dashboard)
 
 1. Dashboard → Add Provider
-2. Fill in: name, API URL, API Key, model, type, costs
+2. Fill in: name, API URL, API Key, model, provider type (openai-compatible, anthropic, gemini-native, azure-openai), capability (chat, embeddings, vision), costs
 3. Auto-ordered as the next fallback
+
+### Add a provider adapter (backend)
+
+The adapter system follows the same pluggable pattern as auth providers. Use `src/adapters/` to add new provider types:
+
+1. Create `src/adapters/yourprovider.js` extending `ProviderAdapter` (from `src/adapters/base.js`):
+
+```js
+import ProviderAdapter from './base.js'
+import { Readable } from 'stream'
+
+export default class YourProviderAdapter extends ProviderAdapter {
+  static get type() { return 'yourprovider' }
+
+  buildUrl(baseUrl) { /* return the API endpoint URL */ }
+  buildHeaders(apiKey) { /* return headers object */ }
+
+  async chat(provider, requestBody, signal) {
+    // Transform request to provider format, call fetch, transform response
+  }
+
+  async stream(provider, requestBody, signal) {
+    // Return a Node.js Readable streaming SSE-formatted chunks
+  }
+
+  async testConnection(apiUrl, apiKey) {
+    // Return { valid: true } or { valid: false, error: '...' }
+  }
+}
+```
+
+2. Register in `src/adapters/index.js`:
+```js
+import YourProviderAdapter from './yourprovider.js'
+registerAdapter('yourprovider', YourProviderAdapter)
+```
+
+3. The factory auto-caches singleton instances — no additional wiring needed.
 
 ### Create a custom AuthProvider
 

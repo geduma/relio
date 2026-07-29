@@ -140,7 +140,11 @@ export default function Chat() {
             onClick={sendMessage}
             disabled={sending || !input.trim() || !selectedId}
           >
-            {sending ? 'Sending...' : 'Send'}
+            {sending ? (
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg>
+            ) : (
+              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            )}
           </button>
         </div>
       </div>

@@ -254,3 +254,71 @@ describe('AzureOpenAIAdapter', () => {
     expect(AzureOpenAIAdapter.type).toBe('azure-openai')
   })
 })
+
+describe('Adapter streaming', () => {
+  it('OpenAICompatibleAdapter.stream() rejects with no network', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    await expect(adapter.stream(
+      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      null
+    )).rejects.toThrow()
+  })
+
+  it('AnthropicAdapter.stream() rejects with no network', async () => {
+    const adapter = new AnthropicAdapter()
+    await expect(adapter.stream(
+      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      null
+    )).rejects.toThrow()
+  })
+
+  it('GeminiNativeAdapter.stream() rejects with no network', async () => {
+    const adapter = new GeminiNativeAdapter()
+    await expect(adapter.stream(
+      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      null
+    )).rejects.toThrow()
+  })
+
+  it('AzureOpenAIAdapter.stream() rejects with no network', async () => {
+    const adapter = new AzureOpenAIAdapter()
+    await expect(adapter.stream(
+      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      null
+    )).rejects.toThrow()
+  })
+})
+
+describe('Adapter testConnection', () => {
+  it('OpenAICompatibleAdapter.testConnection() returns error with no network', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  it('AnthropicAdapter.testConnection() returns error with no network', async () => {
+    const adapter = new AnthropicAdapter()
+    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  it('GeminiNativeAdapter.testConnection() returns error with no network', async () => {
+    const adapter = new GeminiNativeAdapter()
+    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  it('AzureOpenAIAdapter.testConnection() returns error with no network', async () => {
+    const adapter = new AzureOpenAIAdapter()
+    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+})

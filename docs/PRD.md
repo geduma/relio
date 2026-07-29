@@ -131,12 +131,15 @@ authMiddleware
     ├── Cache Hit? → Response
     │
     ▼
-failoverEngine → Provider 1 (Main)
-                    → Provider 2 (Fallback 1)
-                    → Provider N
+failoverEngine → getAdapter(provider_type)
+                    │
+                    ├── openai-compatible
+                    ├── anthropic
+                    ├── gemini-native
+                    └── azure-openai
     │
     ▼
-metricsLogger + SQLite
+circuitBreaker + metricsLogger + SQLite
 ```
 
 ### 5.2 Technology Stack
@@ -262,6 +265,7 @@ POST /admin/api/providers/test-connection
 - Chat dashboard for interactive provider testing
 - Dark mode with toggle and localStorage persistence
 - Provider connection test with API key validation and masked key handling
+- **Provider Type Abstraction** — pluggable adapters for openai-compatible, anthropic, gemini-native, azure-openai with canonical response normalization
 
 ### v2.0 (Future)
 - API key encryption at rest

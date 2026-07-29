@@ -1,4 +1,5 @@
 import ProviderAdapter from './base.js'
+import { Readable } from 'stream'
 
 export default class GeminiNativeAdapter extends ProviderAdapter {
   static get type() { return 'gemini-native' }
@@ -231,8 +232,6 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-
-    const { Readable } = await import('stream')
 
     return new Readable({
       async read() {

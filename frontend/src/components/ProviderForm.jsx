@@ -114,21 +114,23 @@ export default function ProviderForm() {
     <div>
       <h2>{isEdit ? 'Edit Provider' : 'New Provider'}</h2>
       {formError && (
-        <div className="alert alert-error form-wide-error">
+        <div className="alert alert-error" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'0.5rem'}}>
           {formError}
           <button type="button" className="btn-dismiss" onClick={() => setFormError(null)}>&times;</button>
         </div>
       )}
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
-        <label>Provider Type
-          <select name="provider_type" value={form.provider_type} onChange={handleChange}>
-            {PROVIDER_TYPES.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field-full">API URL <input name="api_url" value={form.api_url} onChange={handleChange} required /></label>
+        <div className="field-full inline-row">
+          <label>API URL <input name="api_url" value={form.api_url} onChange={handleChange} required placeholder="https://api.openai.com/v1" /></label>
+          <label>Provider Type
+            <select name="provider_type" value={form.provider_type} onChange={handleChange}>
+              {PROVIDER_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
         <label className="field-full">API Key <input name="api_key" value={form.api_key} onChange={handleChange} required={!isEdit} type="password" /></label>
         <label>Model <input name="model" value={form.model} onChange={handleChange} required /></label>
         <label>Capability
@@ -151,7 +153,7 @@ export default function ProviderForm() {
             <span className="switch-slider"></span>
           </label>
         </div>
-        <div className="form-actions field-full">
+        <div className="field-full form-actions">
           <button type="button" className="btn" onClick={testConnection} disabled={connStatus === 'testing'}>
             {connStatus === 'testing' ? 'Testing...' : 'Test'}
           </button>

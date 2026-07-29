@@ -1,4 +1,5 @@
 import ProviderAdapter from './base.js'
+import { Readable } from 'stream'
 
 const AZURE_API_VERSION = '2024-02-15-preview'
 
@@ -85,7 +86,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       throw err
     }
 
-    return response.body
+    return Readable.fromWeb(response.body)
   }
 
   async testConnection(apiUrl, apiKey) {

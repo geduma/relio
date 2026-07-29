@@ -1,4 +1,5 @@
 import ProviderAdapter from './base.js'
+import { Readable } from 'stream'
 
 const ANTHROPIC_VERSION = '2023-06-01'
 
@@ -245,8 +246,6 @@ export default class AnthropicAdapter extends ProviderAdapter {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
     const transformedBody = this.transformRequest(requestBody)
-    const { Readable } = await import('stream')
-
     const response = await fetch(url, {
       method: 'POST',
       headers: { ...headers, 'anthropic-beta': 'messages-2023-12-15' },

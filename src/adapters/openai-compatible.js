@@ -1,4 +1,5 @@
 import ProviderAdapter from './base.js'
+import { Readable } from 'stream'
 
 export default class OpenAICompatibleAdapter extends ProviderAdapter {
   static get type() { return 'openai-compatible' }
@@ -76,7 +77,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
       throw err
     }
 
-    return response.body
+    return Readable.fromWeb(response.body)
   }
 
   async testConnection(apiUrl, apiKey) {

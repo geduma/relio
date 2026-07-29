@@ -1,4 +1,4 @@
-import { dbAll, dbGet, dbRun } from '../db.js'
+import { dbAll, dbGet } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
 
 export function selectProviders(capability) {
