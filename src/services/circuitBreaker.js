@@ -8,7 +8,6 @@ function getProviderState(providerId) {
   return state || { provider_id: providerId, state: 'healthy', failure_count: 0 }
 }
 
-import { getDb, dbRun } from '../db.js'
 
 export function recordSuccess(providerId) {
   const db = getDb()

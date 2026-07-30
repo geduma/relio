@@ -2,11 +2,8 @@
 let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt
 
 beforeAll(async () => {
-  process.env.DB_PATH = ':memory:'
-  process.env.CACHE_TTL_SECONDS = '3600'
-  process.env.CONFIG_PATH = new URL('./test-config.json', import.meta.url).pathname
-
   const dbMod = await import('../src/db.js')
+  dbMod.setDbPath(':memory:')
   encrypt = dbMod.encrypt
   dbMod.initDb()
 

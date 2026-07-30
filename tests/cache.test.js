@@ -2,9 +2,8 @@
 let generateHash, getCache, setCache, cleanExpiredCache
 
 beforeAll(async () => {
-  process.env.DB_PATH = ':memory:'
-  process.env.CACHE_TTL_SECONDS = '1'
   const dbMod = await import('../src/db.js')
+  dbMod.setDbPath(':memory:')
   dbMod.initDb()
 
   const cacheMod = await import('../src/services/cacheManager.js')

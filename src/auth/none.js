@@ -18,7 +18,7 @@ export default class NoneAuthProvider extends AuthProvider {
     const expiresAt = new Date(Date.now() + SESSION_DURATION_MS).toISOString()
 
     dbRun(
-      `INSERT INTO sessions (id, token_hash, user_email, user_name, user_avatar, expires_at)
+      `INSERT OR REPLACE INTO sessions (id, token_hash, user_email, user_name, user_avatar, expires_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [sessionId, 'anonymous', 'anonymous@local', 'Anonymous User', null, expiresAt]
     )

@@ -32,8 +32,12 @@ router.post('/send', async (req, res) => {
         authenticatedVia: 'dashboard_chat',
         apiKey: null,
         providerId: null,
+        forceExposeProvider: true,
       })
-      return res.status(result.statusCode).json(addTime(result.body))
+      return res.status(result.statusCode).json(addTime({
+        ...result.body,
+        _provider: result.body._provider || null,
+      }))
     } catch (err) {
       return res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null, _provider: err._provider || null }))
     }
