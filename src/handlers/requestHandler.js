@@ -2,13 +2,15 @@ import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailabl
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
+import { config } from '../config.js'
 
-export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId }) {
+export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId, forceExposeProvider = false }) {
   const startTime = Date.now()
 
   const capability = getCapabilityFromBody(requestBody)
 
   let lastError = null
+  let lastProvider = null
   let retryCount = 0
 
   const queryHash = generateHash(requestBody)
@@ -27,9 +29,10 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       })
     }
     const provider = cached.provider_id ? getProvider(cached.provider_id) : null
+    const exposeProvider = forceExposeProvider || (config.relay?.exposeProvider ?? true)
     return {
       statusCode: 200,
-      body: provider
+      body: provider && exposeProvider
         ? { ...responseBody, _provider: { id: provider.id, name: provider.name, model: provider.model } }
         : responseBody,
     }
@@ -60,7 +63,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 30000)
 
-      const data = await callProvider(provider, requestBody, controller.signal)
+      const data = await callProvider(provider, requestBody, controller.signal, capability)
       clearTimeout(timeout)
 
       const responseTimeMs = Date.now() - startTime
@@ -84,9 +87,16 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         responseTimeMs, cacheHit: false,
       })
 
-      return { statusCode: 200, body: { ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } } }
+      const exposeProvider = forceExposeProvider || (config.relay?.exposeProvider ?? true)
+      return {
+        statusCode: 200,
+        body: exposeProvider
+          ? { ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } }
+          : data,
+      }
     } catch (err) {
       lastError = err
+      lastProvider = provider
       retryCount++
 
       recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
@@ -114,5 +124,8 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   const finalErr = new Error(lastError?.message || 'All providers failed')
   finalErr.status = lastError?.status || 503
   finalErr.data = lastError?.data || null
+  if (lastProvider) {
+    finalErr._provider = { id: lastProvider.id, name: lastProvider.name, model: lastProvider.model }
+  }
   throw finalErr
 }

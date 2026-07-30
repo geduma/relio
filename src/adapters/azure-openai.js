@@ -13,8 +13,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       url += `${separator}api-version=${AZURE_API_VERSION}`
     }
     if (!url.endsWith('/chat/completions') && !url.includes('/chat/completions')) {
-      const suffix = url.endsWith('/v1') ? '' : '/v1'
-      url += `${suffix}/chat/completions`
+      url += '/chat/completions'
     }
     return url
   }
@@ -24,6 +23,10 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     const separator = url.includes('?') ? '&' : '?'
     if (!url.includes('api-version=')) {
       url += `${separator}api-version=${AZURE_API_VERSION}`
+    }
+    const deploymentMatch = url.match(/\/deployments\/[^/?]+/)
+    if (deploymentMatch) {
+      url = url.slice(0, deploymentMatch.index) + '/models'
     }
     return url
   }
@@ -91,6 +94,24 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     }
 
     return Readable.fromWeb(response.body)
+  }
+
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.data || []
+    } catch {
+      return []
+    }
   }
 
   async testConnection(apiUrl, apiKey) {

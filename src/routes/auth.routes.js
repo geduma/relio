@@ -24,7 +24,7 @@ function setSessionCookie(res, sessionId) {
   res.cookie('relio_session', sessionId, {
     httpOnly: config.cookie.httpOnly,
     secure: config.server.nodeEnv === 'production' ? true : config.cookie.secure,
-    sameSite: 'lax',
+    sameSite: config.cookie.sameSite || 'lax',
     maxAge: 24 * 60 * 60 * 1000,
   })
 }

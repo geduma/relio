@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { dbRun } from './db.js'
+import { dbRun, getDb } from './db.js'
+import { config } from './config.js'
 import { cleanExpiredCache } from './services/cacheManager.js'
 import { logger } from './utils/logger.js'
 
@@ -10,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BACKUP_DIR = path.resolve(__dirname, '../db/backups')
 const LOG_DIR = path.resolve(__dirname, '../logs')
 const ARCHIVE_DIR = path.join(LOG_DIR, 'archive')
-const DB_PATH = path.resolve(__dirname, '../db/db.sqlite')
+const DB_PATH = path.resolve(__dirname, '..', config.db.path)
 
 const RETENTION = {
   requestsLog: 90,
@@ -36,39 +37,45 @@ function backupDb() {
     return
   }
 
+  getDb().exec('PRAGMA wal_checkpoint(TRUNCATE)')
+
   fs.copyFileSync(DB_PATH, backupPath)
   logger.info(`Database backed up to ${backupPath}`)
 }
 
 function cleanOldData() {
-  const deletedRequests = dbRun(
-    `DELETE FROM requests_log WHERE request_at < datetime('now', ?)`,
-    [`-${RETENTION.requestsLog} days`]
-  ).changes
+  const db = getDb()
+  const tx = db.transaction(() => {
+    const deletedRequests = dbRun(
+      `DELETE FROM requests_log WHERE request_at < datetime('now', ?)`,
+      [`-${RETENTION.requestsLog} days`]
+    ).changes
 
-  const deletedCache = cleanExpiredCache()
+    const deletedCache = cleanExpiredCache()
 
-  const deletedLoginHistory = dbRun(
-    `DELETE FROM login_history WHERE timestamp < datetime('now', ?)`,
-    [`-${RETENTION.loginHistory} days`]
-  ).changes
+    const deletedLoginHistory = dbRun(
+      `DELETE FROM login_history WHERE timestamp < datetime('now', ?)`,
+      [`-${RETENTION.loginHistory} days`]
+    ).changes
 
-  const deletedMetrics = dbRun(
-    `DELETE FROM metrics WHERE metric_date < date('now', ?)`,
-    [`-${RETENTION.metrics} days`]
-  ).changes
+    const deletedMetrics = dbRun(
+      `DELETE FROM metrics WHERE metric_date < date('now', ?)`,
+      [`-${RETENTION.metrics} days`]
+    ).changes
 
-  const deletedSessions = dbRun(
-    `DELETE FROM sessions WHERE expires_at < datetime('now')`
-  ).changes
+    const deletedSessions = dbRun(
+      `DELETE FROM sessions WHERE expires_at < datetime('now')`
+    ).changes
 
-  logger.info('Cleanup complete', {
-    requestsLog: deletedRequests,
-    cache: deletedCache,
-    loginHistory: deletedLoginHistory,
-    metrics: deletedMetrics,
-    sessions: deletedSessions,
+    logger.info('Cleanup complete', {
+      requestsLog: deletedRequests,
+      cache: deletedCache,
+      loginHistory: deletedLoginHistory,
+      metrics: deletedMetrics,
+      sessions: deletedSessions,
+    })
   })
+  tx()
 }
 
 function cleanOldBackups(maxBackups = 10) {
@@ -100,15 +107,18 @@ function archiveOldLogs() {
 }
 
 export function recoverCooldowns() {
+  const now = new Date().toISOString()
   const recovered = dbRun(
     `UPDATE providers SET status = 'active', cooldown_until = NULL
-     WHERE status = 'cooldown' AND cooldown_until IS NOT NULL AND cooldown_until <= datetime('now')`
+     WHERE status = 'cooldown' AND cooldown_until IS NOT NULL AND cooldown_until <= ?`,
+    [now]
   ).changes
 
   if (recovered > 0) {
     dbRun(
       `UPDATE circuit_breaker_state SET state = 'healthy', failure_count = 0, cooldown_until = NULL, updated_at = datetime('now')
-       WHERE state = 'cooldown' AND cooldown_until <= datetime('now')`
+       WHERE state = 'cooldown' AND cooldown_until <= ?`,
+      [now]
     )
     logger.info('Cooldowns recovered', { count: recovered })
   }

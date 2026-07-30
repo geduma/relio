@@ -4,10 +4,14 @@
   "description": "LLM Relay — intelligent proxy with failover, caching, and audit",
   "main": "src/index.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "build": "cd frontend && npm run build",
     "dev": "npm run build && node --watch src/index.js",
-    "start": "npm run build && node src/index.js",
+    "start": "node src/index.js",
+    "start:prod": "NODE_ENV=production node src/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

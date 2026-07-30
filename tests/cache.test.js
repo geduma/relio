@@ -2,9 +2,8 @@
 let generateHash, getCache, setCache, cleanExpiredCache
 
 beforeAll(async () => {
-  process.env.DB_PATH = ':memory:'
-  process.env.CACHE_TTL_SECONDS = '1'
   const dbMod = await import('../src/db.js')
+  dbMod.setDbPath(':memory:')
   dbMod.initDb()
 
   const cacheMod = await import('../src/services/cacheManager.js')
@@ -40,12 +39,20 @@ describe('CacheManager', () => {
     expect(parsed.choices[0].message.content).toBe('Hi!')
   })
 
+  it('returns cached value on second call (memCache hit)', () => {
+    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'again' }] }
+    setCache('/v1/chat/completions', body, { choices: [{ message: { content: 'Mem' } }] })
+    const hash = generateHash(body)
+    const cached = getCache(hash)
+    expect(JSON.parse(cached.response_body).choices[0].message.content).toBe('Mem')
+  })
+
   it('returns null for non-existent hash', () => {
     const result = getCache('nonexistent_hash')
     expect(result).toBeNull()
   })
 
-  it('cleans expired cache', () => {
+  it('cleans expired cache returns number', () => {
     const count = cleanExpiredCache()
     expect(typeof count).toBe('number')
   })

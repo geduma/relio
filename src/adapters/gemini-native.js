@@ -32,7 +32,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
 
   buildHeaders(apiKey) {
     return {
-      'Authorization': `Bearer ${apiKey}`,
+      'X-Goog-Api-Key': apiKey,
       'Content-Type': 'application/json',
     }
   }
@@ -41,20 +41,48 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     const contents = []
     let systemInstruction = null
 
+    const safeJsonParse = (str) => {
+      if (typeof str === 'object') return str
+      try { return JSON.parse(str || '{}') } catch { return {} }
+    }
+
     for (const msg of body.messages || []) {
       if (msg.role === 'system') {
-        systemInstruction = { parts: [{ text: msg.content }] }
+        if (typeof msg.content === 'string') {
+          systemInstruction = { parts: [{ text: msg.content }] }
+        } else if (Array.isArray(msg.content)) {
+          const texts = msg.content.filter(p => p.type === 'text').map(p => ({ text: p.text }))
+          systemInstruction = { parts: texts }
+        }
+        continue
+      }
+
+      if (msg.role === 'tool') {
+        const tcId = msg.tool_call_id || ''
+        const fnCall = body.messages
+          ?.flatMap(m => m.tool_calls || [])
+          ?.find(tc => tc.id === tcId)
+        const fnName = fnCall?.function?.name || tcId
+        contents.push({
+          role: 'user',
+          parts: [{
+            functionResponse: {
+              name: fnName,
+              response: { result: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) },
+            },
+          }],
+        })
         continue
       }
 
       const parts = []
 
       if (typeof msg.content === 'string') {
-        parts.push({ text: msg.content })
+        if (msg.content) parts.push({ text: msg.content })
       } else if (Array.isArray(msg.content)) {
         for (const part of msg.content) {
           if (part.type === 'text') {
-            parts.push({ text: part.text })
+            if (part.text) parts.push({ text: part.text })
           } else if (part.type === 'image_url') {
             let imageData = part.image_url?.url || ''
             if (imageData.startsWith('data:')) {
@@ -69,6 +97,17 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         }
       }
 
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          parts.push({
+            functionCall: {
+              name: tc.function?.name || '',
+              args: safeJsonParse(tc.function?.arguments),
+            },
+          })
+        }
+      }
+
       const role = msg.role === 'assistant' ? 'model' : 'user'
       contents.push({ role, parts })
     }
@@ -79,25 +118,46 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       result.systemInstruction = systemInstruction
     }
 
-    if (body.temperature != null) result.generationConfig = { temperature: body.temperature }
-    if (body.max_tokens != null) {
-      result.generationConfig = { ...result.generationConfig, maxOutputTokens: body.max_tokens }
-    }
-    if (body.top_p != null) {
-      result.generationConfig = { ...result.generationConfig, topP: body.top_p }
-    }
-    if (body.stop) {
-      result.generationConfig = { ...result.generationConfig, stopSequences: Array.isArray(body.stop) ? body.stop : [body.stop] }
+    if (body.temperature != null || body.max_tokens != null || body.top_p != null || body.stop || body.response_format) {
+      result.generationConfig = {}
+
+      if (body.temperature != null) result.generationConfig.temperature = body.temperature
+      if (body.max_tokens != null) result.generationConfig.maxOutputTokens = body.max_tokens
+      if (body.top_p != null) result.generationConfig.topP = body.top_p
+      if (body.stop) {
+        result.generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop]
+      }
+      if (body.response_format?.type === 'json_object') {
+        result.generationConfig.responseMimeType = 'application/json'
+      }
     }
 
     if (body.tools && body.tools.length > 0) {
-      result.tools = body.tools.map(t => ({
-        functionDeclarations: [{
+      result.tools = [{
+        functionDeclarations: body.tools.map(t => ({
           name: t.function?.name || t.name,
           description: t.function?.description || t.description || '',
           parameters: t.function?.parameters || t.input_schema || {},
-        }],
-      }))
+        })),
+      }]
+
+      if (body.tool_choice) {
+        let mode = 'AUTO'
+        if (body.tool_choice === 'any' || body.tool_choice === 'required') {
+          mode = 'ANY'
+        } else if (typeof body.tool_choice === 'object' && body.tool_choice.function?.name) {
+          mode = 'ANY'
+          result.toolConfig = {
+            functionCallingConfig: {
+              mode,
+              allowedFunctionNames: [body.tool_choice.function.name],
+            },
+          }
+        }
+        if (!result.toolConfig) {
+          result.toolConfig = { functionCallingConfig: { mode } }
+        }
+      }
     }
 
     return result
@@ -119,6 +179,8 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       }
     }
 
+    this._callCounter = this._callCounter || 0
+
     const candidate = data.candidates[0]
     const parts = candidate.content?.parts || []
     let text = ''
@@ -129,8 +191,9 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         text += part.text
       }
       if (part.functionCall) {
+        this._callCounter++
         toolCalls.push({
-          id: `call_${Date.now()}`,
+          id: `call_${this._callCounter}`,
           type: 'function',
           function: {
             name: part.functionCall.name,
@@ -232,6 +295,24 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    let isFirstChunk = true
+    let previousContent = ''
+
+    const extractDelta = (canonical) => {
+      const msg = canonical.choices[0]?.message || {}
+      const delta = {}
+      if (isFirstChunk) {
+        delta.role = 'assistant'
+        isFirstChunk = false
+      }
+      const newContent = msg.content || ''
+      if (newContent.length > previousContent.length) {
+        delta.content = newContent.slice(previousContent.length)
+      }
+      previousContent = newContent
+      if (msg.tool_calls) delta.tool_calls = msg.tool_calls
+      return delta
+    }
 
     return new Readable({
       async read() {
@@ -270,6 +351,10 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
               }
 
               const canonical = this.transformResponse(geminiData)
+              const delta = extractDelta(canonical)
+
+              if (!delta.content && !delta.tool_calls && !delta.role) continue
+
               const streamChunk = {
                 id: canonical.id,
                 object: 'chat.completion.chunk',
@@ -277,10 +362,8 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
                 model: canonical.model,
                 choices: [{
                   index: 0,
-                  delta: {
-                    content: canonical.choices[0]?.message?.content || '',
-                  },
-                  finish_reason: null,
+                  delta,
+                  finish_reason: canonical.choices[0]?.finish_reason || null,
                 }],
               }
 
@@ -296,6 +379,24 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         }
       },
     })
+  }
+
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.models || []
+    } catch {
+      return []
+    }
   }
 
   async testConnection(apiUrl, apiKey) {
@@ -314,7 +415,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     try {
       const modelsUrl = `${base}${base.endsWith('/v1') ? '' : '/v1'}/models`
       const res = await tryFetch(modelsUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}` },
+        headers: { 'X-Goog-Api-Key': apiKey },
       })
 
       if (res.status === 401 || res.status === 403) {

@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest'
-import { getAdapter, registerAdapter } from '../src/adapters/index.js'
+import { getAdapter } from '../src/adapters/index.js'
 import ProviderAdapter from '../src/adapters/base.js'
 import OpenAICompatibleAdapter from '../src/adapters/openai-compatible.js'
 import AnthropicAdapter from '../src/adapters/anthropic.js'
@@ -56,6 +56,8 @@ describe('ProviderAdapter (base)', () => {
     const adapter = new TestAdapter()
     await expect(adapter.chat()).rejects.toThrow('test must implement chat()')
     await expect(adapter.stream()).rejects.toThrow('test must implement stream()')
+    await expect(adapter.embeddings()).rejects.toThrow('test must implement embeddings()')
+    await expect(adapter.models()).rejects.toThrow('test must implement models()')
     await expect(adapter.testConnection()).rejects.toThrow('test must implement testConnection()')
     expect(() => adapter.buildUrl()).toThrow('test must implement buildUrl()')
     expect(() => adapter.buildHeaders()).toThrow('test must implement buildHeaders()')
@@ -72,6 +74,11 @@ describe('OpenAICompatibleAdapter', () => {
     expect(adapter.buildUrl('https://example.com/v1/chat/completions')).toBe('https://example.com/v1/chat/completions')
   })
 
+  it('builds correct embeddings URL', () => {
+    expect(adapter.buildUrlForEmbeddings('https://api.openai.com/v1')).toBe('https://api.openai.com/v1/embeddings')
+    expect(adapter.buildUrlForEmbeddings('https://api.openai.com')).toBe('https://api.openai.com/v1/embeddings')
+  })
+
   it('builds correct headers', () => {
     const headers = adapter.buildHeaders('sk-test')
     expect(headers['Authorization']).toBe('Bearer sk-test')
@@ -80,6 +87,14 @@ describe('OpenAICompatibleAdapter', () => {
 
   it('has correct type', () => {
     expect(OpenAICompatibleAdapter.type).toBe('openai-compatible')
+  })
+
+  it('embeddings() rejects with no network', async () => {
+    await expect(adapter.embeddings(
+      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
+      { input: 'text' },
+      null
+    )).rejects.toThrow()
   })
 })
 
@@ -112,7 +127,9 @@ describe('AnthropicAdapter', () => {
     })
 
     expect(result.model).toBe('claude-3-opus')
-    expect(result.system).toBe('Be helpful')
+    expect(Array.isArray(result.system)).toBe(true)
+    expect(result.system[0].type).toBe('text')
+    expect(result.system[0].text).toBe('Be helpful')
     expect(result.messages).toHaveLength(1)
     expect(result.messages[0].role).toBe('user')
     expect(result.messages[0].content).toBe('Hello')
@@ -162,6 +179,24 @@ describe('AnthropicAdapter', () => {
     expect(result.choices[0].message.tool_calls[0].function.arguments).toBe('{"city":"Paris"}')
   })
 
+  it('transforms tool_choice correctly', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'Use tool' }],
+      tools: [{ function: { name: 'get_weather', description: 'Get weather', parameters: {} } }],
+      tool_choice: { type: 'function', function: { name: 'get_weather' } },
+    })
+    expect(result.tool_choice).toEqual({ type: 'tool', name: 'get_weather' })
+  })
+
+  it('transforms tool_choice auto correctly', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'Hi' }],
+      tools: [{ function: { name: 'get_weather' } }],
+      tool_choice: 'auto',
+    })
+    expect(result.tool_choice).toEqual({ type: 'auto' })
+  })
+
   it('has correct type', () => {
     expect(AnthropicAdapter.type).toBe('anthropic')
   })
@@ -177,7 +212,8 @@ describe('GeminiNativeAdapter', () => {
 
   it('builds correct headers', () => {
     const headers = adapter.buildHeaders('AIza-test')
-    expect(headers['Authorization']).toBe('Bearer AIza-test')
+    expect(headers['X-Goog-Api-Key']).toBe('AIza-test')
+    expect(headers['Authorization']).toBeUndefined()
     expect(headers['Content-Type']).toBe('application/json')
   })
 
@@ -227,6 +263,56 @@ describe('GeminiNativeAdapter', () => {
     const result = adapter.transformResponse({ candidates: [], model: 'gemini-pro' })
     expect(result.choices[0].message.content).toBe('')
     expect(result.choices[0].finish_reason).toBe('stop')
+  })
+
+  it('transforms role:tool messages into functionResponse parts', () => {
+    const result = adapter.transformRequest({
+      messages: [
+        { role: 'user', content: 'What is the weather?' },
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } }] },
+        { role: 'tool', content: 'Sunny', tool_call_id: 'get_weather' },
+      ],
+    })
+    expect(result.contents[0].role).toBe('user')
+    expect(result.contents[0].parts[0].text).toBe('What is the weather?')
+    expect(result.contents[1].role).toBe('model')
+    expect(result.contents[1].parts[0].functionCall.name).toBe('get_weather')
+    expect(result.contents[2].role).toBe('user')
+    expect(result.contents[2].parts[0].functionResponse.name).toBe('get_weather')
+    expect(result.contents[2].parts[0].functionResponse.response.result).toBe('Sunny')
+  })
+
+  it('transforms response_format json_object', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'JSON please' }],
+      response_format: { type: 'json_object' },
+    })
+    expect(result.generationConfig.responseMimeType).toBe('application/json')
+  })
+
+  it('transforms tool_choice correctly', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'Use tool' }],
+      tools: [{ function: { name: 'get_weather', description: 'Get weather', parameters: {} } }],
+      tool_choice: { type: 'function', function: { name: 'get_weather' } },
+    })
+    expect(result.toolConfig.functionCallingConfig.mode).toBe('ANY')
+    expect(result.toolConfig.functionCallingConfig.allowedFunctionNames).toEqual(['get_weather'])
+  })
+
+  it('transforms Gemini response with functionCall to OpenAI tool_calls', () => {
+    const result = adapter.transformResponse({
+      candidates: [{
+        content: { parts: [{ functionCall: { name: 'get_weather', args: { city: 'Paris' } } }], role: 'model' },
+        finishReason: 'TOOL_CALL',
+      }],
+      usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+      model: 'gemini-pro',
+    })
+    expect(result.choices[0].message.content).toBeNull()
+    expect(result.choices[0].finish_reason).toBe('tool_calls')
+    expect(result.choices[0].message.tool_calls).toHaveLength(1)
+    expect(result.choices[0].message.tool_calls[0].function.name).toBe('get_weather')
   })
 
   it('has correct type', () => {
@@ -290,6 +376,42 @@ describe('Adapter streaming', () => {
       { messages: [{ role: 'user', content: 'hi' }] },
       null
     )).rejects.toThrow()
+  })
+})
+
+describe('Error normalization', () => {
+  it('normalizes rate limit errors', async () => {
+    const { normalizeError } = await import('../src/utils/logger.js')
+    const err = new Error('Rate limit exceeded')
+    err.status = 429
+    const result = normalizeError(err)
+    expect(result.error.type).toBe('rate_limit_error')
+    expect(result.error.code).toBe('rate_limit')
+  })
+
+  it('normalizes authentication errors', async () => {
+    const { normalizeError } = await import('../src/utils/logger.js')
+    const err = new Error('Invalid API key')
+    err.status = 401
+    const result = normalizeError(err)
+    expect(result.error.type).toBe('authentication_error')
+    expect(result.error.code).toBe('authentication')
+  })
+
+  it('normalizes context length errors', async () => {
+    const { normalizeError } = await import('../src/utils/logger.js')
+    const err = new Error('maximum context length exceeded')
+    const result = normalizeError(err)
+    expect(result.error.type).toBe('invalid_request_error')
+    expect(result.error.code).toBe('context_length_exceeded')
+  })
+
+  it('normalizes safety errors', async () => {
+    const { normalizeError } = await import('../src/utils/logger.js')
+    const err = new Error('safety blocked')
+    const result = normalizeError(err)
+    expect(result.error.type).toBe('content_filter_error')
+    expect(result.error.code).toBe('content_filter')
   })
 })
 

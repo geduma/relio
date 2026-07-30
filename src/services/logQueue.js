@@ -21,60 +21,65 @@ function flush() {
   if (logs.length === 0 && metrics.length === 0 && touches.length === 0) return
 
   const db = getDb()
-  const tx = db.transaction(() => {
-    for (const data of logs) {
-      const totalTokens = (data.inputTokens || 0) + (data.outputTokens || 0)
-      db.prepare(`INSERT INTO requests_log
-        (id, provider_id, endpoint, request_body, origin_ip, origin_header,
-         status_code, response_body, error_message,
-         input_tokens, output_tokens, total_tokens, estimated_cost,
-         response_time_ms, authenticated_via, cache_hit, was_retry, retry_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        uuidv4(), data.providerId, data.endpoint,
-        JSON.stringify(data.requestBody), data.originIp, data.originHeader,
-        data.statusCode, data.responseBody ? JSON.stringify(data.responseBody) : null, data.errorMessage,
-        data.inputTokens || 0, data.outputTokens || 0, totalTokens, data.estimatedCost || 0,
-        data.responseTimeMs, data.authenticatedVia, data.cacheHit ? 1 : 0, data.wasRetry ? 1 : 0, data.retryCount || 0
-      )
-    }
 
-    for (const { providerId, data } of metrics) {
-      const today = new Date().toISOString().slice(0, 10)
-      const id = `${providerId}_${today}`
-      const inputTokens = data.inputTokens || 0
-      const outputTokens = data.outputTokens || 0
-      const cost = data.cost || 0
-      const error = data.error ? 1 : 0
-      const cacheHit = data.cacheHit ? 1 : 0
-      const responseTimeMs = data.responseTimeMs || 0
+  try {
+    const tx = db.transaction(() => {
+      for (const d of logs) {
+        const totalTokens = (d.inputTokens || 0) + (d.outputTokens || 0)
+        db.prepare(`INSERT INTO requests_log
+          (id, provider_id, endpoint, request_body, origin_ip, origin_header,
+           status_code, response_body, error_message,
+           input_tokens, output_tokens, total_tokens, estimated_cost,
+           response_time_ms, authenticated_via, cache_hit, was_retry, retry_count)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          uuidv4(), d.providerId, d.endpoint,
+          JSON.stringify(d.requestBody), d.originIp, d.originHeader,
+          d.statusCode, d.responseBody ? JSON.stringify(d.responseBody) : null, d.errorMessage,
+          d.inputTokens || 0, d.outputTokens || 0, totalTokens, d.estimatedCost || 0,
+          d.responseTimeMs, d.authenticatedVia, d.cacheHit ? 1 : 0, d.wasRetry ? 1 : 0, d.retryCount || 0
+        )
+      }
 
-      db.prepare(`INSERT INTO metrics
-        (id, provider_id, metric_date, total_requests, total_input_tokens, total_output_tokens,
-         total_cost, error_count, cache_hits, avg_response_time_ms)
-        VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(provider_id, metric_date) DO UPDATE SET
-          total_requests = total_requests + 1,
-          total_input_tokens = total_input_tokens + ?,
-          total_output_tokens = total_output_tokens + ?,
-          total_cost = total_cost + ?,
-          error_count = error_count + ?,
-          cache_hits = cache_hits + ?,
-          avg_response_time_ms = (avg_response_time_ms * (total_requests - 1) + ?) / total_requests`
-      ).run(
-        id, providerId, today,
-        inputTokens, outputTokens, cost,
-        error, cacheHit, responseTimeMs,
-        inputTokens, outputTokens, cost,
-        error, cacheHit, responseTimeMs
-      )
-    }
+      for (const { providerId, data } of metrics) {
+        const today = new Date().toISOString().slice(0, 10)
+        const id = `${providerId}_${today}`
+        const inputTokens = data.inputTokens || 0
+        const outputTokens = data.outputTokens || 0
+        const cost = data.cost || 0
+        const error = data.error ? 1 : 0
+        const cacheHit = data.cacheHit ? 1 : 0
+        const responseTimeMs = data.responseTimeMs || 0
 
-    for (const id of touches) {
-      db.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(id)
-    }
-  })
-  tx()
+        db.prepare(`INSERT INTO metrics
+          (id, provider_id, metric_date, total_requests, total_input_tokens, total_output_tokens,
+           total_cost, error_count, cache_hits, avg_response_time_ms)
+          VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(provider_id, metric_date) DO UPDATE SET
+            total_requests = total_requests + 1,
+            total_input_tokens = total_input_tokens + ?,
+            total_output_tokens = total_output_tokens + ?,
+            total_cost = total_cost + ?,
+            error_count = error_count + ?,
+            cache_hits = cache_hits + ?,
+            avg_response_time_ms = (avg_response_time_ms * (total_requests - 1) + ?) / total_requests`
+        ).run(
+          id, providerId, today,
+          inputTokens, outputTokens, cost,
+          error, cacheHit, responseTimeMs,
+          inputTokens, outputTokens, cost,
+          error, cacheHit, responseTimeMs
+        )
+      }
+
+      for (const id of touches) {
+        db.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(id)
+      }
+    })
+    tx()
+  } catch (err) {
+    console.error('[logQueue] Flush failed, data may be lost:', err.message)
+  }
 }
 
 export function enqueueLog(data) {

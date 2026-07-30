@@ -13,9 +13,9 @@ export function getProvider(id) {
 export function selectProviders(capability) {
   return dbAll(
     `SELECT * FROM providers
-     WHERE capability = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= datetime('now')))
+     WHERE capability = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= ?))
      ORDER BY order_position ASC`,
-    [capability]
+    [capability, new Date().toISOString()]
   ).map(decryptProvider)
 }
 
@@ -32,7 +32,7 @@ export function isRateLimitExceeded(provider) {
 
   const windowStart = new Date(Date.now() - 60000).toISOString()
   const count = dbGet(
-    `SELECT COUNT(*) AS cnt FROM requests_log
+    `SELECT COUNT(id) AS cnt FROM requests_log
      WHERE provider_id = ? AND request_at > ?`,
     [provider.id, windowStart]
   ).cnt
@@ -53,14 +53,26 @@ export function isDailyLimitExceeded(provider) {
   return used >= provider.tokens_per_day
 }
 
-export async function callProvider(provider, requestBody, signal) {
+export async function callProvider(provider, requestBody, signal, capability) {
   const adapter = getAdapter(provider.provider_type)
+  if (capability === 'embeddings') {
+    return adapter.embeddings(provider, requestBody, signal)
+  }
   return adapter.chat(provider, requestBody, signal)
 }
 
 export async function streamProvider(provider, requestBody, signal) {
   const adapter = getAdapter(provider.provider_type)
   return adapter.stream(provider, requestBody, signal)
+}
+
+export async function listModels(provider) {
+  const adapter = getAdapter(provider.provider_type)
+  try {
+    return await adapter.models(provider.api_url, provider.api_key)
+  } catch (err) {
+    throw new Error(`Failed to list models for ${provider.name}: ${err.message}`)
+  }
 }
 
 export function getCapabilityFromBody(body) {

@@ -34,12 +34,40 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
     for (const msg of body.messages || []) {
       if (msg.role === 'system') {
-        systemPrompt = msg.content
+        if (typeof msg.content === 'string') {
+          systemPrompt = msg.content
+        } else if (Array.isArray(msg.content)) {
+          const texts = msg.content.filter(p => p.type === 'text').map(p => p.text).join('\n')
+          systemPrompt = texts
+        }
         continue
       }
+
+      if (msg.role === 'tool') {
+        const tcId = msg.tool_call_id || ''
+        const fnCall = body.messages
+          ?.flatMap(m => m.tool_calls || [])
+          ?.find(tc => tc.id === tcId)
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+        messages.push({
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: tcId, content }],
+        })
+        continue
+      }
+
+      const content = msg.role === 'assistant' && msg.tool_calls
+        ? [{ type: 'text', text: msg.content || '' }, ...msg.tool_calls.map(tc => ({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.function?.name || '',
+            input: JSON.parse(tc.function?.arguments || '{}'),
+          }))]
+        : msg.content
+
       messages.push({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: msg.content,
+        content,
       })
     }
 
@@ -50,7 +78,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
     }
 
     if (systemPrompt) {
-      result.system = systemPrompt
+      result.system = [{ type: 'text', text: systemPrompt }]
     }
 
     if (body.temperature != null) result.temperature = body.temperature
@@ -63,6 +91,19 @@ export default class AnthropicAdapter extends ProviderAdapter {
         description: t.function?.description || t.description || '',
         input_schema: t.function?.parameters || t.input_schema || {},
       }))
+
+      if (body.tool_choice) {
+        if (body.tool_choice === 'auto') {
+          result.tool_choice = { type: 'auto' }
+        } else if (body.tool_choice === 'required' || body.tool_choice === 'any') {
+          result.tool_choice = { type: 'any' }
+        } else if (typeof body.tool_choice === 'object') {
+          const fn = body.tool_choice.function
+          if (fn?.name) {
+            result.tool_choice = { type: 'tool', name: fn.name }
+          }
+        }
+      }
     }
 
     return result
@@ -131,7 +172,14 @@ export default class AnthropicAdapter extends ProviderAdapter {
     if (data.type === 'message_start') {
       return {
         id: data.message?.id,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
         model: data.message?.model,
+        choices: [{
+          index: 0,
+          delta: { role: 'assistant' },
+          finish_reason: null,
+        }],
       }
     }
 
@@ -151,7 +199,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
       if (delta?.type === 'input_json_delta') {
         result.choices[0].delta.tool_calls = [{
-          index: 0,
+          index: data.index || 0,
           function: {
             arguments: delta.partial_json || '',
           },
@@ -168,7 +216,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
             index: 0,
             delta: {
               tool_calls: [{
-                index: 0,
+                index: data.index || 0,
                 id: data.content_block.id,
                 type: 'function',
                 function: {
@@ -272,6 +320,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
           while (true) {
             const { done, value } = await reader.read()
             if (done) {
+              this.push('data: [DONE]\n\n')
               this.push(null)
               break
             }
@@ -295,6 +344,24 @@ export default class AnthropicAdapter extends ProviderAdapter {
         }
       },
     })
+  }
+
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.data || data.models || []
+    } catch {
+      return []
+    }
   }
 
   async testConnection(apiUrl, apiKey) {

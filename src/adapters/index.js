@@ -25,7 +25,7 @@ export function getAdapter(providerType) {
   if (!AdapterClass) {
     const Fallback = registry.get('openai-compatible')
     const instance = new Fallback()
-    instances.set('openai-compatible', instance)
+    instances.set(normalized, instance)
     return instance
   }
 

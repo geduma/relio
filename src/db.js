@@ -6,7 +6,12 @@ import { config } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ALGORITHM = 'aes-256-gcm'
-const KEY = crypto.createHash('sha256').update(config.security?.encryptionKey || 'relio-default-key-change-me').digest()
+const FALLBACK_KEY = 'relio-default-key-change-me'
+const RAW_KEY = config.security?.encryptionKey || FALLBACK_KEY
+if (RAW_KEY === FALLBACK_KEY) {
+  console.warn('config.security.encryptionKey not set; using insecure fallback key')
+}
+const KEY = crypto.createHash('sha256').update(RAW_KEY).digest()
 
 export function encrypt(text) {
   const iv = crypto.randomBytes(16)
@@ -19,7 +24,7 @@ export function encrypt(text) {
 
 export function decrypt(ciphertext) {
   const parts = ciphertext.split(':')
-  if (parts.length !== 3) return ciphertext
+  if (parts.length !== 3) throw new Error('Invalid ciphertext format')
   const iv = Buffer.from(parts[0], 'hex')
   const authTag = Buffer.from(parts[1], 'hex')
   const encrypted = parts[2]
@@ -31,8 +36,18 @@ export function decrypt(ciphertext) {
 }
 
 let db
+let _overrideDbPath
+
+export function setDbPath(path) {
+  _overrideDbPath = path
+}
+
+export function resetDbPath() {
+  _overrideDbPath = undefined
+}
 
 function resolveDbPath() {
+  if (_overrideDbPath) return _overrideDbPath
   const raw = config.db.path
   if (raw === ':memory:') return ':memory:'
   return path.resolve(__dirname, '..', raw)
@@ -191,6 +206,11 @@ function runMigrations(d) {
   if (!columns.includes('provider_type')) {
     d.exec("ALTER TABLE providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(provider_type IN ('openai-compatible', 'anthropic', 'gemini-native', 'azure-openai'))")
     columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
+  }
+
+  const cacheColumns = d.prepare("PRAGMA table_info('cache')").all().map(c => c.name)
+  if (!cacheColumns.includes('provider_id')) {
+    d.exec("ALTER TABLE cache ADD COLUMN provider_id TEXT REFERENCES providers(id)")
   }
 }
 
