@@ -13,6 +13,8 @@ function memGet(key) {
   if (!entry) return null
   if (Date.now() > entry.expiresAt) {
     memCache.delete(key)
+    const idx = memOrder.indexOf(key)
+    if (idx !== -1) memOrder.splice(idx, 1)
     return null
   }
   return entry.data

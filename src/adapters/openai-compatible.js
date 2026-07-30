@@ -4,28 +4,33 @@ import { Readable } from 'stream'
 export default class OpenAICompatibleAdapter extends ProviderAdapter {
   static get type() { return 'openai-compatible' }
 
+  _stripQuery(url) {
+    const idx = url.indexOf('?')
+    return idx === -1 ? url : url.slice(0, idx)
+  }
+
   buildUrl(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    if (!url.endsWith('/chat/completions')) {
-      const hasVersion = /\/v\d[\w.]*(\/|$)/.test(url)
+    const base = this._stripQuery(baseUrl).replace(/\/+$/, '')
+    if (!base.endsWith('/chat/completions')) {
+      const hasVersion = /\/v\d[\w.]*(\/|$)/.test(base)
       const suffix = hasVersion ? '' : '/v1'
-      url += `${suffix}/chat/completions`
+      return `${base}${suffix}/chat/completions`
     }
-    return url
+    return base
   }
 
   buildUrlForEmbeddings(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    url = url.replace(/\/chat\/completions$/, '')
-    if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
-    return `${url}/embeddings`
+    const base = this._stripQuery(baseUrl).replace(/\/+$/, '')
+    const cleaned = base.replace(/\/chat\/completions$/, '')
+    if (!/\/v\d[\w.]*(\/|$)/.test(cleaned)) return `${cleaned}/v1/embeddings`
+    return `${cleaned}/embeddings`
   }
 
   buildUrlForModels(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    url = url.replace(/\/chat\/completions$/, '')
-    if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
-    return `${url}/models`
+    const base = this._stripQuery(baseUrl).replace(/\/+$/, '')
+    const cleaned = base.replace(/\/chat\/completions$/, '')
+    if (!/\/v\d[\w.]*(\/|$)/.test(cleaned)) return `${cleaned}/v1/models`
+    return `${cleaned}/models`
   }
 
   buildHeaders(apiKey) {

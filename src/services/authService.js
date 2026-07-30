@@ -31,6 +31,8 @@ export async function login(credentials) {
 
 export async function logout(sessionId) {
   sessionCache.delete(sessionId)
+  const idx = sessionOrder.indexOf(sessionId)
+  if (idx !== -1) sessionOrder.splice(idx, 1)
   const provider = await getAuthProvider()
   return provider.logout(sessionId)
 }
@@ -38,6 +40,12 @@ export async function logout(sessionId) {
 export async function getSession(sessionId) {
   const cached = sessionCache.get(sessionId)
   if (cached && Date.now() < cached.expiresAt) return cached.data
+
+  if (cached) {
+    sessionCache.delete(sessionId)
+    const idx = sessionOrder.indexOf(sessionId)
+    if (idx !== -1) sessionOrder.splice(idx, 1)
+  }
 
   const provider = await getAuthProvider()
   const session = await provider.getSession(sessionId)
@@ -81,6 +89,12 @@ export function validateApiKey(key) {
     return cached.row
   }
 
+  if (cached) {
+    apiKeyCache.delete(key)
+    const idx = apiKeyOrder.indexOf(key)
+    if (idx !== -1) apiKeyOrder.splice(idx, 1)
+  }
+
   const row = dbGet('SELECT * FROM api_keys WHERE key = ?', [key])
   if (row) {
     boundedSet(apiKeyCache, apiKeyOrder, key, { id: row.id, row, expiresAt: Date.now() + API_KEY_CACHE_TTL })
@@ -104,7 +118,11 @@ export function listApiKeys() {
 
 export function revokeApiKey(id) {
   for (const [key, entry] of apiKeyCache) {
-    if (entry.id === id) apiKeyCache.delete(key)
+    if (entry.id === id) {
+      apiKeyCache.delete(key)
+      const idx = apiKeyOrder.indexOf(key)
+      if (idx !== -1) apiKeyOrder.splice(idx, 1)
+    }
   }
   const result = dbRun('DELETE FROM api_keys WHERE id = ?', [id])
   return result.changes > 0

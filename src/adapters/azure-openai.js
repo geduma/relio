@@ -13,8 +13,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       url += `${separator}api-version=${AZURE_API_VERSION}`
     }
     if (!url.endsWith('/chat/completions') && !url.includes('/chat/completions')) {
-      const suffix = url.endsWith('/v1') ? '' : '/v1'
-      url += `${suffix}/chat/completions`
+      url += '/chat/completions'
     }
     return url
   }
@@ -24,6 +23,10 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     const separator = url.includes('?') ? '&' : '?'
     if (!url.includes('api-version=')) {
       url += `${separator}api-version=${AZURE_API_VERSION}`
+    }
+    const deploymentMatch = url.match(/\/deployments\/[^/?]+/)
+    if (deploymentMatch) {
+      url = url.slice(0, deploymentMatch.index) + '/models'
     }
     return url
   }

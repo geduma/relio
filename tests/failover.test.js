@@ -1,5 +1,5 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt
 
 beforeAll(async () => {
   process.env.DB_PATH = ':memory:'
@@ -7,6 +7,7 @@ beforeAll(async () => {
   process.env.CONFIG_PATH = new URL('./test-config.json', import.meta.url).pathname
 
   const dbMod = await import('../src/db.js')
+  encrypt = dbMod.encrypt
   dbMod.initDb()
 
   const failMod = await import('../src/services/failoverEngine.js')
@@ -21,17 +22,17 @@ beforeAll(async () => {
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p1', 'Main', 'https://api.openai.com/v1', 'sk-test', 'gpt-4', 'chat', 'openai-compatible', 0, 'Main', 60, 10000]
+    ['p1', 'Main', 'https://api.openai.com/v1', encrypt('sk-test'), 'gpt-4', 'chat', 'openai-compatible', 0, 'Main', 60, 10000]
   )
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p2', 'Fallback', 'https://api.anthropic.com/v1', 'sk-test2', 'claude-3', 'chat', 'openai-compatible', 1, 'Fallback 1', 60, 10000]
+    ['p2', 'Fallback', 'https://api.anthropic.com/v1', encrypt('sk-test2'), 'claude-3', 'chat', 'openai-compatible', 1, 'Fallback 1', 60, 10000]
   )
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status, cooldown_until)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p3', 'Cooldown', 'https://api.groq.com/v1', 'sk-test3', 'mixtral', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
+    ['p3', 'Cooldown', 'https://api.groq.com/v1', encrypt('sk-test3'), 'mixtral', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
   )
 })
 
@@ -100,5 +101,20 @@ describe('FailoverEngine', () => {
     }
     await expect(callProvider(provider, { messages: [{ role: 'user', content: 'hi' }] }, null))
       .rejects.toThrow()
+  })
+
+  it('excludes providers in cooldown', () => {
+    const providers = selectProviders('chat')
+    const cooldownIds = providers.map(p => p.id)
+    expect(cooldownIds).not.toContain('p3')
+  })
+
+  it('includes cooldown provider when cooldown_until is in the past', async () => {
+    const dbMod = await import('../src/db.js')
+    dbMod.dbRun('UPDATE providers SET cooldown_until = datetime(\'now\', \'-1 hour\') WHERE id = ?', ['p3'])
+    const providers = selectProviders('chat')
+    const ids = providers.map(p => p.id)
+    expect(ids).toContain('p3')
+    dbMod.dbRun('UPDATE providers SET cooldown_until = ? WHERE id = ?', [new Date(Date.now() + 3600000).toISOString(), 'p3'])
   })
 })

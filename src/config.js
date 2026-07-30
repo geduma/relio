@@ -16,13 +16,12 @@ function loadConfig() {
   }
   const cfg = JSON.parse(raw)
 
-  if (process.env.DB_PATH) cfg.db.path = process.env.DB_PATH
-  if (process.env.PORT) cfg.server.port = parseInt(process.env.PORT, 10)
-  if (process.env.HOST) cfg.server.host = process.env.HOST
-  if (process.env.NODE_ENV) cfg.server.nodeEnv = process.env.NODE_ENV
+  cfg.server ??= {}
+  cfg.db ??= {}
+  cfg.security ??= {}
 
   cfg.relay ??= {}
-  cfg.relay.exposeProvider ??= true
+  cfg.relay.exposeProvider ??= false
 
   return cfg
 }

@@ -19,8 +19,8 @@ router.get('/models', async (_req, res) => {
       try {
         const models = await listModels(p)
         allModels.push(...models)
-      } catch {
-        // skip provider if models endpoint fails
+      } catch (err) {
+        console.warn(`[proxy] Models endpoint failed for ${p.name}: ${err.message}`)
       }
     }
     res.json({ object: 'list', data: allModels })

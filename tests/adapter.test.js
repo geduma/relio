@@ -1,6 +1,6 @@
 
 import { describe, it, expect } from 'vitest'
-import { getAdapter, registerAdapter } from '../src/adapters/index.js'
+import { getAdapter } from '../src/adapters/index.js'
 import ProviderAdapter from '../src/adapters/base.js'
 import OpenAICompatibleAdapter from '../src/adapters/openai-compatible.js'
 import AnthropicAdapter from '../src/adapters/anthropic.js'
@@ -127,7 +127,9 @@ describe('AnthropicAdapter', () => {
     })
 
     expect(result.model).toBe('claude-3-opus')
-    expect(result.system).toBe('Be helpful')
+    expect(Array.isArray(result.system)).toBe(true)
+    expect(result.system[0].type).toBe('text')
+    expect(result.system[0].text).toBe('Be helpful')
     expect(result.messages).toHaveLength(1)
     expect(result.messages[0].role).toBe('user')
     expect(result.messages[0].content).toBe('Hello')
@@ -210,7 +212,8 @@ describe('GeminiNativeAdapter', () => {
 
   it('builds correct headers', () => {
     const headers = adapter.buildHeaders('AIza-test')
-    expect(headers['Authorization']).toBe('Bearer AIza-test')
+    expect(headers['X-Goog-Api-Key']).toBe('AIza-test')
+    expect(headers['Authorization']).toBeUndefined()
     expect(headers['Content-Type']).toBe('application/json')
   })
 
@@ -274,8 +277,9 @@ describe('GeminiNativeAdapter', () => {
     expect(result.contents[0].parts[0].text).toBe('What is the weather?')
     expect(result.contents[1].role).toBe('model')
     expect(result.contents[1].parts[0].functionCall.name).toBe('get_weather')
-    expect(result.contents[0].parts[1].functionResponse.name).toBe('get_weather')
-    expect(result.contents[0].parts[1].functionResponse.response.result).toBe('Sunny')
+    expect(result.contents[2].role).toBe('user')
+    expect(result.contents[2].parts[0].functionResponse.name).toBe('get_weather')
+    expect(result.contents[2].parts[0].functionResponse.response.result).toBe('Sunny')
   })
 
   it('transforms response_format json_object', () => {

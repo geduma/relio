@@ -44,8 +44,12 @@ router.post('/send', async (req, res) => {
     return res.status(404).json(addTime({ error: 'Provider not found' }))
   }
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120_000)
+  req.on('close', () => { clearTimeout(timeout); controller.abort() })
+
   try {
-    const data = await callProvider(provider, { messages, model: req.body.model || provider.model }, null)
+    const data = await callProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
     const responseTimeMs = Date.now() - start
     const inputTokens = data.usage?.prompt_tokens || 0
     const outputTokens = data.usage?.completion_tokens || 0

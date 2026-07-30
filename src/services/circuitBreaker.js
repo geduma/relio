@@ -1,4 +1,4 @@
-import { dbGet, dbRun } from '../db.js'
+import { dbGet, dbRun, getDb } from '../db.js'
 
 function getProviderState(providerId) {
   const state = dbGet(
@@ -8,40 +8,54 @@ function getProviderState(providerId) {
   return state || { provider_id: providerId, state: 'healthy', failure_count: 0 }
 }
 
+import { getDb, dbRun } from '../db.js'
+
 export function recordSuccess(providerId) {
-  dbRun(
-    `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, updated_at)
-     VALUES (?, 'healthy', 0, datetime('now'))
-     ON CONFLICT(provider_id) DO UPDATE SET
-       state = 'healthy',
-       failure_count = 0,
-       updated_at = datetime('now')`,
-    [providerId]
-  )
+  const db = getDb()
+  const tx = db.transaction(() => {
+    dbRun(
+      `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, updated_at)
+       VALUES (?, 'healthy', 0, datetime('now'))
+       ON CONFLICT(provider_id) DO UPDATE SET
+         state = 'healthy',
+         failure_count = 0,
+         updated_at = datetime('now')`,
+      [providerId]
+    )
+    dbRun(
+      "UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = ?",
+      [providerId]
+    )
+  })
+  tx()
 }
 
 export function recordFailure(providerId, cooldownAfter, cooldownDuration) {
   const state = getProviderState(providerId)
   const newCount = state.failure_count + 1
 
+  const db = getDb()
+
   if (newCount >= cooldownAfter) {
     const cooldownUntil = new Date(Date.now() + cooldownDuration * 1000).toISOString()
-    dbRun(
-      `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, cooldown_until, updated_at)
-       VALUES (?, 'cooldown', ?, datetime('now'), ?, datetime('now'))
-       ON CONFLICT(provider_id) DO UPDATE SET
-         state = 'cooldown',
-         failure_count = ?,
-         last_failure_at = datetime('now'),
-         cooldown_until = ?,
-         updated_at = datetime('now')`,
-      [providerId, newCount, cooldownUntil, newCount, cooldownUntil]
-    )
-
-    dbRun(
-      'UPDATE providers SET status = \'cooldown\', cooldown_until = ? WHERE id = ?',
-      [cooldownUntil, providerId]
-    )
+    const tx = db.transaction(() => {
+      dbRun(
+        `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, cooldown_until, updated_at)
+         VALUES (?, 'cooldown', ?, datetime('now'), ?, datetime('now'))
+         ON CONFLICT(provider_id) DO UPDATE SET
+           state = 'cooldown',
+           failure_count = ?,
+           last_failure_at = datetime('now'),
+           cooldown_until = ?,
+           updated_at = datetime('now')`,
+        [providerId, newCount, cooldownUntil, newCount, cooldownUntil]
+      )
+      dbRun(
+        'UPDATE providers SET status = \'cooldown\', cooldown_until = ? WHERE id = ?',
+        [cooldownUntil, providerId]
+      )
+    })
+    tx()
   } else {
     dbRun(
       `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, updated_at)
