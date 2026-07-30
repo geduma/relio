@@ -1,6 +1,7 @@
 {
   "auth": {
-    "provider": "none"
+    "provider": "none",
+    "trustedProxy": false
   },
   "geduma": {
     "apiUrl": "geduma-api-url",
