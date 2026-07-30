@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react'
 
+function parseDate(dateStr) {
+  if (!dateStr) return new Date()
+  if (dateStr.endsWith('Z') || dateStr.includes('+') || dateStr.includes('T')) {
+    return new Date(dateStr)
+  }
+  return new Date(dateStr.replace(' ', 'T') + 'Z')
+}
+
 function formatLogLine(log) {
-  const time = new Date(log.request_at).toLocaleString()
+  const time = parseDate(log.request_at).toLocaleString()
   const tokens = (log.input_tokens || 0) + (log.output_tokens || 0)
   const provider = log.provider_id ? log.provider_id.slice(0, 8) : '-'
   const cache = log.cache_hit ? 'HIT' : 'MISS'
@@ -108,7 +116,7 @@ export default function Logs() {
           <tbody>
             {logs.map(log => (
               <tr key={log.id}>
-                <td>{new Date(log.request_at).toLocaleString()}</td>
+                <td>{parseDate(log.request_at).toLocaleString()}</td>
                 <td><code>{log.endpoint}</code></td>
                 <td>{log.provider_id?.slice(0, 8) || '-'}</td>
                 <td><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>

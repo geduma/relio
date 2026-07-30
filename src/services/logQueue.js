@@ -26,18 +26,20 @@ function flush() {
     const tx = db.transaction(() => {
       for (const d of logs) {
         const totalTokens = (d.inputTokens || 0) + (d.outputTokens || 0)
+        const now = new Date().toISOString()
         db.prepare(`INSERT INTO requests_log
           (id, provider_id, endpoint, request_body, origin_ip, origin_header,
            status_code, response_body, error_message,
            input_tokens, output_tokens, total_tokens, estimated_cost,
-           response_time_ms, authenticated_via, cache_hit, was_retry, retry_count)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           response_time_ms, authenticated_via, cache_hit, was_retry, retry_count, request_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           uuidv4(), d.providerId, d.endpoint,
           JSON.stringify(d.requestBody), d.originIp, d.originHeader,
           d.statusCode, d.responseBody ? JSON.stringify(d.responseBody) : null, d.errorMessage,
           d.inputTokens || 0, d.outputTokens || 0, totalTokens, d.estimatedCost || 0,
-          d.responseTimeMs, d.authenticatedVia, d.cacheHit ? 1 : 0, d.wasRetry ? 1 : 0, d.retryCount || 0
+          d.responseTimeMs, d.authenticatedVia, d.cacheHit ? 1 : 0, d.wasRetry ? 1 : 0, d.retryCount || 0,
+          now
         )
       }
 
