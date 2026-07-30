@@ -3,6 +3,12 @@ export default class ProviderAdapter {
     throw new Error('ProviderAdapter must define static get type()')
   }
 
+  static extractErrorMsg(data) {
+    if (!data) return null
+    if (Array.isArray(data)) return data[0]?.error?.message || null
+    return data.error?.message || null
+  }
+
   async chat(provider, requestBody, signal) {
     throw new Error(`${this.constructor.type} must implement chat()`)
   }

@@ -282,7 +282,8 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
     if (!response.ok) {
       const detail = JSON.stringify(data).slice(0, 500)
-      const err = new Error(data.error?.message || `Anthropic returned ${response.status} — body: ${detail}`)
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Anthropic returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -306,7 +307,8 @@ export default class AnthropicAdapter extends ProviderAdapter {
       let data
       try { data = await response.json() } catch { data = null }
       const detail = data ? JSON.stringify(data).slice(0, 500) : 'no body'
-      const err = new Error(data?.error?.message || `Anthropic stream request failed (status ${response.status}) — body: ${detail}`)
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Anthropic stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -405,6 +407,13 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
       if (res.ok) {
         return { valid: true }
+      }
+
+      if (res.status === 404) {
+        let body
+        try { body = await res.json() } catch { body = null }
+        if (ProviderAdapter.extractErrorMsg(body)) return { valid: true }
+        return { valid: false, error: `Chat endpoint not found at ${base}. Check the API URL.` }
       }
 
       return { valid: false, error: `Anthropic returned status ${res.status}` }
