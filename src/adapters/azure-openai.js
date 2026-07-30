@@ -62,7 +62,9 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     }
 
     if (!response.ok) {
-      const err = new Error(data.error?.message || `Azure returned ${response.status}`)
+      const detail = JSON.stringify(data).slice(0, 500)
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Azure returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -87,7 +89,9 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     if (!response.ok) {
       let data
       try { data = await response.json() } catch { data = null }
-      const err = new Error(data?.error?.message || `Azure stream request failed (status ${response.status})`)
+      const detail = data ? JSON.stringify(data).slice(0, 500) : 'no body'
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Azure stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -143,6 +147,10 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       }
 
       if (res.status === 404) {
+        let body
+        try { body = await res.json() } catch { body = null }
+        if (ProviderAdapter.extractErrorMsg(body)) return { valid: true }
+
         const chatUrl = this.buildUrl(apiUrl)
         const chatRes = await tryFetch(chatUrl, {
           method: 'POST',
@@ -155,8 +163,8 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
         }
 
         if (chatRes.status === 400) {
-          const body = await chatRes.json().catch(() => ({}))
-          if (body.error?.code === 'DeploymentNotFound') {
+          const chatBody = await chatRes.json().catch(() => ({}))
+          if (chatBody.error?.code === 'DeploymentNotFound') {
             return { valid: false, error: 'Deployment not found. Check the model/deployment name in the URL.' }
           }
           return { valid: true }
@@ -164,6 +172,13 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
 
         if (chatRes.ok) {
           return { valid: true }
+        }
+
+        if (chatRes.status === 404) {
+          let chatBody
+          try { chatBody = await chatRes.json() } catch { chatBody = null }
+          if (ProviderAdapter.extractErrorMsg(chatBody)) return { valid: true }
+          return { valid: false, error: `Chat endpoint not found at ${base}. Check the API URL.` }
         }
 
         return { valid: false, error: `Azure returned status ${chatRes.status}` }

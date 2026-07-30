@@ -186,7 +186,7 @@ beforeAll(async () => {
 `testProviderConnection()` in `providers.routes.js` validates both URL reachability and API key correctness:
 
 1. **Primary:** `GET /v1/models` with `Authorization: Bearer <apiKey>`
-   - `200` → also verifies with `POST /v1/chat/completions` (catches providers that don't auth on `/models`)
+   - `200` → also verifies with `POST /v1/chat/completions` (catches providers that don't auth on `/models`, and 404 from chat → "endpoint not found")
    - `401`/`403` → API key invalid
    - `404` → falls back to `POST /v1/chat/completions`
 2. **Fallback:** `POST /v1/chat/completions` with fake model
@@ -337,6 +337,18 @@ export default class MyProvider extends AuthProvider {
 ```
 
 2. Set `auth.provider` in `config.json` to the provider type name
+
+## Provider-agnostic rule
+
+Relio must **always be provider-agnostic**. Every adapter or utility must apply to ALL provider types uniformly:
+
+- ❌ No code that detects a specific provider name, URL pattern, or model list
+- ❌ No special-casing for `google`, `openai`, `anthropic`, `azure`, or any particular vendor
+- ✅ Always use patterns in `src/adapters/base.js` for shared behavior (e.g. `ProviderAdapter.extractErrorMsg()`)
+- ✅ Error handling, response parsing, timeouts, and retries must follow the same logic for every `provider_type`
+- ✅ When a provider returns non-standard formats (e.g. array `[{error}]` instead of object `{error}`), handle it generically in `base.js` so all adapters benefit
+
+If a fix would require detecting a specific provider, rethink the approach. The adapter architecture is designed so that `provider_type` is the only dimension of variation.
 
 Interface reference: `src/auth/base.js` has full JSDoc documentation.
 

@@ -65,8 +65,9 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
 
     if (!response.ok) {
       const detail = JSON.stringify(data).slice(0, 500)
-      const msg = data.error?.message
-        ? `Provider error: ${data.error.message} (status ${response.status})`
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const msg = errMsg
+        ? `Provider error: ${errMsg} (status ${response.status})`
         : `Provider returned ${response.status} — body: ${detail}`
       const err = new Error(msg)
       err.status = response.status
@@ -93,7 +94,9 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     if (!response.ok) {
       let data
       try { data = await response.json() } catch { data = null }
-      const err = new Error(data?.error?.message || `Stream request failed (status ${response.status})`)
+      const detail = data ? JSON.stringify(data).slice(0, 500) : 'no body'
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -126,7 +129,9 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     }
 
     if (!response.ok) {
-      const err = new Error(data.error?.message || `Provider returned ${response.status}`)
+      const detail = JSON.stringify(data).slice(0, 500)
+      const errMsg = ProviderAdapter.extractErrorMsg(data)
+      const err = new Error(errMsg || `Provider returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -181,13 +186,16 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
         body: JSON.stringify({ model: 'relio-test-connection', messages: [{ role: 'user', content: 'hi' }] }),
       })
       if (res.status === 401 || res.status === 403) return 'invalid_key'
-      if (res.status === 404) return 'not_found'
       let body
       try { body = await res.json() } catch { body = null }
-      if (body?.error?.message) {
-        if (/invalid|unauthorized|auth|api.key/.test(body.error.message.toLowerCase())) {
-          return 'invalid_key'
-        }
+      if (res.status === 404) {
+        const errMsg = ProviderAdapter.extractErrorMsg(body)
+        if (errMsg) return 'valid'
+        return 'not_found'
+      }
+      const errMsg = ProviderAdapter.extractErrorMsg(body)
+      if (errMsg && /invalid|unauthorized|auth|api.key/.test(errMsg.toLowerCase())) {
+        return 'invalid_key'
       }
       return 'valid'
     }
