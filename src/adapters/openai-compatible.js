@@ -64,7 +64,10 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     }
 
     if (!response.ok) {
-      const err = new Error(data.error?.message || `Provider returned ${response.status}`)
+      const msg = data.error?.message
+        ? `Provider error: ${data.error.message} (status ${response.status})`
+        : `Provider returned ${response.status}`
+      const err = new Error(msg)
       err.status = response.status
       err.data = data
       throw err
@@ -201,6 +204,9 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
         const chatResult = await tryChatCompletions()
         if (chatResult === 'invalid_key') {
           return { valid: false, error: 'API key is invalid' }
+        }
+        if (chatResult === 'not_found') {
+          return { valid: false, error: `Chat endpoint not found at ${base}. Check the API URL or provider type.` }
         }
         return { valid: true, status: modelsRes.status }
       }
