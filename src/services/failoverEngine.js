@@ -53,14 +53,22 @@ export function isDailyLimitExceeded(provider) {
   return used >= provider.tokens_per_day
 }
 
-export async function callProvider(provider, requestBody, signal) {
+export async function callProvider(provider, requestBody, signal, capability) {
   const adapter = getAdapter(provider.provider_type)
+  if (capability === 'embeddings') {
+    return adapter.embeddings(provider, requestBody, signal)
+  }
   return adapter.chat(provider, requestBody, signal)
 }
 
 export async function streamProvider(provider, requestBody, signal) {
   const adapter = getAdapter(provider.provider_type)
   return adapter.stream(provider, requestBody, signal)
+}
+
+export async function listModels(provider) {
+  const adapter = getAdapter(provider.provider_type)
+  return adapter.models(provider.api_url, provider.api_key)
 }
 
 export function getCapabilityFromBody(body) {

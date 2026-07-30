@@ -1,6 +1,15 @@
 # Relio: LLM Relay — Full Technical Specification
 
 > **⚠️ Legacy document — covers the initial v1.0 release. For current feature documentation see [PRD.md](./PRD.md) (requirements) and [README.md](../README.md) (overview).**
+>
+> **v1.1 updates (see [Validation Guide](./validation-guide.md) for full compliance checklist):**
+> - Embeddings now routed through dedicated adapter method (not chat endpoint)
+> - `GET /v1/models` endpoint added
+> - Errors normalized to OpenAI `{error: {message, type, code}}` format
+> - `_provider` field made configurable via `config.relay.exposeProvider`
+> - Gemini: `role: 'tool'` → `functionResponse`, streaming tool calls fixed
+> - Anthropic: `tool_choice` mapped correctly
+> - Gemini: `response_format` → `generationConfig.responseMimeType`
 
 **Name:** Relio (LLM Relay)  
 **Version:** 1.0  

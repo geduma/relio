@@ -25,5 +25,8 @@
     "secure": false,
     "sameSite": "strict",
     "httpOnly": true
+  },
+  "relay": {
+    "exposeProvider": false
   }
 }

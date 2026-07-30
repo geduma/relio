@@ -1,14 +1,33 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, getProvider } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, getProvider, listModels } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { recordSuccess } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { pipeline } from 'stream/promises'
+import { normalizeError } from '../utils/logger.js'
 
 const router = Router()
 
 router.use(requireApiKey)
+
+router.get('/models', async (_req, res) => {
+  try {
+    const providers = selectProviders('chat')
+    const allModels = []
+    for (const p of providers) {
+      try {
+        const models = await listModels(p)
+        allModels.push(...models)
+      } catch {
+        // skip provider if models endpoint fails
+      }
+    }
+    res.json({ object: 'list', data: allModels })
+  } catch (err) {
+    res.status(503).json(normalizeError(Object.assign(err, { status: 503 })))
+  }
+})
 
 router.post('/chat/completions', async (req, res) => {
   if (req.body.stream) {
@@ -26,7 +45,7 @@ router.post('/chat/completions', async (req, res) => {
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
-    res.status(err.status || 503).json({ error: err.message })
+    res.status(err.status || 503).json(normalizeError(err))
   }
 })
 
@@ -42,7 +61,7 @@ router.post('/embeddings', async (req, res) => {
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
-    res.status(err.status || 503).json({ error: err.message })
+    res.status(err.status || 503).json(normalizeError(err))
   }
 })
 
@@ -64,7 +83,7 @@ async function handleStreamingRequest(req, res) {
     }
 
     if (!provider) {
-      res.status(404).json({ error: 'No available provider for streaming' })
+      res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
       return
     }
 
@@ -92,7 +111,7 @@ async function handleStreamingRequest(req, res) {
     })
   } catch (err) {
     if (res.headersSent) return
-    res.status(err.status || 503).json({ error: err.message })
+    res.status(err.status || 503).json(normalizeError(err))
   }
 }
 

@@ -47,6 +47,20 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         continue
       }
 
+      if (msg.role === 'tool') {
+        const lastUserIdx = [...contents].reverse().findIndex(c => c.role === 'user')
+        if (lastUserIdx !== -1) {
+          const idx = contents.length - 1 - lastUserIdx
+          contents[idx].parts.push({
+            functionResponse: {
+              name: msg.tool_call_id || '',
+              response: { result: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) },
+            },
+          })
+        }
+        continue
+      }
+
       const parts = []
 
       if (typeof msg.content === 'string') {
@@ -69,6 +83,17 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         }
       }
 
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          parts.push({
+            functionCall: {
+              name: tc.function?.name || '',
+              args: JSON.parse(tc.function?.arguments || '{}'),
+            },
+          })
+        }
+      }
+
       const role = msg.role === 'assistant' ? 'model' : 'user'
       contents.push({ role, parts })
     }
@@ -79,15 +104,18 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       result.systemInstruction = systemInstruction
     }
 
-    if (body.temperature != null) result.generationConfig = { temperature: body.temperature }
-    if (body.max_tokens != null) {
-      result.generationConfig = { ...result.generationConfig, maxOutputTokens: body.max_tokens }
-    }
-    if (body.top_p != null) {
-      result.generationConfig = { ...result.generationConfig, topP: body.top_p }
-    }
-    if (body.stop) {
-      result.generationConfig = { ...result.generationConfig, stopSequences: Array.isArray(body.stop) ? body.stop : [body.stop] }
+    if (body.temperature != null || body.max_tokens != null || body.top_p != null || body.stop || body.response_format) {
+      result.generationConfig = {}
+
+      if (body.temperature != null) result.generationConfig.temperature = body.temperature
+      if (body.max_tokens != null) result.generationConfig.maxOutputTokens = body.max_tokens
+      if (body.top_p != null) result.generationConfig.topP = body.top_p
+      if (body.stop) {
+        result.generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop]
+      }
+      if (body.response_format?.type === 'json_object') {
+        result.generationConfig.responseMimeType = 'application/json'
+      }
     }
 
     if (body.tools && body.tools.length > 0) {
@@ -98,6 +126,13 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
           parameters: t.function?.parameters || t.input_schema || {},
         }],
       }))
+
+      if (body.tool_choice) {
+        result.toolConfig = { functionCallingConfig: { mode: 'ANY' } }
+        if (typeof body.tool_choice === 'object' && body.tool_choice.function?.name) {
+          result.toolConfig.functionCallingConfig.allowedFunctionNames = [body.tool_choice.function.name]
+        }
+      }
     }
 
     return result
@@ -270,6 +305,11 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
               }
 
               const canonical = this.transformResponse(geminiData)
+              const msg = canonical.choices[0]?.message || {}
+              const delta = {}
+              if (msg.content) delta.content = msg.content
+              if (msg.tool_calls) delta.tool_calls = msg.tool_calls
+
               const streamChunk = {
                 id: canonical.id,
                 object: 'chat.completion.chunk',
@@ -277,10 +317,8 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
                 model: canonical.model,
                 choices: [{
                   index: 0,
-                  delta: {
-                    content: canonical.choices[0]?.message?.content || '',
-                  },
-                  finish_reason: null,
+                  delta,
+                  finish_reason: canonical.choices[0]?.finish_reason || null,
                 }],
               }
 
@@ -296,6 +334,24 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         }
       },
     })
+  }
+
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.models || []
+    } catch {
+      return []
+    }
   }
 
   async testConnection(apiUrl, apiKey) {

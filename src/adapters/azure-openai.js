@@ -93,6 +93,24 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     return Readable.fromWeb(response.body)
   }
 
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.data || []
+    } catch {
+      return []
+    }
+  }
+
   async testConnection(apiUrl, apiKey) {
     const base = apiUrl.replace(/\/+$/, '')
     const separator = base.includes('?') ? '&' : '?'

@@ -16,7 +16,7 @@
 
 ## Features
 
-- **OpenAI-compatible proxy** — `/v1/chat/completions`, `/v1/embeddings`
+- **OpenAI-compatible proxy** — `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`
 - **Automatic failover** — tries providers in order (Main → Fallback 1 → N)
 - **Circuit breaker** — auto-cooldown after N consecutive failures
 - **Persistent cache** — identical responses never reach the provider
@@ -30,6 +30,9 @@
 - **Dark mode** — toggleable theme (dark by default) with localStorage persistence
 - **Auto-maintenance** — daily backups, data retention cleanup
 - **Provider Type Abstraction** — pluggable adapters for OpenAI-compatible, Anthropic, Gemini, and Azure OpenAI with canonical response normalization
+- **Normalized errors** — all errors follow `{error: {message, type, code}}` OpenAI format
+- **Structured output** — Gemini JSON mode via `response_format`
+- **Tool choice** — Anthropic and Gemini respect `tool_choice` parameter
 
 ## Requirements
 
@@ -88,6 +91,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `server.host` | Server host |
 | `server.baseUrl` | Public URL for OAuth redirects |
 | `server.nodeEnv` | `development` or `production` |
+| `relay.exposeProvider` | `true` (default) — includes `_provider` in proxy responses. Set to `false` for strict abstraction |
 
 ## Development
 
@@ -205,6 +209,7 @@ curl http://localhost:3000/v1/chat/completions \
 
 | Method | Route | Auth | Description |
 |---|---|---|---|
+| GET | `/v1/models` | API Key | List available models |
 | POST | `/v1/chat/completions` | API Key | Chat/vision (multimodal) |
 | POST | `/v1/embeddings` | API Key | Embeddings |
 

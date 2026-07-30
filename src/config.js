@@ -21,6 +21,9 @@ function loadConfig() {
   if (process.env.HOST) cfg.server.host = process.env.HOST
   if (process.env.NODE_ENV) cfg.server.nodeEnv = process.env.NODE_ENV
 
+  cfg.relay ??= {}
+  cfg.relay.exposeProvider ??= true
+
   return cfg
 }
 

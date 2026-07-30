@@ -63,6 +63,19 @@ export default class AnthropicAdapter extends ProviderAdapter {
         description: t.function?.description || t.description || '',
         input_schema: t.function?.parameters || t.input_schema || {},
       }))
+
+      if (body.tool_choice) {
+        if (body.tool_choice === 'auto') {
+          result.tool_choice = { type: 'auto' }
+        } else if (body.tool_choice === 'required' || body.tool_choice === 'any') {
+          result.tool_choice = { type: 'any' }
+        } else if (typeof body.tool_choice === 'object') {
+          const fn = body.tool_choice.function
+          if (fn?.name) {
+            result.tool_choice = { type: 'tool', name: fn.name }
+          }
+        }
+      }
     }
 
     return result
@@ -295,6 +308,24 @@ export default class AnthropicAdapter extends ProviderAdapter {
         }
       },
     })
+  }
+
+  async models(apiUrl, apiKey) {
+    const url = this.buildUrlForModels(apiUrl)
+    const headers = this.buildHeaders(apiKey)
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!response.ok) return []
+      const data = await response.json()
+      return data.data || data.models || []
+    } catch {
+      return []
+    }
   }
 
   async testConnection(apiUrl, apiKey) {
