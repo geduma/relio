@@ -9,6 +9,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   const capability = getCapabilityFromBody(requestBody)
 
   let lastError = null
+  let lastProvider = null
   let retryCount = 0
 
   const queryHash = generateHash(requestBody)
@@ -87,6 +88,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       return { statusCode: 200, body: { ...data, _provider: { id: provider.id, name: provider.name, model: provider.model } } }
     } catch (err) {
       lastError = err
+      lastProvider = provider
       retryCount++
 
       recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
@@ -114,5 +116,8 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   const finalErr = new Error(lastError?.message || 'All providers failed')
   finalErr.status = lastError?.status || 503
   finalErr.data = lastError?.data || null
+  if (lastProvider) {
+    finalErr._provider = { id: lastProvider.id, name: lastProvider.name, model: lastProvider.model }
+  }
   throw finalErr
 }

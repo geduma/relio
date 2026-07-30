@@ -35,7 +35,7 @@ router.post('/send', async (req, res) => {
       })
       return res.status(result.statusCode).json(addTime(result.body))
     } catch (err) {
-      return res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null }))
+      return res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null, _provider: err._provider || null }))
     }
   }
 
@@ -75,7 +75,7 @@ router.post('/send', async (req, res) => {
 
     enqueueMetric(provider.id, { error: true, responseTimeMs })
 
-    res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null }))
+    res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null, _provider: { id: provider.id, name: provider.name, model: provider.model } }))
   }
 })
 

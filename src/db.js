@@ -192,6 +192,11 @@ function runMigrations(d) {
     d.exec("ALTER TABLE providers ADD COLUMN provider_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(provider_type IN ('openai-compatible', 'anthropic', 'gemini-native', 'azure-openai'))")
     columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
   }
+
+  const cacheColumns = d.prepare("PRAGMA table_info('cache')").all().map(c => c.name)
+  if (!cacheColumns.includes('provider_id')) {
+    d.exec("ALTER TABLE cache ADD COLUMN provider_id TEXT REFERENCES providers(id)")
+  }
 }
 
 function createIndexes(d) {
