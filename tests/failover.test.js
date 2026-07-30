@@ -19,17 +19,17 @@ beforeAll(async () => {
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p1', 'Main', 'https://api.openai.com/v1', encrypt('sk-test'), 'gpt-4', 'chat', 'openai-compatible', 0, 'Main', 60, 10000]
+    ['p1', 'Main', 'https://api.example.com/v1', encrypt('sk-test'), 'gpt-4', 'chat', 'openai-compatible', 0, 'Main', 60, 10000]
   )
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, rate_limit_req_per_min, tokens_per_day)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p2', 'Fallback', 'https://api.anthropic.com/v1', encrypt('sk-test2'), 'claude-3', 'chat', 'openai-compatible', 1, 'Fallback 1', 60, 10000]
+    ['p2', 'Fallback', 'https://api.example.com/v1', encrypt('sk-test2'), 'claude-3', 'chat', 'openai-compatible', 1, 'Fallback 1', 60, 10000]
   )
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status, cooldown_until)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['p3', 'Cooldown', 'https://api.groq.com/v1', encrypt('sk-test3'), 'mixtral', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
+    ['p3', 'Cooldown', 'https://api.example.com/v1', encrypt('sk-test3'), 'mixtral', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
   )
 })
 

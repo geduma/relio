@@ -3,10 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useToast } from './Toast.jsx'
 
 const PROVIDER_TYPES = [
-  { value: 'openai-compatible', label: 'OpenAI Compatible', hint: 'https://api.openai.com/v1' },
-  { value: 'anthropic', label: 'Anthropic', hint: 'https://api.anthropic.com' },
-  { value: 'gemini-native', label: 'Gemini Native', hint: 'https://generativelanguage.googleapis.com' },
-  { value: 'azure-openai', label: 'Azure OpenAI', hint: 'https://YOUR_RESOURCE.openai.azure.com/openai/deployments/YOUR_DEPLOYMENT' },
+  { value: 'openai-compatible', label: 'OpenAI Compatible' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'gemini-native', label: 'Gemini Native' },
+  { value: 'azure-openai', label: 'Azure OpenAI' },
 ]
 
 const emptyForm = {
@@ -37,13 +37,6 @@ export default function ProviderForm() {
         })
     }
   }, [id])
-
-  useEffect(() => {
-    const selected = PROVIDER_TYPES.find(t => t.value === form.provider_type)
-    if (selected && !isEdit && !form.api_url) {
-      setForm(prev => ({ ...prev, api_url: selected.hint }))
-    }
-  }, [form.provider_type, isEdit])
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -122,7 +115,7 @@ export default function ProviderForm() {
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field-full">Name <input name="name" value={form.name} onChange={handleChange} required /></label>
         <div className="field-full inline-row">
-          <label>API URL <input name="api_url" value={form.api_url} onChange={handleChange} required placeholder="https://api.openai.com/v1" /></label>
+          <label>API URL <input name="api_url" value={form.api_url} onChange={handleChange} required placeholder="https://api.provider.com/v1" /></label>
           <label>Provider Type
             <select name="provider_type" value={form.provider_type} onChange={handleChange}>
               {PROVIDER_TYPES.map(t => (

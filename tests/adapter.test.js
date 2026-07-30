@@ -68,15 +68,15 @@ describe('OpenAICompatibleAdapter', () => {
   const adapter = new OpenAICompatibleAdapter()
 
   it('builds correct URL', () => {
-    expect(adapter.buildUrl('https://api.openai.com/v1')).toBe('https://api.openai.com/v1/chat/completions')
-    expect(adapter.buildUrl('https://api.openai.com')).toBe('https://api.openai.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.example.com/v1')).toBe('https://api.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.example.com')).toBe('https://api.example.com/v1/chat/completions')
     expect(adapter.buildUrl('https://example.com/v1/')).toBe('https://example.com/v1/chat/completions')
     expect(adapter.buildUrl('https://example.com/v1/chat/completions')).toBe('https://example.com/v1/chat/completions')
   })
 
   it('builds correct embeddings URL', () => {
-    expect(adapter.buildUrlForEmbeddings('https://api.openai.com/v1')).toBe('https://api.openai.com/v1/embeddings')
-    expect(adapter.buildUrlForEmbeddings('https://api.openai.com')).toBe('https://api.openai.com/v1/embeddings')
+    expect(adapter.buildUrlForEmbeddings('https://api.example.com/v1')).toBe('https://api.example.com/v1/embeddings')
+    expect(adapter.buildUrlForEmbeddings('https://api.example.com')).toBe('https://api.example.com/v1/embeddings')
   })
 
   it('builds correct headers', () => {
@@ -102,9 +102,9 @@ describe('AnthropicAdapter', () => {
   const adapter = new AnthropicAdapter()
 
   it('builds correct URL', () => {
-    expect(adapter.buildUrl('https://api.anthropic.com')).toBe('https://api.anthropic.com/v1/messages')
-    expect(adapter.buildUrl('https://api.anthropic.com/v1')).toBe('https://api.anthropic.com/v1/messages')
-    expect(adapter.buildUrl('https://api.anthropic.com/v1/messages')).toBe('https://api.anthropic.com/v1/messages')
+    expect(adapter.buildUrl('https://api.example.com')).toBe('https://api.example.com/v1/messages')
+    expect(adapter.buildUrl('https://api.example.com/v1')).toBe('https://api.example.com/v1/messages')
+    expect(adapter.buildUrl('https://api.example.com/v1/messages')).toBe('https://api.example.com/v1/messages')
   })
 
   it('builds correct headers', () => {
@@ -206,8 +206,8 @@ describe('GeminiNativeAdapter', () => {
   const adapter = new GeminiNativeAdapter()
 
   it('builds correct URL', () => {
-    const url = adapter.buildUrl('https://generativelanguage.googleapis.com', 'gemini-pro')
-    expect(url).toBe('https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent')
+    const url = adapter.buildUrl('https://api.example.com', 'gemini-pro')
+    expect(url).toBe('https://api.example.com/v1/models/gemini-pro:generateContent')
   })
 
   it('builds correct headers', () => {
@@ -324,7 +324,7 @@ describe('AzureOpenAIAdapter', () => {
   const adapter = new AzureOpenAIAdapter()
 
   it('builds correct URL with api-version', () => {
-    const url = adapter.buildUrl('https://my-resource.openai.azure.com/openai/deployments/gpt-4')
+    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4')
     expect(url).toContain('api-version=2024-02-15-preview')
     expect(url).toContain('/chat/completions')
   })

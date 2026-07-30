@@ -672,7 +672,7 @@ Creates a new provider.
 // Requires: relio_session cookie
 // Body: {
 //   "name": "OpenAI GPT-4",
-//   "api_url": "https://api.openai.com/v1",
+//   "api_url": "https://api.provider.com/v1",
 //   "api_key": "sk-...",
 //   "model": "gpt-4",
 //   "type": "chat",
@@ -1159,7 +1159,7 @@ Dashboard:
 1. Click "Add Provider"
 2. Fill in:
    - Name: "OpenAI GPT-4"
-   - API URL: "https://api.openai.com/v1"
+   - API URL: "https://api.provider.com/v1"
    - API Key: "sk-..."
    - Model: "gpt-4"
    - Type: "chat"
