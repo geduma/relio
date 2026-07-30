@@ -64,9 +64,10 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     }
 
     if (!response.ok) {
+      const detail = JSON.stringify(data).slice(0, 500)
       const msg = data.error?.message
         ? `Provider error: ${data.error.message} (status ${response.status})`
-        : `Provider returned ${response.status}`
+        : `Provider returned ${response.status} — body: ${detail}`
       const err = new Error(msg)
       err.status = response.status
       err.data = data
