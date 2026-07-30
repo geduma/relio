@@ -23,6 +23,9 @@ function loadConfig() {
   cfg.relay ??= {}
   cfg.relay.exposeProvider ??= false
 
+  cfg.auth ??= {}
+  cfg.auth.trustedProxy ??= false
+
   return cfg
 }
 
