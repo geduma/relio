@@ -9,7 +9,7 @@ router.get('/providers', async (req, res) => {
     const view = await getLoginView()
     if (view === 'none') {
       const result = await autoLogin()
-      setSessionCookie(res, result.sessionId)
+      setSessionCookie(req, res, result.sessionId)
       return res.json({ loginView: view, autoLogin: true, user: result.user })
     }
 
@@ -20,10 +20,10 @@ router.get('/providers', async (req, res) => {
   }
 })
 
-function setSessionCookie(res, sessionId) {
+function setSessionCookie(req, res, sessionId) {
   res.cookie('relio_session', sessionId, {
     httpOnly: config.cookie.httpOnly,
-    secure: config.server.nodeEnv === 'production' ? true : config.cookie.secure,
+    secure: req.secure || config.cookie.secure,
     sameSite: config.cookie.sameSite || 'lax',
     maxAge: 24 * 60 * 60 * 1000,
   })
@@ -46,7 +46,7 @@ router.get('/callback', async (req, res) => {
     }
 
     const result = await login({ sessionToken })
-    setSessionCookie(res, result.sessionId)
+    setSessionCookie(req, res, result.sessionId)
     res.redirect('/admin')
   } catch (err) {
     res.redirect(`/admin/login?error=${encodeURIComponent('Authentication failed')}`)
@@ -61,7 +61,7 @@ router.post('/callback', async (req, res) => {
     }
 
     const result = await login({ sessionToken })
-    setSessionCookie(res, result.sessionId)
+    setSessionCookie(req, res, result.sessionId)
     res.json({ user: result.user })
   } catch (err) {
     res.status(401).json({ error: 'Authentication failed', message: err.message })
