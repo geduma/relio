@@ -62,7 +62,8 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     }
 
     if (!response.ok) {
-      const err = new Error(data.error?.message || `Azure returned ${response.status}`)
+      const detail = JSON.stringify(data).slice(0, 500)
+      const err = new Error(data.error?.message || `Azure returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
@@ -87,7 +88,8 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     if (!response.ok) {
       let data
       try { data = await response.json() } catch { data = null }
-      const err = new Error(data?.error?.message || `Azure stream request failed (status ${response.status})`)
+      const detail = data ? JSON.stringify(data).slice(0, 500) : 'no body'
+      const err = new Error(data?.error?.message || `Azure stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
       throw err
