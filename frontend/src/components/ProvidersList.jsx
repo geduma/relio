@@ -109,13 +109,15 @@ export default function ProvidersList() {
               <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
               <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td className="actions-cell">
-                <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                {p.order_label === 'Main' && p.status !== 'paused' ? (
-                  <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
-                ) : (
-                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
-                )}
+              <td>
+                <div className="actions-cell">
+                  <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                  {p.order_label === 'Main' && p.status !== 'paused' ? (
+                    <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
+                  ) : (
+                    <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}
@@ -127,9 +129,11 @@ export default function ProvidersList() {
               <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
               <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td className="actions-cell">
-                <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+              <td>
+                <div className="actions-cell">
+                  <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+                </div>
               </td>
             </tr>
           ))}

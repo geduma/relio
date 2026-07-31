@@ -41,7 +41,10 @@ router.post('/test-connection', async (req, res) => {
   }
 
   if (!api_url || !api_key) {
-    return res.status(400).json({ valid: false, error: 'api_url and api_key are required' })
+    const missing = []
+    if (!api_url) missing.push('api_url')
+    if (!api_key) missing.push('api_key')
+    return res.status(400).json({ valid: false, error: `Missing required fields: ${missing.join(', ')}` })
   }
 
   const result = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
@@ -59,8 +62,15 @@ router.post('/', async (req, res) => {
     cooldown_after_failures, cooldown_duration_seconds, status,
   } = req.body
 
-  if (!name || !api_url || !api_key || !model || !capability) {
-    return res.status(400).json({ error: 'name, api_url, api_key, model, and capability are required' })
+  const missing = []
+  if (!name) missing.push('name')
+  if (!api_url) missing.push('api_url')
+  if (!api_key) missing.push('api_key')
+  if (!model) missing.push('model')
+  if (!capability) missing.push('capability')
+
+  if (missing.length) {
+    return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
   }
 
   const validation = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
@@ -69,7 +79,10 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
   }
 
-  const maxPos = dbGet('SELECT MAX(order_position) AS max FROM providers WHERE capability = ?', [capability])
+  const maxPos = dbGet(
+    `SELECT MAX(order_position) AS max FROM providers WHERE capability = ? AND status != 'paused'`,
+    [capability]
+  )
   const nextPos = (maxPos?.max ?? -1) + 1
 
   const id = uuidv4()

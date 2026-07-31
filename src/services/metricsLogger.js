@@ -2,18 +2,19 @@ import { dbAll } from '../db.js'
 
 export function getMetrics(from, to) {
   const rows = dbAll(
-    `SELECT m.provider_id, p.name AS provider_name,
-            SUM(m.total_requests) AS total_requests,
-            SUM(m.total_input_tokens) AS total_input_tokens,
-            SUM(m.total_output_tokens) AS total_output_tokens,
-            SUM(m.total_cost) AS total_cost,
-            SUM(m.error_count) AS error_count,
-            SUM(m.cache_hits) AS cache_hits,
-            SUM(m.avg_response_time_ms * m.total_requests) / NULLIF(SUM(m.total_requests), 0) AS avg_response_time_ms
-     FROM metrics m
-     LEFT JOIN providers p ON p.id = m.provider_id
-     WHERE m.metric_date >= ? AND m.metric_date <= ?
-     GROUP BY m.provider_id`,
+    `SELECT p.id AS provider_id, p.name AS provider_name,
+            COALESCE(SUM(m.total_requests), 0) AS total_requests,
+            COALESCE(SUM(m.total_input_tokens), 0) AS total_input_tokens,
+            COALESCE(SUM(m.total_output_tokens), 0) AS total_output_tokens,
+            COALESCE(SUM(m.total_cost), 0) AS total_cost,
+            COALESCE(SUM(m.error_count), 0) AS error_count,
+            COALESCE(SUM(m.cache_hits), 0) AS cache_hits,
+            COALESCE(SUM(m.avg_response_time_ms * m.total_requests) / NULLIF(SUM(m.total_requests), 0), 0) AS avg_response_time_ms
+     FROM providers p
+     LEFT JOIN metrics m ON m.provider_id = p.id AND m.metric_date >= ? AND m.metric_date <= ?
+     WHERE p.status != 'paused'
+     GROUP BY p.id
+     ORDER BY p.order_position ASC`,
     [from, to]
   )
 
