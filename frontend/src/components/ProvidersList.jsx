@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast, errorMessage } from './Toast.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 const TYPE_LABELS = {
   'openai-compatible': 'OpenAI Compatible',
@@ -38,6 +39,8 @@ export default function ProvidersList() {
   }
 
   const activeProviders = providers.filter(p => p.status !== 'paused')
+  const pausedProviders = providers.filter(p => p.status === 'paused')
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
 
   async function handleReorder(dragId, targetId) {
     const ids = activeProviders.map(p => p.id)
@@ -97,39 +100,7 @@ export default function ProvidersList() {
           </tr>
         </thead>
         <tbody>
-          {activeProviders.map((p, i) => (
-            <tr key={p.id}>
-              <td>
-                <span className="order-label">{p.order_label}</span>
-                <div className="order-arrows">
-                  <button
-                    disabled={i === 0}
-                    onClick={() => handleReorder(p.id, activeProviders[i - 1]?.id)}
-                  >&#9650;</button>
-                  <button
-                    disabled={i === activeProviders.length - 1}
-                    onClick={() => handleReorder(p.id, activeProviders[i + 1]?.id)}
-                  >&#9660;</button>
-                </div>
-              </td>
-              <td>{p.name}</td>
-              <td>{p.model}</td>
-              <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
-              <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
-              <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td>
-                <div className="actions-cell">
-                  <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                  {p.order_label === 'Main' && p.status !== 'paused' ? (
-                    <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
-                  ) : (
-                    <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-          {providers.filter(p => p.status === 'paused').map(p => (
+          {pageRows.map(p => p.status === 'paused' ? (
             <tr key={p.id} className="row-paused">
               <td><span className="order-label">--</span></td>
               <td>{p.name}</td>
@@ -144,9 +115,53 @@ export default function ProvidersList() {
                 </div>
               </td>
             </tr>
+          ) : (
+            (() => {
+              const idx = activeProviders.findIndex(ap => ap.id === p.id)
+              return (
+                <tr key={p.id}>
+                  <td>
+                    <span className="order-label">{p.order_label}</span>
+                    <div className="order-arrows">
+                      <button
+                        disabled={idx === 0}
+                        onClick={() => handleReorder(p.id, activeProviders[idx - 1]?.id)}
+                      >&#9650;</button>
+                      <button
+                        disabled={idx === activeProviders.length - 1}
+                        onClick={() => handleReorder(p.id, activeProviders[idx + 1]?.id)}
+                      >&#9660;</button>
+                    </div>
+                  </td>
+                  <td>{p.name}</td>
+                  <td>{p.model}</td>
+                  <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
+                  <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
+                  <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
+                  <td>
+                    <div className="actions-cell">
+                      <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
+                      {p.order_label === 'Main' && p.status !== 'paused' ? (
+                        <span className="btn btn-sm btn-disabled" title="Move to a fallback position first">Delete</span>
+                      ) : (
+                        <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })()
           ))}
         </tbody>
       </table></div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={providers.length}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
 
       {deleteTarget && (
         <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>

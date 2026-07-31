@@ -218,6 +218,7 @@ beforeAll(async () => {
 | `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys |
 | `Logs.jsx` | `/admin/dashboard/logs` | Requests table |
 | `Chat.jsx` | `/admin/chat` | Chat interface to test providers |
+| `Pagination.jsx` | — | Shared paginator + `usePagination` hook (tables) |
 
 ## Docker
 

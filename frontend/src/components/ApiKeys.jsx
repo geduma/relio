@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
@@ -7,6 +8,7 @@ export default function ApiKeys() {
   const [newKey, setNewKey] = useState(null)
   const [revokeTarget, setRevokeTarget] = useState(null) // { id, name }
   const toast = useToast()
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(keys)
 
   useEffect(() => {
     fetch('/admin/api/keys')
@@ -82,7 +84,7 @@ export default function ApiKeys() {
           </tr>
         </thead>
         <tbody>
-          {keys.map(k => (
+          {pageRows.map(k => (
             <tr key={k.id}>
               <td>{k.name}</td>
               <td><code>{k.key_preview}</code></td>
@@ -97,6 +99,14 @@ export default function ApiKeys() {
           ))}
         </tbody>
       </table></div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={keys.length}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
 
       {revokeTarget && (
         <div className="modal-overlay" onClick={() => setRevokeTarget(null)}>

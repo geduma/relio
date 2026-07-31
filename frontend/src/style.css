@@ -150,13 +150,18 @@ body {
 .mobile-topbar { display: none; }
 
 /* Table */
-.table-wrapper { overflow-x: auto; }
+.table-wrapper { overflow: auto; max-height: min(60vh, 480px); }
 .table { width: 100%; border-collapse: collapse; background: var(--bg-surface); border-radius: 8px; overflow: hidden; }
 .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-light); }
-.table th { background: var(--bg-elevated); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); }
+.table th { background: var(--bg-elevated); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); position: sticky; top: 0; }
 .table tr:hover { background: var(--bg-elevated); }
 .row-paused { opacity: 0.55; }
 .actions-cell { display: flex; gap: 0.5rem; }
+
+/* Pagination */
+.pagination { display: flex; align-items: center; gap: 0.75rem; justify-content: flex-end; margin-top: 0.75rem; flex-wrap: wrap; }
+.pagination-info { font-size: 0.8rem; color: var(--text-muted); }
+.pagination select { padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); font-size: 0.8rem; }
 
 /* Badges */
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 99px; font-size: 0.75rem; font-weight: 600; }

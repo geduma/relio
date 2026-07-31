@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 export default function Metrics() {
   const [metrics, setMetrics] = useState(null)
@@ -9,6 +10,8 @@ export default function Metrics() {
     return d.toISOString().slice(0, 10)
   })
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const providers = metrics?.providers || []
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
 
   useEffect(() => {
     setError(null)
@@ -74,7 +77,7 @@ export default function Metrics() {
               </tr>
             </thead>
             <tbody>
-              {metrics.providers?.map(p => (
+              {pageRows.map(p => (
                 <tr key={p.provider_id}>
                   <td>{p.provider_name}</td>
                   <td>{p.total_requests}</td>
@@ -88,6 +91,14 @@ export default function Metrics() {
               ))}
             </tbody>
           </table></div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={providers.length}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </div>
