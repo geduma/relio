@@ -74,14 +74,20 @@ export default function Login() {
     }
 
     fetch('/admin/api/auth/providers')
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load login providers (${r.status})`)
+        return r.json()
+      })
       .then(data => {
         setLoginConfig(data)
         if (data.autoLogin) {
           navigate('/admin', { replace: true })
         }
       })
-      .catch(() => setLoginConfig({ loginView: 'oauth', providers: [] }))
+      .catch(err => {
+        setLoginConfig({ loginView: 'oauth', providers: [] })
+        setError(errorMessage(err))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -92,7 +98,10 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionToken }),
       })
-      if (!res.ok) throw new Error('Login failed')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(errorMessage(data.error || 'Login failed'))
+      }
       navigate('/admin', { replace: true })
     } catch (err) {
       toast(err.message, 'error')
@@ -108,7 +117,10 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: providerId }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(errorMessage(data.error || `Login failed (${res.status})`))
+      }
       if (data.redirect) {
         window.location.href = data.redirect
       } else {

@@ -27,7 +27,7 @@ export default function Dashboard() {
         if (r.status === 401) navigate('/admin/login')
         return r.json()
       })
-      .catch(() => navigate('/admin/login'))
+      .catch(() => {})
   }, [])
 
   function toggleTheme() {

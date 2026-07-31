@@ -28,15 +28,22 @@ export default function ProviderForm() {
   const toast = useToast()
 
   useEffect(() => {
+    setForm(emptyForm)
+    setConnStatus(null)
+    setFormError(null)
     if (isEdit) {
       fetch('/admin/api/providers')
-        .then(r => r.json())
+        .then(async r => {
+          if (!r.ok) throw new Error(`Failed to load provider (${r.status})`)
+          return r.json()
+        })
         .then(list => {
           const p = list.find(x => x.id === id)
           if (p) setForm(p)
         })
+        .catch(err => toast(errorMessage(err), 'error'))
     }
-  }, [id])
+  }, [id, isEdit])
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -130,13 +137,12 @@ export default function ProviderForm() {
           <select name="capability" value={form.capability} onChange={handleChange}>
             <option value="chat">Chat</option>
             <option value="embeddings">Embeddings</option>
-            <option value="vision">Vision</option>
           </select>
         </label>
         <label>Rate Limit (req/min) <input name="rate_limit_req_per_min" type="number" value={form.rate_limit_req_per_min} onChange={handleChange} /></label>
         <label>Tokens/day <input name="tokens_per_day" type="number" value={form.tokens_per_day} onChange={handleChange} /></label>
-        <label>Cost /1K in tokens <input name="cost_per_input_token" type="number" step="0.000001" value={form.cost_per_input_token} onChange={handleChange} /></label>
-        <label>Cost /1K out tokens <input name="cost_per_output_token" type="number" step="0.000001" value={form.cost_per_output_token} onChange={handleChange} /></label>
+        <label>Cost per input token <input name="cost_per_input_token" type="number" step="0.000001" value={form.cost_per_input_token} onChange={handleChange} /></label>
+        <label>Cost per output token <input name="cost_per_output_token" type="number" step="0.000001" value={form.cost_per_output_token} onChange={handleChange} /></label>
         <label>Cooldown failures <input name="cooldown_after_failures" type="number" value={form.cooldown_after_failures} onChange={handleChange} /></label>
         <label>Cooldown duration (s) <input name="cooldown_duration_seconds" type="number" value={form.cooldown_duration_seconds} onChange={handleChange} /></label>
         <div className="field-full toggle-row">

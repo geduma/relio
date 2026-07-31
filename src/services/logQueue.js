@@ -64,7 +64,7 @@ function flush() {
             total_cost = total_cost + ?,
             error_count = error_count + ?,
             cache_hits = cache_hits + ?,
-            avg_response_time_ms = (avg_response_time_ms * (total_requests - 1) + ?) / total_requests`
+            avg_response_time_ms = (avg_response_time_ms * total_requests + ?) / (total_requests + 1)`
         ).run(
           id, providerId, today,
           inputTokens, outputTokens, cost,

@@ -18,8 +18,12 @@ export default function ProvidersList() {
   useEffect(() => {
     const query = filter ? `?capability=${filter}` : ''
     fetch(`/admin/api/providers${query}`)
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load providers (${r.status})`)
+        return r.json()
+      })
       .then(setProviders)
+      .catch(err => toast(errorMessage(err), 'error'))
   }, [filter])
 
   async function handleDelete(id) {
@@ -42,11 +46,16 @@ export default function ProvidersList() {
     ids.splice(dragIdx, 1)
     ids.splice(targetIdx, 0, dragId)
 
-    await fetch('/admin/api/providers/reorder', {
+    const res = await fetch('/admin/api/providers/reorder', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider_ids: ids }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast(errorMessage(data.error || 'Failed to reorder providers'), 'error')
+      return
+    }
 
     setProviders(prev => {
       const map = Object.fromEntries(prev.map(p => [p.id, p]))
@@ -73,7 +82,6 @@ export default function ProvidersList() {
           <option value="">All capabilities</option>
           <option value="chat">Chat</option>
           <option value="embeddings">Embeddings</option>
-          <option value="vision">Vision</option>
         </select>
       </div>
       <div className="table-wrapper"><table className="table">

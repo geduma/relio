@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun, getDb, encrypt, decrypt } from '../db.js'
-import { getProvider } from '../services/failoverEngine.js'
+import { getProvider, invalidateProviderCache } from '../services/failoverEngine.js'
 import { requireDashboardSession } from '../middleware/authMiddleware.js'
 import { getAdapter } from '../adapters/index.js'
 import { logger } from '../utils/logger.js'
@@ -103,6 +103,7 @@ router.post('/', async (req, res) => {
     ]
   )
 
+  invalidateProviderCache(id)
   res.json({ success: true, provider_id: id })
 })
 
@@ -210,6 +211,7 @@ router.patch('/:id', async (req, res) => {
     doUpdate()
   }
 
+  invalidateProviderCache(id)
   res.json({ success: true })
 })
 
@@ -247,6 +249,7 @@ router.delete('/:id', (req, res) => {
   })
   tx()
 
+  invalidateProviderCache(id)
   res.json({ success: true })
 })
 

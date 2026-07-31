@@ -1,5 +1,5 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt, isRetryableError, recordProviderRequest
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -14,6 +14,8 @@ beforeAll(async () => {
   isDailyLimitExceeded = failMod.isDailyLimitExceeded
   getCapabilityFromBody = failMod.getCapabilityFromBody
   callProvider = failMod.callProvider
+  isRetryableError = failMod.isRetryableError
+  recordProviderRequest = failMod.recordProviderRequest
 
   const { dbRun } = dbMod
   dbRun(
@@ -113,5 +115,43 @@ describe('FailoverEngine', () => {
     const ids = providers.map(p => p.id)
     expect(ids).toContain('p3')
     dbMod.dbRun('UPDATE providers SET cooldown_until = ? WHERE id = ?', [new Date(Date.now() + 3600000).toISOString(), 'p3'])
+  })
+
+  it('isRetryableError: 4xx errors are not retryable', () => {
+    expect(isRetryableError({ status: 400 })).toBe(false)
+    expect(isRetryableError({ status: 401 })).toBe(false)
+    expect(isRetryableError({ status: 404 })).toBe(false)
+  })
+
+  it('isRetryableError: 5xx, 408, 429, network and abort errors are retryable', () => {
+    expect(isRetryableError({ status: 500 })).toBe(true)
+    expect(isRetryableError({ status: 502 })).toBe(true)
+    expect(isRetryableError({ status: 408 })).toBe(true)
+    expect(isRetryableError({ status: 429 })).toBe(true)
+    expect(isRetryableError({ name: 'AbortError' })).toBe(true)
+    expect(isRetryableError({})).toBe(true)
+    expect(isRetryableError(null)).toBe(false)
+  })
+
+  it('in-memory rate limit counts recorded provider requests', () => {
+    const id = 'rl-test-bucket'
+    recordProviderRequest(id)
+    recordProviderRequest(id)
+    recordProviderRequest(id)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 3 })).toBe(true)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 4 })).toBe(false)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 0 })).toBe(false)
+  })
+
+  it('daily limit uses metrics table aggregation', async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const dbMod = await import('../src/db.js')
+    dbMod.dbRun(
+      `INSERT INTO metrics (id, provider_id, metric_date, total_requests, total_input_tokens, total_output_tokens, total_cost, avg_response_time_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['m-rl-1', 'p1', today, 1, 6000, 0, 0, 10]
+    )
+    expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 10000 })).toBe(false)
+    expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 5000 })).toBe(true)
   })
 })

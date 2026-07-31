@@ -19,12 +19,15 @@ export default function Chat() {
 
   useEffect(() => {
     fetch('/admin/api/chat/providers')
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load providers (${r.status})`)
+        return r.json()
+      })
       .then(list => {
         setProviders(list)
         if (list.length > 0) setSelectedId(list[0].id)
       })
-      .catch(() => toast('Failed to load providers', 'error'))
+      .catch(err => toast(errorMessage(err), 'error'))
   }, [])
 
   useEffect(() => {
@@ -33,7 +36,8 @@ export default function Chat() {
 
   async function sendMessage() {
     const text = input.trim()
-    if (!text || !selectedId || sending) return
+    if (!text || sending) return
+    if (!useProxy && !selectedId) return
 
     const userMsg = { role: 'user', content: text }
     setMessages(prev => [...prev, userMsg])
@@ -45,13 +49,13 @@ export default function Chat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          provider_id: selectedId,
+          provider_id: useProxy ? null : selectedId,
           messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMsg],
           use_proxy: useProxy,
         }),
       })
-      const data = await res.json()
-      const content = data.choices?.[0]?.message?.content || errorMessage(data.error || JSON.stringify(data))
+      const data = await res.json().catch(() => ({}))
+      const content = data.choices?.[0]?.message?.content || errorMessage(data.error || (res.ok ? JSON.stringify(data) : `Request failed (${res.status})`))
       const prov = data._provider
       const providerName = prov ? `${prov.name} (${prov.model})` : null
       setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])
@@ -75,6 +79,7 @@ export default function Chat() {
   }
 
   function loadingLabel() {
+    if (useProxy) return 'Auto (failover)'
     return selectedProvider ? `${selectedProvider.name} (${selectedProvider.model})` : 'Assistant'
   }
 
@@ -84,24 +89,25 @@ export default function Chat() {
         <h2>Chat</h2>
         <div className="chat-controls">
           <select
-            value={selectedId}
+            value={useProxy ? 'auto' : selectedId}
             onChange={e => setSelectedId(e.target.value)}
-            disabled={providers.length === 0}
+            disabled={providers.length === 0 || useProxy}
           >
-            {providers.length === 0 && <option value="">No providers</option>}
-            {providers.map(p => (
+            {useProxy && <option value="auto">Auto (failover)</option>}
+            {!useProxy && providers.length === 0 && <option value="">No providers</option>}
+            {!useProxy && providers.map(p => (
               <option key={p.id} value={p.id}>
                 {p.name} ({p.model})
               </option>
             ))}
           </select>
-          <label className="chat-toggle-label">
+          <div className="chat-toggle-label">
             <span>Proxy</span>
             <label className="switch">
               <input type="checkbox" checked={useProxy} onChange={e => setUseProxy(e.target.checked)} />
               <span className="switch-slider"></span>
             </label>
-          </label>
+          </div>
           <button type="button" className="btn" onClick={clearChat} disabled={messages.length === 0}>
             Clear
           </button>
@@ -146,7 +152,7 @@ export default function Chat() {
           <button
             className="btn btn-primary chat-input-btn"
             onClick={sendMessage}
-            disabled={sending || !input.trim() || !selectedId}
+            disabled={sending || !input.trim() || (!useProxy && !selectedId)}
           >
             {sending ? (
               <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg>

@@ -17,14 +17,27 @@ function loadConfig() {
   const cfg = JSON.parse(raw)
 
   cfg.server ??= {}
+  cfg.server.port = parseInt(process.env.PORT, 10) || cfg.server.port
+  cfg.server.host = process.env.HOST || cfg.server.host
+  cfg.server.nodeEnv = process.env.NODE_ENV || cfg.server.nodeEnv
+
   cfg.db ??= {}
+  cfg.db.path = process.env.DB_PATH || cfg.db.path || ''
+
   cfg.security ??= {}
 
   cfg.relay ??= {}
   cfg.relay.exposeProvider ??= false
+  cfg.relay.streamTimeoutSeconds ??= 300
+  cfg.relay.streamIdleTimeoutMs ??= 30000
 
   cfg.auth ??= {}
   cfg.auth.trustedProxy ??= false
+
+  cfg.rateLimit ??= {}
+  cfg.rateLimit.proxyPerMinute ??= 60
+  cfg.rateLimit.dashboardPerMinute ??= 120
+  cfg.rateLimit.loginPer15Minutes ??= 20
 
   return cfg
 }

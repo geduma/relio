@@ -10,8 +10,12 @@ export default function ApiKeys() {
 
   useEffect(() => {
     fetch('/admin/api/auth/api-keys')
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load keys (${r.status})`)
+        return r.json()
+      })
       .then(setKeys)
+      .catch(err => toast(errorMessage(err), 'error'))
   }, [])
 
   async function handleCreate(e) {
@@ -35,9 +39,13 @@ export default function ApiKeys() {
   }
 
   async function handleRevoke(id) {
-    await fetch(`/admin/api/auth/api-keys/${id}`, { method: 'DELETE' })
-    const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
-    setKeys(updated)
+    const res = await fetch(`/admin/api/auth/api-keys/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast(errorMessage(data.error || 'Failed to revoke key'), 'error')
+      return
+    }
+    setKeys(prev => prev.filter(k => k.id !== id))
     toast('API key revoked', 'success')
   }
 

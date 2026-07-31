@@ -1,4 +1,4 @@
-import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider } from '../services/failoverEngine.js'
+import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, isRetryableError, recordProviderRequest } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -74,6 +74,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 30000)
 
+      recordProviderRequest(provider.id)
       const data = await callProvider(provider, requestBody, controller.signal, capability)
       clearTimeout(timeout)
 
@@ -110,8 +111,6 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       lastProvider = provider
       retryCount++
 
-      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
-
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
         statusCode: err.status || 503, errorMessage: err.message,
@@ -122,6 +121,16 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       enqueueMetric(provider.id, {
         error: true, responseTimeMs: Date.now() - startTime,
       })
+
+      if (!isRetryableError(err)) {
+        const finalErr = new Error(err.message)
+        finalErr.status = err.status || 400
+        finalErr.data = err.data || null
+        finalErr._provider = { id: provider.id, name: provider.name, model: provider.model }
+        throw finalErr
+      }
+
+      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
     }
   }
 
