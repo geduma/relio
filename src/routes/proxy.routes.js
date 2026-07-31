@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, getProvider, listModels } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, listModels, parseModelSelector, stripModel, isProviderAvailable, FAILOVER_MODEL } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { recordSuccess } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -10,6 +10,17 @@ import { normalizeError } from '../utils/logger.js'
 const router = Router()
 
 router.use(requireApiKey)
+
+function selectorError(selection, model) {
+  const message = selection.error === 'missing'
+    ? `model is required. Use a provider name/ID or "${FAILOVER_MODEL}".`
+    : `Unknown provider "${model}". Use a provider name/ID or "${FAILOVER_MODEL}".`
+  return { error: { message, type: 'invalid_request_error', code: 'unknown_provider' } }
+}
+
+function selectionProviderId(selection) {
+  return selection.mode === 'provider' ? selection.provider.id : null
+}
 
 router.get('/models', async (_req, res) => {
   try {
@@ -34,14 +45,20 @@ router.post('/chat/completions', async (req, res) => {
     return handleStreamingRequest(req, res)
   }
 
+  const selection = parseModelSelector(req.body.model, 'chat')
+  if (selection.error) {
+    return res.status(400).json(selectorError(selection, req.body.model))
+  }
+
   try {
     const result = await processRequest({
       endpoint: '/v1/chat/completions',
-      requestBody: req.body,
+      requestBody: stripModel(req.body),
       originIp: req.ip,
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       apiKey: req.apiKey,
+      providerId: selectionProviderId(selection),
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
@@ -50,14 +67,20 @@ router.post('/chat/completions', async (req, res) => {
 })
 
 router.post('/embeddings', async (req, res) => {
+  const selection = parseModelSelector(req.body.model, 'embeddings')
+  if (selection.error) {
+    return res.status(400).json(selectorError(selection, req.body.model))
+  }
+
   try {
     const result = await processRequest({
       endpoint: '/v1/embeddings',
-      requestBody: req.body,
+      requestBody: stripModel(req.body),
       originIp: req.ip,
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       apiKey: req.apiKey,
+      providerId: selectionProviderId(selection),
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
@@ -71,12 +94,20 @@ async function handleStreamingRequest(req, res) {
 
   req.on('close', () => controller.abort())
 
-  try {
-    const providerId = req.query.provider_id || req.body.provider_id
+  const selection = parseModelSelector(req.body.model, 'chat')
+  if (selection.error) {
+    res.status(400).json(selectorError(selection, req.body.model))
+    return
+  }
 
+  try {
     let provider
-    if (providerId) {
-      provider = getProvider(providerId)
+    if (selection.mode === 'provider') {
+      if (!isProviderAvailable(selection.provider)) {
+        res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
+        return
+      }
+      provider = selection.provider
     } else {
       const providers = selectProviders('chat')
       provider = providers[0]
@@ -87,7 +118,7 @@ async function handleStreamingRequest(req, res) {
       return
     }
 
-    const stream = await streamProvider(provider, req.body, controller.signal)
+    const stream = await streamProvider(provider, stripModel(req.body), controller.signal)
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',

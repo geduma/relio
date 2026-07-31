@@ -13,7 +13,8 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   let lastProvider = null
   let retryCount = 0
 
-  const queryHash = generateHash(requestBody)
+  const cacheKeyBody = providerId ? { _provider: providerId, ...requestBody } : requestBody
+  const queryHash = generateHash(cacheKeyBody)
   const cached = getCache(queryHash)
   if (cached) {
     const responseBody = JSON.parse(cached.response_body)
@@ -41,7 +42,17 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   let providers
   if (providerId) {
     const p = getProvider(providerId)
-    providers = p ? [p] : []
+    if (!p) {
+      const err = new Error('Provider not found')
+      err.status = 404
+      throw err
+    }
+    if (!isProviderAvailable(p)) {
+      const err = new Error(`Provider "${p.name}" is paused or in cooldown`)
+      err.status = 503
+      throw err
+    }
+    providers = [p]
   } else {
     providers = selectProviders(capability)
   }
@@ -73,7 +84,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
       recordSuccess(provider.id)
-      setCache(endpoint, requestBody, data, provider.id)
+      setCache(endpoint, cacheKeyBody, data, provider.id)
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,

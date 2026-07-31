@@ -165,15 +165,29 @@ Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dar
 
 ### Proxy API
 
+The `model` field is a **provider selector**: use a provider name or ID to route directly to it, or `"auto"` to enable failover across providers. The model sent to each provider is always the one configured for that provider.
+
 ```bash
+# Route to a specific provider (uses its configured model)
 curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer llm_pk_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gpt-4",
+    "model": "MyProviderName",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+
+# Failover mode (Main -> Fallback 1 -> ...)
+curl http://localhost:3000/v1/chat/completions \
+  -H "Authorization: Bearer llm_pk_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "auto",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
+
+An unknown provider returns `400` with `code: "unknown_provider"`.
 
 ## API Endpoints
 
