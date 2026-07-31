@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 
 export default function Metrics() {
   const [metrics, setMetrics] = useState(null)
+  const [error, setError] = useState(null)
   const [from, setFrom] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 7)
@@ -10,9 +11,14 @@ export default function Metrics() {
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
 
   useEffect(() => {
+    setError(null)
     fetch(`/admin/api/metrics?from=${from}&to=${to}`)
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load metrics (${r.status})`)
+        return r.json()
+      })
       .then(setMetrics)
+      .catch(err => setError(err.message))
   }, [from, to])
 
   return (
@@ -22,6 +28,8 @@ export default function Metrics() {
         <label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label>To <input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
       </div>
+      {error && <p className="empty-state empty-state--error">{error}</p>}
+      {!metrics && !error && <p className="empty-state">Loading metrics...</p>}
       {metrics && (
         <>
           {metrics.totals && (

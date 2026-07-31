@@ -82,16 +82,22 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | Key | Description |
 |---|---|
 | `auth.provider` | `none` (anonymous, default) or `geduma` (OAuth) |
+| `auth.trustedProxy` | `false` (default). Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
 | `geduma.apiUrl` | Geduma API base URL (only needed for `geduma` provider) |
 | `geduma.appId` | App ID registered on geduma-auth (only needed for `geduma` provider) |
 | `security.encryptionKey` | AES-256-GCM key for API key encryption at rest (auto-derived if omitted) |
-| `db.path` | SQLite database file path |
+| `db.path` | SQLite database file path (overridable via `DB_PATH` env) |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
-| `server.port` | Server port |
-| `server.host` | Server host |
+| `server.port` | Server port (overridable via `PORT` env) |
+| `server.host` | Server host (overridable via `HOST` env) |
 | `server.baseUrl` | Public URL for OAuth redirects |
-| `server.nodeEnv` | `development` or `production` |
-| `relay.exposeProvider` | `true` (default) — includes `_provider` in proxy responses. Set to `false` for strict abstraction |
+| `server.nodeEnv` | `development` or `production` (overridable via `NODE_ENV` env) |
+| `relay.exposeProvider` | `false` (default) — includes `_provider` in proxy responses. Set to `true` to expose resolved provider metadata |
+| `relay.streamTimeoutSeconds` | Max duration for streaming requests (default `300`) |
+| `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
+| `rateLimit.loginPer15Minutes` | Login attempts per 15 minutes (default `20`) |
+| `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
+| `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `60`) |
 
 ## Development
 
@@ -158,10 +164,10 @@ The compose file mounts `config.json`, `db/`, and `logs/` from the host so data 
 
 Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dark/light mode, persisted in localStorage).
 
-1. Add providers — select **provider type** (openai-compatible, anthropic, gemini-native, azure-openai) and **capability** (chat, embeddings, vision)
+1. Add providers — select **provider type** (openai-compatible, anthropic, gemini-native, azure-openai) and **capability** (chat, embeddings)
 2. Order them: Main, Fallback 1, Fallback 2...
 3. Generate API Keys for your AI agents
-4. Use the **Chat** tab to test providers interactively with response time display
+4. Use the **Chat** tab to test providers interactively with response time display (toggle **Proxy** to route through the full failover/cache pipeline)
 
 ### Proxy API
 

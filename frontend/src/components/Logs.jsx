@@ -48,7 +48,9 @@ export default function Logs() {
     const a = document.createElement('a')
     a.href = url
     a.download = `relio-logs-${new Date().toISOString().slice(0, 10)}.txt`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 

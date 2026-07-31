@@ -28,18 +28,23 @@ Instructions for AI assistants working on this codebase.
 Uses `better-sqlite3` with helper functions in `src/db.js`:
 
 ```js
-import { dbAll, dbGet, dbRun, dbExec, dbTransaction } from '../db.js'
+import { dbAll, dbGet, dbRun, getDb } from '../db.js'
 
 // Queries
-const rows = dbAll('SELECT * FROM providers WHERE type = ?', ['chat'])
+const rows = dbAll('SELECT * FROM providers WHERE capability = ?', ['chat'])
 const row  = dbGet('SELECT * FROM providers WHERE id = ?', [id])
 const result = dbRun('UPDATE providers SET name = ? WHERE id = ?', [name, id])
+
+// Transactions
+const db = getDb()
+const tx = db.transaction(() => { dbRun(...); dbRun(...) })
+tx()
 ```
 
 - **Never** use `db.prepare().all()` directly — always use helpers
-- **Transactions** via `dbTransaction(fn)`
+- **Transactions** via `getDb().transaction(fn)`
 - **WAL mode** enabled by default
-- **`:memory:`** for tests
+- **`:memory:`** for tests (via `setDbPath(':memory:')`)
 
 ## Architecture
 
@@ -84,11 +89,11 @@ src/
 
 ### Chat Flow (Dashboard)
 
-1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `type = 'chat'`)
-2. User selects a provider, types a message, and optionally enables the Relio proxy toggle
+1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `capability = 'chat'`)
+2. User selects a provider, types a message, and optionally enables the Relio proxy toggle (when ON, the provider selector switches to "Auto (failover)" and is disabled)
 3. `POST /admin/api/chat/send` with `{ provider_id, messages, use_proxy }`:
    - **Proxy disabled (default):** Calls `callProvider()` directly — bypasses failover, cache, metrics, and rate limiting
-   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics)
+   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics); `provider_id` is ignored and the best available provider is selected
 4. Response is rendered as a chat bubble
 
 ### Provider Connection Test
@@ -102,20 +107,21 @@ src/
    - Computes `queryHash` → checks cache
    - Cache hit → returns immediately
    - Cache miss → `selectProviders(capability)` ordered by `order_position`
-   - For each provider: checks `isProviderAvailable()`, `isRateLimitExceeded()`, `isDailyLimitExceeded()`
+   - For each provider: checks `isProviderAvailable()`, `isRateLimitExceeded()` (in-memory), `isDailyLimitExceeded()` (via `metrics` table)
    - `callProvider()` → `getAdapter(provider.provider_type)` resolves adapter from registry (singleton cache) → `adapter.chat()` with 30s timeout
-   - Success → `recordSuccess()`, `setCache()`, `logRequest()`, `updateMetrics()`
-   - Failure → `recordFailure()`, next provider
+   - Success → `recordSuccess()`, `setCache()`, `enqueueLog()`, `enqueueMetric()`
+   - Retryable failure (network/5xx/408/429) → `recordFailure()`, next provider; non-retryable (4xx) → thrown immediately, no failover
 3. All failed → 503
 
 ### Streaming Flow
 
 1. `proxy.routes.js` detects `stream: true` in request body → `handleStreamingRequest()`
-2. Resolves provider (by `provider_id` or first available for `chat` capability)
+2. Resolves provider (by provider name/ID, or first available for `chat` capability skipping paused/cooldown/rate-limited/daily-limited providers)
 3. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`
-4. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
-5. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
-6. On client disconnect: `AbortController` cancels upstream fetch, pipeline rejects gracefully
+4. Enforces an idle timeout (`relay.streamIdleTimeoutMs`) and a max duration (`relay.streamTimeoutSeconds`) via `AbortController`; client disconnect aborts the upstream fetch
+5. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
+6. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
+7. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors; no action once headers were sent
 
 ### Login Flow
 
@@ -140,7 +146,27 @@ All settings live in `config.json` at the project root. `src/config.js` reads th
 
 To add a new key, add it to `config.json`, `config.example.json`, and update the README table.
 
-`process.env` overrides are supported for testing: `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, and `CONFIG_PATH`.
+`process.env` overrides are supported: `PORT`, `HOST`, `NODE_ENV`, `DB_PATH`, and `CONFIG_PATH`.
+
+### Env vars
+
+| Env | Type | Default | Effect |
+|---|---|---|---|
+| `CONFIG_PATH` | string | `./config.json` | Path to the JSON config file |
+| `PORT` | number | from `config.json` | HTTP listen port |
+| `HOST` | string | from `config.json` | Listen address (`0.0.0.0` in prod) |
+| `NODE_ENV` | string | from `config.json` | `development` / `production` |
+| `DB_PATH` | string | from `config.json` | SQLite file path (e.g. `:memory:`) |
+
+### Security / relay settings
+
+- `auth.trustedProxy` (default `false`): set to `true` only when Relio sits behind a trusted reverse proxy — enables `trust proxy` and honors `X-Forwarded-For`.
+- `relay.exposeProvider` (default `false`): when `true`, responses include the resolved `_provider` metadata.
+- `relay.streamTimeoutSeconds` (default `300`): max duration for streaming requests.
+- `relay.streamIdleTimeoutMs` (default `30000`): abort a stream if no data arrives for this long.
+- `rateLimit.loginPer15Minutes` (default `20`): login attempts per 15 min.
+- `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
+- `rateLimit.proxyPerMinute` (default `60`): `/v1` requests per min, keyed by API key + IP.
 
 ## Tests
 
@@ -199,11 +225,11 @@ beforeAll(async () => {
 
 ### Chat Flow (Dashboard)
 
-1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `type = 'chat'`)
-2. User selects a provider, types a message, and optionally enables the Relio proxy toggle
+1. `Chat.jsx` loads providers from `GET /admin/api/chat/providers` (only `capability = 'chat'`)
+2. User selects a provider, types a message, and optionally enables the Relio proxy toggle (when ON, the selector shows "Auto (failover)" and is disabled)
 3. `POST /admin/api/chat/send` with `{ provider_id, messages, use_proxy }`:
    - **Proxy disabled (default):** Calls `callProvider()` directly — bypasses failover, cache, metrics, and rate limiting
-   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics)
+   - **Proxy enabled:** Calls `processRequest()` — goes through the full pipeline (failover, caching, circuit breaker, metrics); `provider_id` is ignored
 4. Response includes `response_time_ms` displayed next to the provider name in each message bubble
 
 ### Components
@@ -253,7 +279,7 @@ Before Docker deployment, ensure you have `config.json` with your settings (moun
 ### Add an LLM provider (Dashboard)
 
 1. Dashboard → Add Provider
-2. Fill in: name, API URL, API Key, model, provider type (openai-compatible, anthropic, gemini-native, azure-openai), capability (chat, embeddings, vision), costs
+2. Fill in: name, API URL, API Key, model, provider type (openai-compatible, anthropic, gemini-native, azure-openai), capability (chat, embeddings), costs
 3. Auto-ordered as the next fallback
 
 ### Add a provider adapter (backend)

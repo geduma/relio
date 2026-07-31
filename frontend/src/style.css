@@ -204,7 +204,6 @@ body {
 .badge-paused { background: var(--badge-paused-bg); color: var(--badge-paused-text); }
 .badge-chat { background: var(--badge-active-bg); color: var(--badge-active-text); }
 .badge-embeddings { background: var(--badge-cooldown-bg); color: var(--badge-cooldown-text); }
-.badge-vision { background: var(--badge-paused-bg); color: var(--badge-paused-text); }
 
 /* Header row */
 .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
