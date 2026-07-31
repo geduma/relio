@@ -227,8 +227,11 @@ router.delete('/:id', (req, res) => {
   }
 
   const tx = db.transaction(() => {
-    dbRun('DELETE FROM providers WHERE id = ?', [id])
     dbRun('DELETE FROM circuit_breaker_state WHERE provider_id = ?', [id])
+    dbRun('DELETE FROM requests_log WHERE provider_id = ?', [id])
+    dbRun('DELETE FROM cache WHERE provider_id = ?', [id])
+    dbRun('DELETE FROM metrics WHERE provider_id = ?', [id])
+    dbRun('DELETE FROM providers WHERE id = ?', [id])
 
     const activeOnes = dbAll(
       `SELECT id FROM providers WHERE capability = ? AND status = 'active' ORDER BY order_position ASC`,

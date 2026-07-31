@@ -6,6 +6,12 @@ export function useToast() {
   return useContext(ToastContext)
 }
 
+export function errorMessage(err) {
+  if (err == null) return 'Unknown error'
+  if (typeof err === 'string') return err
+  return err.message || err.error?.message || JSON.stringify(err)
+}
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 

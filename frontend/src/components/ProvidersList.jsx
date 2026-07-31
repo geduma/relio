@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useToast } from './Toast.jsx'
+import { useToast, errorMessage } from './Toast.jsx'
 
 const TYPE_LABELS = {
   'openai-compatible': 'OpenAI Compatible',
@@ -26,7 +26,7 @@ export default function ProvidersList() {
     const res = await fetch(`/admin/api/providers/${id}`, { method: 'DELETE' })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      toast(data.error || 'Failed to delete provider', 'error')
+      toast(errorMessage(data.error || 'Failed to delete provider'), 'error')
       return
     }
     setProviders(prev => prev.filter(p => p.id !== id))

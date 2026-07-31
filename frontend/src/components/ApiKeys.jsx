@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useToast } from './Toast.jsx'
+import { useToast, errorMessage } from './Toast.jsx'
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
@@ -23,7 +23,7 @@ export default function ApiKeys() {
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      toast(data.error || 'Failed to create key', 'error')
+      toast(errorMessage(data.error || 'Failed to create key'), 'error')
       return
     }
     const data = await res.json()
