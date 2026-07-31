@@ -89,7 +89,7 @@ router.post('/send', async (req, res) => {
 
 router.get('/providers', (req, res) => {
   const rows = dbAll(
-    "SELECT id, name, model, api_url, provider_type FROM providers WHERE capability = 'chat' ORDER BY order_position ASC"
+    "SELECT id, name, model, api_url, provider_type FROM providers WHERE capability = 'chat' AND status != 'paused' ORDER BY order_position ASC"
   )
   res.json(rows)
 })

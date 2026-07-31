@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useToast } from './Toast.jsx'
+import { useToast, errorMessage } from './Toast.jsx'
 
 function msgLabel(msg, providers) {
   if (msg.role === 'user') return 'You'
@@ -51,7 +51,7 @@ export default function Chat() {
         }),
       })
       const data = await res.json()
-      const content = data.choices?.[0]?.message?.content || data.error || JSON.stringify(data)
+      const content = data.choices?.[0]?.message?.content || errorMessage(data.error || JSON.stringify(data))
       const prov = data._provider
       const providerName = prov ? `${prov.name} (${prov.model})` : null
       setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])

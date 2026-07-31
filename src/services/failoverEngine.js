@@ -5,9 +5,34 @@ function decryptProvider(p) {
   return { ...p, api_key: decrypt(p.api_key) }
 }
 
+export const FAILOVER_MODEL = 'auto'
+
 export function getProvider(id) {
   const p = dbGet('SELECT * FROM providers WHERE id = ?', [id])
   return p ? decryptProvider(p) : null
+}
+
+export function resolveProvider(selector, capability) {
+  if (!selector) return null
+  const byId = dbGet('SELECT * FROM providers WHERE id = ? AND capability = ?', [selector, capability])
+  if (byId) return decryptProvider(byId)
+  const byName = dbGet('SELECT * FROM providers WHERE name = ? COLLATE NOCASE AND capability = ?', [selector, capability])
+  return byName ? decryptProvider(byName) : null
+}
+
+export function parseModelSelector(model, capability) {
+  if (!model) return { error: 'missing' }
+  if (String(model).trim().toLowerCase() === FAILOVER_MODEL) return { mode: 'failover' }
+  const provider = resolveProvider(model, capability)
+  if (!provider) return { error: 'unknown' }
+  return { mode: 'provider', provider }
+}
+
+export function stripModel(body) {
+  if (!body || body.model === undefined) return body
+  const clone = { ...body }
+  delete clone.model
+  return clone
 }
 
 export function selectProviders(capability) {

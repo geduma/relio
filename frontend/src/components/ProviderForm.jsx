@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useToast } from './Toast.jsx'
+import { useToast, errorMessage } from './Toast.jsx'
 
 const PROVIDER_TYPES = [
   { value: 'openai-compatible', label: 'OpenAI Compatible' },
@@ -68,8 +68,8 @@ export default function ProviderForm() {
         toast('Connection successful', 'success')
       } else {
         setConnStatus('fail')
-        setFormError(data.error || 'Connection failed')
-        toast(data.error || 'Connection failed', 'error')
+        setFormError(errorMessage(data.error || 'Connection failed'))
+        toast(errorMessage(data.error || 'Connection failed'), 'error')
       }
     } catch {
       setConnStatus('fail')
@@ -92,7 +92,7 @@ export default function ProviderForm() {
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      const msg = data.error || 'Failed to save provider'
+      const msg = errorMessage(data.error || 'Failed to save provider')
       setFormError(msg)
       toast(msg, 'error')
       setSaving(false)
