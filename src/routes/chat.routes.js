@@ -1,14 +1,11 @@
 import { Router } from 'express'
 import { dbGet, dbAll } from '../db.js'
-import { requireDashboardSession } from '../middleware/authMiddleware.js'
 import { callProvider, getProvider } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { logger } from '../utils/logger.js'
 
 const router = Router()
-
-router.use(requireDashboardSession)
 
 router.post('/send', async (req, res) => {
   const { provider_id, messages, use_proxy } = req.body

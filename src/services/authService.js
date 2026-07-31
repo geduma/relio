@@ -1,15 +1,11 @@
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun } from '../db.js'
-import { getAuthProvider } from '../auth/index.js'
 import { enqueueApiKeyTouch } from './logQueue.js'
 
 const API_KEY_CACHE_TTL = 300_000
-const SESSION_CACHE_TTL = 60_000
 const CACHE_MAX = 500
 const apiKeyCache = new Map()
-const sessionCache = new Map()
 const apiKeyOrder = []
-const sessionOrder = []
 
 function boundedSet(map, order, key, value) {
   if (map.has(key)) {
@@ -22,57 +18,6 @@ function boundedSet(map, order, key, value) {
   }
   map.set(key, value)
   order.push(key)
-}
-
-export async function login(credentials) {
-  const provider = await getAuthProvider()
-  return provider.login(credentials)
-}
-
-export async function logout(sessionId) {
-  sessionCache.delete(sessionId)
-  const idx = sessionOrder.indexOf(sessionId)
-  if (idx !== -1) sessionOrder.splice(idx, 1)
-  const provider = await getAuthProvider()
-  return provider.logout(sessionId)
-}
-
-export async function getSession(sessionId) {
-  const cached = sessionCache.get(sessionId)
-  if (cached && Date.now() < cached.expiresAt) return cached.data
-
-  if (cached) {
-    sessionCache.delete(sessionId)
-    const idx = sessionOrder.indexOf(sessionId)
-    if (idx !== -1) sessionOrder.splice(idx, 1)
-  }
-
-  const provider = await getAuthProvider()
-  const session = await provider.getSession(sessionId)
-  if (session) {
-    boundedSet(sessionCache, sessionOrder, sessionId, { data: session, expiresAt: Date.now() + SESSION_CACHE_TTL })
-  }
-  return session || null
-}
-
-export async function getLoginConfig() {
-  const provider = await getAuthProvider()
-  return provider.getLoginConfig()
-}
-
-export async function initiateLogin(credentials) {
-  const provider = await getAuthProvider()
-  return provider.initiateLogin(credentials)
-}
-
-export async function getLoginView() {
-  const provider = await getAuthProvider()
-  return provider.loginView
-}
-
-export async function autoLogin() {
-  const provider = await getAuthProvider()
-  return provider.login({})
 }
 
 export function createApiKey(name) {

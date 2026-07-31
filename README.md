@@ -10,7 +10,7 @@
 | Database | SQLite (better-sqlite3) |
 | Frontend | React + Vite (self-served by Express) |
 | HTTP Client | Native fetch (Node 18+) |
-| Auth | Pluggable (Geduma OAuth / none) + local API Keys |
+| Auth | Local API Keys (`/v1/*`) |
 | Testing | Vitest |
 | Infra | Docker multi-stage (`docker/`) |
 
@@ -54,7 +54,7 @@ cd frontend && npm install && cd ..
 npm run dev
 ```
 
-Open `http://localhost:3000/admin` — no login required by default.
+Open `http://localhost:3000/admin` — the dashboard requires no login.
 
 ## Configuration
 
@@ -62,40 +62,31 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 ```json
 {
-  "auth": { "provider": "none" },
   "db": { "path": "./db/db.sqlite" },
   "cache": { "ttlSeconds": 2592000 },
   "server": {
     "port": 3000,
     "host": "0.0.0.0",
     "baseUrl": "http://localhost:3000",
-    "nodeEnv": "development"
-  },
-  "cookie": {
-    "secure": false,
-    "sameSite": "strict",
-    "httpOnly": true
+    "nodeEnv": "development",
+    "trustedProxy": false
   }
 }
 ```
 
 | Key | Description |
 |---|---|
-| `auth.provider` | `none` (anonymous, default) or `geduma` (OAuth) |
-| `auth.trustedProxy` | `false` (default). Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
-| `geduma.apiUrl` | Geduma API base URL (only needed for `geduma` provider) |
-| `geduma.appId` | App ID registered on geduma-auth (only needed for `geduma` provider) |
 | `security.encryptionKey` | AES-256-GCM key for API key encryption at rest (auto-derived if omitted) |
 | `db.path` | SQLite database file path (overridable via `DB_PATH` env) |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port (overridable via `PORT` env) |
 | `server.host` | Server host (overridable via `HOST` env) |
-| `server.baseUrl` | Public URL for OAuth redirects |
+| `server.baseUrl` | Public URL |
 | `server.nodeEnv` | `development` or `production` (overridable via `NODE_ENV` env) |
+| `server.trustedProxy` | `false` (default). Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
 | `relay.exposeProvider` | `false` (default) — includes `_provider` in proxy responses. Set to `true` to expose resolved provider metadata |
 | `relay.streamTimeoutSeconds` | Max duration for streaming requests (default `300`) |
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
-| `rateLimit.loginPer15Minutes` | Login attempts per 15 minutes (default `20`) |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `60`) |
 
@@ -115,20 +106,7 @@ In dev mode, the frontend runs on `http://localhost:5173` and proxies API reques
 
 ## Authentication
 
-Relio uses a pluggable auth provider system. Set `auth.provider` in `config.json`:
-
-- **`none`** (default) — anonymous session, no login page shown.
-- **`geduma`** — OAuth via Geduma API. Requires a registered `appId` and setting `auth.provider` to `"geduma"`.
-
-### Geduma Auth Flow
-
-1. Login page fetches available OAuth providers from Geduma
-2. User clicks a provider → Relio redirects to Geduma's OAuth initiation endpoint
-3. User authenticates (Google, GitHub, etc.) → Geduma handles the OAuth callback
-4. Geduma redirects back to Relio with a session token in the URL hash
-5. Relio exchanges the session token for user data and creates a local session
-
-To implement a custom provider, see `src/auth/base.js` and `docs/AGENTS.md`.
+The dashboard requires no login. Only the proxy API (`/v1/*`) is protected by **local API Keys** (`llm_pk_xxx`), managed in the dashboard under *Keys*.
 
 ## LLM Provider Adapters
 
@@ -197,15 +175,6 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 
 ## API Endpoints
 
-### Authentication
-
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| GET | `/admin/api/auth/providers` | No | List login providers |
-| POST | `/admin/api/auth/login` | No | Initiate OAuth login |
-| POST | `/admin/api/auth/callback` | No | Exchange session token |
-| POST | `/admin/api/auth/logout` | Cookie | Logout |
-
 ### Dashboard
 
 | Method | Route | Description |
@@ -221,9 +190,9 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 | GET | `/admin/api/metrics/health` | Health check |
 | GET | `/admin/api/chat/providers` | List chat-capable providers |
 | POST | `/admin/api/chat/send` | Send a message to a provider via Chat UI |
-| POST | `/admin/api/auth/api-keys` | Create API Key |
-| GET | `/admin/api/auth/api-keys` | List API Keys |
-| DELETE | `/admin/api/auth/api-keys/:keyPreview` | Revoke API Key |
+| POST | `/admin/api/keys` | Create API Key |
+| GET | `/admin/api/keys` | List API Keys |
+| DELETE | `/admin/api/keys/:keyPreview` | Revoke API Key |
 
 ### Proxy (public)
 
@@ -247,11 +216,6 @@ relio/
 │   ├── index.js            # Entry point
 │   ├── config.js           # Config loader (reads config.json)
 │   ├── db.js               # SQLite setup + queries
-│   ├── auth/               # Pluggable auth providers
-│   │   ├── base.js         # AuthProvider interface
-│   │   ├── geduma.js       # Geduma OAuth provider
-│   │   ├── none.js         # Anonymous session provider
-│   │   └── index.js        # Factory
 │   ├── adapters/           # Pluggable LLM provider adapters
 │   │   ├── base.js         # ProviderAdapter interface
 │   │   ├── index.js        # Factory + registry (singleton cache)
@@ -260,7 +224,7 @@ relio/
 │   │   ├── gemini-native.js
 │   │   └── azure-openai.js
 │   ├── services/           # Business logic
-│   ├── middleware/          # Auth middleware
+│   ├── middleware/          # API Key auth middleware
 │   ├── routes/             # API routes
 │   │   └── chat.routes.js  # Dashboard chat API
 │   ├── handlers/           # Request processing

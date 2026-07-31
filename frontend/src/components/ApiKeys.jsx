@@ -9,7 +9,7 @@ export default function ApiKeys() {
   const toast = useToast()
 
   useEffect(() => {
-    fetch('/admin/api/auth/api-keys')
+    fetch('/admin/api/keys')
       .then(async r => {
         if (!r.ok) throw new Error(`Failed to load keys (${r.status})`)
         return r.json()
@@ -20,7 +20,7 @@ export default function ApiKeys() {
 
   async function handleCreate(e) {
     e.preventDefault()
-    const res = await fetch('/admin/api/auth/api-keys', {
+    const res = await fetch('/admin/api/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
@@ -33,13 +33,13 @@ export default function ApiKeys() {
     const data = await res.json()
     setNewKey(data.apiKey)
     setName('')
-    const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
+    const updated = await fetch('/admin/api/keys').then(r => r.json())
     setKeys(updated)
     toast('API key created', 'success')
   }
 
   async function handleRevoke(id) {
-    const res = await fetch(`/admin/api/auth/api-keys/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       toast(errorMessage(data.error || 'Failed to revoke key'), 'error')

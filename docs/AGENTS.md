@@ -9,7 +9,7 @@ Instructions for AI assistants working on this codebase.
 - **DB:** better-sqlite3 (synchronous, no ORM)
 - **Frontend:** React 18 + Vite 5 (no TypeScript)
 - **HTTP:** Native `fetch` (no axios)
-- **Auth:** Pluggable auth providers (default: none/anonymous) + local API Keys
+- **Auth:** Local API Keys (bearer token on `/v1/*`). No login — dashboard is open
 - **Testing:** Vitest
 - **Docker:** multi-stage in `docker/`
 
@@ -18,7 +18,7 @@ Instructions for AI assistants working on this codebase.
 - **No comments** in source code (JSDoc allowed where needed)
 - **ESM** — use `import`/`export`, never `require`
 - **Filenames:** kebab-case (`auth.routes.js`, `cacheManager.js`)
-- **React component names:** PascalCase (`Login.jsx`, `ProvidersList.jsx`)
+- **React component names:** PascalCase (`ProvidersList.jsx`, `Metrics.jsx`)
 - **Variables and functions:** camelCase
 - **Constants:** UPPER_CASE only for exported magic values
 - **No TypeScript** — plain JS with optional JSDoc for complex types
@@ -51,31 +51,25 @@ tx()
 ```
 src/
 ├── index.js              # Express setup, routes, static, error handler
-├── config.js             # Reads config.json
+├── config.js             # Reads config.json + env overrides
 ├── db.js                 # SQLite helpers + migrations
 ├── services/             # Pure logic (no Express)
-│   ├── authService.js    # Geduma login, sessions, API keys
+│   ├── authService.js    # API key management + validation
 │   ├── failoverEngine.js # Provider selection, rate/daily limits
 │   ├── circuitBreaker.js # healthy/cooldown/paused states
 │   ├── cacheManager.js   # Hash + TTL cache
 │   └── metricsLogger.js  # Logging + daily metrics
 ├── middleware/
-│   └── authMiddleware.js # Cookie session + API Key validation
+│   └── authMiddleware.js # API Key validation (/v1/*)
 ├── routes/               # Express routers
-│   ├── auth.routes.js    # /admin/api/auth/*
 │   ├── providers.routes.js
 │   ├── metrics.routes.js
-│   ├── keys.routes.js
+│   ├── keys.routes.js    # /admin/api/keys
 │   ├── chat.routes.js    # /admin/api/chat/* (dashboard chat test)
 │   └── proxy.routes.js   # /v1/*
 ├── handlers/
 │   ├── requestHandler.js # Cache → failover → response
 │   └── dashboardHandler.js
-├── auth/                 # Pluggable auth providers
-│   ├── base.js           # AuthProvider abstract class
-│   ├── geduma.js         # Geduma OAuth provider
-│   ├── none.js           # Anonymous session provider
-│   └── index.js          # Factory (loads provider from AUTH_PROVIDER env)
 ├── adapters/             # Pluggable LLM provider adapters
 │   ├── base.js           # ProviderAdapter abstract class
 │   ├── index.js          # Factory + registry (singleton cache)
@@ -123,23 +117,6 @@ src/
 6. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
 7. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors; no action once headers were sent
 
-### Login Flow
-
-Depends on the active auth provider (set via `auth.provider` in `config.json`):
-
-**none** (default):
-1. `GET /admin/api/auth/providers` → `{ autoLogin: true }`
-2. Frontend auto-redirects to dashboard (no login page shown)
-3. Backend creates anonymous session automatically
-
-**geduma** (opt-in OAuth):
-1. `GET /admin/api/auth/providers` → returns OAuth provider buttons
-2. User clicks a provider → `POST /admin/api/auth/login { provider }` → returns `{ redirect: oauth_url }`
-3. Browser redirects to OAuth provider (Google, GitHub, etc.)
-4. User authenticates → OAuth callback goes to Geduma API (`/auth?code=xxx&state=yyy`)
-5. Geduma returns HTML that redirects to Relio with `#session_token=xxx` in the URL hash
-6. Frontend detects the hash → `POST /admin/api/auth/callback { sessionToken }` → backend exchanges token via Geduma `GET /auth/session/:sessionToken` → creates local session → sets cookie
-
 ## Configuration
 
 All settings live in `config.json` at the project root. `src/config.js` reads this file at startup and exposes the parsed object as `config`.
@@ -160,11 +137,10 @@ To add a new key, add it to `config.json`, `config.example.json`, and update the
 
 ### Security / relay settings
 
-- `auth.trustedProxy` (default `false`): set to `true` only when Relio sits behind a trusted reverse proxy — enables `trust proxy` and honors `X-Forwarded-For`.
+- `server.trustedProxy` (default `false`): set to `true` only when Relio sits behind a trusted reverse proxy — enables `trust proxy` and honors `X-Forwarded-For`.
 - `relay.exposeProvider` (default `false`): when `true`, responses include the resolved `_provider` metadata.
 - `relay.streamTimeoutSeconds` (default `300`): max duration for streaming requests.
 - `relay.streamIdleTimeoutMs` (default `30000`): abort a stream if no data arrives for this long.
-- `rateLimit.loginPer15Minutes` (default `20`): login attempts per 15 min.
 - `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
 - `rateLimit.proxyPerMinute` (default `60`): `/v1` requests per min, keyed by API key + IP.
 
@@ -204,8 +180,7 @@ beforeAll(async () => {
 
 - **Dark mode by default** using CSS custom properties on `:root`
 - `.light-mode` class on `body` overrides variables for light theme
-- Toggle in sidebar (Dashboard) and top-right (Login) persists to `localStorage('relio-theme')`
-- Login page uses `--login-bg` for background contrast
+- Toggle in sidebar (Dashboard) persists to `localStorage('relio-theme')`
 
 ### Provider Connection Test
 
@@ -236,8 +211,7 @@ beforeAll(async () => {
 
 | Component | Route | Purpose |
 |---|---|---|
-| `Login.jsx` | `/admin/login` | Captures session_token hash, initiates OAuth login, theme toggle |
-| `Dashboard.jsx` | `/admin/dashboard/*` | Layout + internal routing + theme toggle |
+| `Dashboard.jsx` | `/admin/*` | Layout + internal routing + theme toggle |
 | `ProvidersList.jsx` | `/admin/dashboard/providers` | List with reorder |
 | `ProviderForm.jsx` | Modal | Create/edit provider |
 | `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + table |
@@ -284,7 +258,7 @@ Before Docker deployment, ensure you have `config.json` with your settings (moun
 
 ### Add a provider adapter (backend)
 
-The adapter system follows the same pluggable pattern as auth providers. Use `src/adapters/` to add new provider types:
+Use `src/adapters/` to add new provider types:
 
 1. Create `src/adapters/yourprovider.js` extending `ProviderAdapter` (from `src/adapters/base.js`):
 
@@ -320,50 +294,6 @@ registerAdapter('yourprovider', YourProviderAdapter)
 
 3. The factory auto-caches singleton instances — no additional wiring needed.
 
-### Create a custom AuthProvider
-
-The auth system is pluggable. To add your own authentication:
-
-1. Create `src/auth/yourprovider.js` that extends `AuthProvider` (from `src/auth/base.js`):
-
-```js
-import AuthProvider from './base.js'
-
-export default class MyProvider extends AuthProvider {
-  static get type() { return 'myprovider' }
-
-  get loginView() { return 'oauth' }   // 'oauth' | 'none'
-
-  async getLoginConfig() {
-    // Return data for the login UI
-    // For 'oauth': { providers: [{ id, name, providerId }] }
-    return { providers: [...] }
-  }
-
-  async initiateLogin({ provider }) {
-    // Called when user clicks a provider button
-    // Return { redirect: url } to send the browser there
-    return { redirect: 'https://...' }
-  }
-
-  async login(credentials) {
-    // Called with the result of the OAuth flow
-    // Authenticate and return { sessionId, user }
-    return { sessionId, user: { email, name, avatar } }
-  }
-
-  async logout(sessionId) {
-    // Destroy session (delete from DB, log history)
-  }
-
-  async getSession(sessionId) {
-    // Return session object or null
-  }
-}
-```
-
-2. Set `auth.provider` in `config.json` to the provider type name
-
 ## Provider-agnostic rule
 
 Relio must **always be provider-agnostic**. Every adapter or utility must apply to ALL provider types uniformly:
@@ -375,8 +305,6 @@ Relio must **always be provider-agnostic**. Every adapter or utility must apply 
 - ✅ When a provider returns non-standard formats (e.g. array `[{error}]` instead of object `{error}`), handle it generically in `base.js` so all adapters benefit
 
 If a fix would require detecting a specific provider, rethink the approach. The adapter architecture is designed so that `provider_type` is the only dimension of variation.
-
-Interface reference: `src/auth/base.js` has full JSDoc documentation.
 
 ## Commands
 

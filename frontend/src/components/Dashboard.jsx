@@ -1,4 +1,4 @@
-import { Routes, Route, Link, useNavigate } from 'react-router-dom'
+import { Routes, Route, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import ProvidersList from './ProvidersList.jsx'
 import ProviderForm from './ProviderForm.jsx'
@@ -10,7 +10,6 @@ import Chat from './Chat.jsx'
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isDark, setIsDark] = useState(true)
-  const navigate = useNavigate()
 
   useEffect(() => {
     const stored = localStorage.getItem('relio-theme')
@@ -21,13 +20,6 @@ export default function Dashboard() {
       setIsDark(true)
       document.body.classList.remove('light-mode')
     }
-
-    fetch('/admin/api/metrics/health')
-      .then(r => {
-        if (r.status === 401) navigate('/admin/login')
-        return r.json()
-      })
-      .catch(() => {})
   }, [])
 
   function toggleTheme() {
@@ -35,11 +27,6 @@ export default function Dashboard() {
     setIsDark(next)
     document.body.classList.toggle('light-mode', !next)
     localStorage.setItem('relio-theme', next ? 'dark' : 'light')
-  }
-
-  async function handleLogout() {
-    await fetch('/admin/api/auth/logout', { method: 'POST' })
-    navigate('/admin/login')
   }
 
   return (
@@ -57,14 +44,9 @@ export default function Dashboard() {
           <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-footer-row">
-            <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
-              {isDark ? '\u263C' : '\u263E'}
-            </button>
-            <button className="btn btn-outline" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
+          <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
+            {isDark ? '\u263C' : '\u263E'}
+          </button>
           <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by geduma</a>
         </div>
       </aside>

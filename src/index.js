@@ -1,21 +1,18 @@
 import express from 'express'
 import helmet from 'helmet'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
-import cookieParser from 'cookie-parser'
 import crypto from 'crypto'
 import path from 'path'
 import cron from 'node-cron'
 import { fileURLToPath } from 'url'
 import { initDb } from './db.js'
 import { runMaintenance, recoverCooldowns } from './maintenance.js'
-import { requireDashboardSession } from './middleware/authMiddleware.js'
 import { getSummary } from './handlers/dashboardHandler.js'
 import { config } from './config.js'
 import { logger, normalizeError } from './utils/logger.js'
 import { startFlushTimer, flushAll } from './services/logQueue.js'
 import { startCacheFlushTimer, flushCacheHits } from './services/cacheManager.js'
 
-import authRoutes from './routes/auth.routes.js'
 import providersRoutes from './routes/providers.routes.js'
 import metricsRoutes from './routes/metrics.routes.js'
 import keysRoutes from './routes/keys.routes.js'
@@ -28,7 +25,7 @@ const app = express()
 const PORT = config.server.port
 const HOST = config.server.host
 
-app.set('trust proxy', config.auth?.trustedProxy ? 1 : false)
+app.set('trust proxy', config.server.trustedProxy ? 1 : false)
 app.use(helmet({
   crossOriginOpenerPolicy: false,
   originAgentCluster: false,
@@ -44,18 +41,9 @@ app.use(helmet({
   },
 }))
 app.use(express.json({ limit: '10mb' }))
-app.use(cookieParser())
 
 const rateLimitError = (message) => ({
   error: { message, type: 'rate_limit_error', code: 'rate_limit' },
-})
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: config.rateLimit.loginPer15Minutes,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: rateLimitError('Too many attempts, try again later'),
 })
 
 const proxyKeyGenerator = (req) => {
@@ -84,7 +72,6 @@ const dashboardLimiter = rateLimit({
   message: rateLimitError('Too many requests, try again later'),
 })
 
-app.use('/admin/api/auth', authLimiter, authRoutes)
 app.use('/v1', apiLimiter, proxyRoutes)
 
 initDb()
@@ -94,10 +81,10 @@ cron.schedule('0 * * * *', recoverCooldowns)
 
 app.use('/admin/api/providers', dashboardLimiter, providersRoutes)
 app.use('/admin/api/metrics', dashboardLimiter, metricsRoutes)
-app.use('/admin/api/auth/api-keys', dashboardLimiter, keysRoutes)
+app.use('/admin/api/keys', dashboardLimiter, keysRoutes)
 app.use('/admin/api/chat', dashboardLimiter, chatRoutes)
 
-app.get('/admin/api/summary', dashboardLimiter, requireDashboardSession, (req, res) => {
+app.get('/admin/api/summary', dashboardLimiter, (req, res) => {
   const summary = getSummary()
   res.json(summary)
 })

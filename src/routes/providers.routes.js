@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { dbAll, dbGet, dbRun, getDb, encrypt, decrypt } from '../db.js'
 import { getProvider, invalidateProviderCache } from '../services/failoverEngine.js'
-import { requireDashboardSession } from '../middleware/authMiddleware.js'
 import { getAdapter } from '../adapters/index.js'
 import { logger } from '../utils/logger.js'
 
@@ -14,8 +13,6 @@ async function testProviderConnection(apiUrl, apiKey, providerType) {
 }
 
 const router = Router()
-
-router.use(requireDashboardSession)
 
 router.get('/', (req, res) => {
   const { capability } = req.query

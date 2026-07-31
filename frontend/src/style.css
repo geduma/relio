@@ -45,7 +45,6 @@
   --code-bg: rgba(255,255,255,0.06);
   --scrollbar-thumb: #3a3a5a;
   --scrollbar-track: #1a1a30;
-  --login-bg: #0c0c1e;
 }
 
 .light-mode {
@@ -95,7 +94,6 @@
   --code-bg: rgba(0,0,0,0.05);
   --scrollbar-thumb: #ccc;
   --scrollbar-track: #f0f0f0;
-  --login-bg: #1a1a2e;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -109,34 +107,6 @@ body {
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
-
-/* Login */
-.login-page {
-  display: flex; align-items: center; justify-content: center;
-  min-height: 100vh; background: var(--login-bg, #1a1a2e); position: relative;
-}
-.login-theme-btn {
-  position: absolute; top: 1rem; right: 1rem;
-  background: transparent; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.5);
-  border-radius: 4px; padding: 0.4rem 0.6rem; cursor: pointer; font-size: 1rem; line-height: 1;
-  transition: color 0.15s, border-color 0.15s;
-}
-.login-theme-btn:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
-.login-card {
-  background: var(--bg-surface); padding: 2rem; border-radius: 8px; min-width: 320px;
-  text-align: center; box-shadow: var(--card-shadow);
-  border: 1px solid var(--border);
-}
-.login-card h1 { font-size: 2rem; color: var(--text-primary); margin-bottom: 0.25rem; display: flex; align-items: baseline; justify-content: center; gap: 0.4rem; flex-wrap: wrap; }
-.login-card h1 .subtitle { font-size: 1rem; color: var(--text-muted); }
-.login-card > p { color: var(--text-secondary); margin-bottom: 1.5rem; }
-.login-card > p:last-child { margin-bottom: 0; }
-.login-card a { color: var(--primary); text-decoration: none; }
-.login-card a:hover { text-decoration: underline; }
-.login-footer { margin-top: 1.5rem; font-size: 0.8rem; color: var(--text-muted); }
-.login-footer a { color: var(--text-muted); }
-.login-footer a:hover { color: var(--primary); }
-.alert-error { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; }
 
 /* Dashboard */
 .dashboard-layout { display: flex; height: 100vh; overflow: hidden; }
@@ -156,7 +126,6 @@ body {
 .subtitle { font-weight: 300; font-size: 0.85em; opacity: 0.7; }
 
 .sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
-.sidebar-footer-row { display: flex; gap: 0.5rem; }
 .sidebar-footer a { color: var(--text-muted); font-size: 0.75rem; text-decoration: none; }
 .sidebar-footer a:hover { color: var(--text-secondary); }
 
@@ -179,14 +148,6 @@ body {
 .hamburger span { display: block; width: 20px; height: 2px; background: #fff; border-radius: 1px; }
 
 .mobile-topbar { display: none; }
-
-.provider-btn { width: 100%; padding: 0.75rem; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem; font-size: 1rem; cursor: pointer; background: var(--bg-elevated); }
-.provider-icon { width: 24px; height: 24px; flex-shrink: 0; }
-.provider-icon--img { border-radius: 4px; object-fit: contain; }
-.provider-icon--letter {
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 50%; color: #fff; font-size: 0.75rem; font-weight: 600;
-}
 
 /* Table */
 .table-wrapper { overflow-x: auto; }
@@ -270,7 +231,6 @@ body {
 }
 .form-inline { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .form-inline input { flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); }
-.providers-list { display: flex; flex-direction: column; gap: 0.5rem; }
 
 /* Chat */
 .chat-page {
@@ -370,7 +330,6 @@ body {
   .modal { min-width: 0; width: calc(100% - 2rem); margin: 1rem; }
   .toast { max-width: none; width: calc(100% - 2rem); }
   .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
-  .login-card { min-width: 0; width: calc(100% - 2rem); margin: 1rem; }
 }
 
 @media (max-width: 480px) {
@@ -385,6 +344,7 @@ body {
 /* Alert */
 .alert { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; }
 .alert-warning { background: var(--warning-bg); border: 1px solid var(--warning-border); color: var(--warning-text); }
+.alert-error { background: var(--error-bg); border: 1px solid var(--error-border); color: var(--error-text); }
 .alert code { display: block; margin: 0.5rem 0; padding: 0.5rem; background: var(--code-bg); border-radius: 4px; word-break: break-all; }
 
 /* Error cell */

@@ -1,10 +1,7 @@
 import { Router } from 'express'
 import { createApiKey, listApiKeys, revokeApiKey } from '../services/authService.js'
-import { requireDashboardSession } from '../middleware/authMiddleware.js'
 
 const router = Router()
-
-router.use(requireDashboardSession)
 
 router.post('/', (req, res) => {
   const { name } = req.body

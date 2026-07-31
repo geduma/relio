@@ -16,9 +16,7 @@ const DB_PATH = path.resolve(__dirname, '..', config.db.path)
 const RETENTION = {
   requestsLog: 90,
   cache: 30,
-  loginHistory: 90,
   metrics: 365,
-  sessions: 7,
 }
 
 function ensureDir(dir) {
@@ -53,26 +51,15 @@ function cleanOldData() {
 
     const deletedCache = cleanExpiredCache()
 
-    const deletedLoginHistory = dbRun(
-      `DELETE FROM login_history WHERE timestamp < datetime('now', ?)`,
-      [`-${RETENTION.loginHistory} days`]
-    ).changes
-
     const deletedMetrics = dbRun(
       `DELETE FROM metrics WHERE metric_date < date('now', ?)`,
       [`-${RETENTION.metrics} days`]
     ).changes
 
-    const deletedSessions = dbRun(
-      `DELETE FROM sessions WHERE expires_at < datetime('now')`
-    ).changes
-
     logger.info('Cleanup complete', {
       requestsLog: deletedRequests,
       cache: deletedCache,
-      loginHistory: deletedLoginHistory,
       metrics: deletedMetrics,
-      sessions: deletedSessions,
     })
   })
   tx()

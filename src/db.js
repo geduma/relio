@@ -145,18 +145,6 @@ export function initDb() {
       last_used_at DATETIME
     );
 
-    CREATE TABLE IF NOT EXISTS login_history (
-      id TEXT PRIMARY KEY,
-      email TEXT,
-      method TEXT NOT NULL,
-      provider TEXT,
-      status TEXT NOT NULL,
-      ip_address TEXT,
-      user_agent TEXT,
-      error_message TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
     CREATE TABLE IF NOT EXISTS circuit_breaker_state (
       provider_id TEXT PRIMARY KEY REFERENCES providers(id),
       state TEXT DEFAULT 'healthy',
@@ -164,16 +152,6 @@ export function initDb() {
       last_failure_at DATETIME,
       cooldown_until DATETIME,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      token_hash TEXT NOT NULL UNIQUE,
-      user_email TEXT,
-      user_name TEXT,
-      user_avatar TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      expires_at DATETIME
     );
 
     CREATE TABLE IF NOT EXISTS metrics (
@@ -226,11 +204,7 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(query_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(endpoint, expires_at);',
     'CREATE INDEX IF NOT EXISTS idx_keys_key ON api_keys(key);',
-    'CREATE INDEX IF NOT EXISTS idx_login_email ON login_history(email, timestamp);',
-    'CREATE INDEX IF NOT EXISTS idx_login_ts ON login_history(timestamp);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',
-    'CREATE INDEX IF NOT EXISTS idx_sessions_hash ON sessions(token_hash);',
-    'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);',
     'CREATE INDEX IF NOT EXISTS idx_metrics_date ON metrics(metric_date);',
   ]
 
