@@ -8,6 +8,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "install:all": "npm install && npm install --prefix frontend",
     "build": "cd frontend && npm run build",
     "dev": "npm run build && node --watch src/index.js",
     "prestart": "node scripts/prestart.js",
