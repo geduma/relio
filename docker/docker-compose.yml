@@ -1,4 +1,5 @@
 name: relio-app
+container_name: relio-app
 
 services:
   relio:
