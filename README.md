@@ -48,10 +48,16 @@ cd relio
 cp config.example.json config.json
 # Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
 
-npm install
-cd frontend && npm install && cd ..
+npm run install:all  # installs backend (root) + frontend dependencies
 
 npm run dev
+```
+
+Alternatively, install each one manually:
+
+```bash
+npm install
+cd frontend && npm install && cd ..
 ```
 
 Open `http://localhost:3000/admin` — the dashboard requires no login.
