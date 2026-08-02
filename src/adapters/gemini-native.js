@@ -145,6 +145,8 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
         let mode = 'AUTO'
         if (body.tool_choice === 'any' || body.tool_choice === 'required') {
           mode = 'ANY'
+        } else if (body.tool_choice === 'none') {
+          mode = 'NONE'
         } else if (typeof body.tool_choice === 'object' && body.tool_choice.function?.name) {
           mode = 'ANY'
           result.toolConfig = {
@@ -161,6 +163,27 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     }
 
     return result
+  }
+
+  _mapFinishReason(finishReason) {
+    const map = {
+      STOP: 'stop',
+      MAX_TOKENS: 'length',
+      SAFETY: 'content_filter',
+      RECITATION: 'content_filter',
+      TOOL_CALL: 'tool_calls',
+      FINISH_REASON_UNSPECIFIED: null,
+    }
+    return map[finishReason] || finishReason || null
+  }
+
+  _mapUsage(usageMetadata) {
+    if (!usageMetadata) return null
+    return {
+      prompt_tokens: usageMetadata.promptTokenCount || 0,
+      completion_tokens: usageMetadata.candidatesTokenCount || 0,
+      total_tokens: (usageMetadata.promptTokenCount || 0) + (usageMetadata.candidatesTokenCount || 0),
+    }
   }
 
   transformResponse(data) {
@@ -203,22 +226,13 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       }
     }
 
-    const finishReasonMap = {
-      STOP: 'stop',
-      MAX_TOKENS: 'length',
-      SAFETY: 'content_filter',
-      RECITATION: 'content_filter',
-      TOOL_CALL: 'tool_calls',
-      FINISH_REASON_UNSPECIFIED: null,
-    }
-
     const choice = {
       index: 0,
       message: {
         role: 'assistant',
         content: text || null,
       },
-      finish_reason: finishReasonMap[candidate.finishReason] || candidate.finishReason || 'stop',
+      finish_reason: this._mapFinishReason(candidate.finishReason) || 'stop',
     }
 
     if (toolCalls.length > 0) {
@@ -231,11 +245,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       created: Math.floor(Date.now() / 1000),
       model: data.model || 'gemini',
       choices: [choice],
-      usage: {
-        prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
-        completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
-        total_tokens: (data.usageMetadata?.promptTokenCount || 0) + (data.usageMetadata?.candidatesTokenCount || 0),
-      },
+      usage: this._mapUsage(data.usageMetadata),
     }
   }
 
@@ -300,30 +310,90 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     const decoder = new TextDecoder()
     let buffer = ''
     let isFirstChunk = true
-    let previousContent = ''
-
-    const extractDelta = (canonical) => {
-      const msg = canonical.choices[0]?.message || {}
-      const delta = {}
-      if (isFirstChunk) {
-        delta.role = 'assistant'
-        isFirstChunk = false
-      }
-      const newContent = msg.content || ''
-      if (newContent.length > previousContent.length) {
-        delta.content = newContent.slice(previousContent.length)
-      }
-      previousContent = newContent
-      if (msg.tool_calls) delta.tool_calls = msg.tool_calls
-      return delta
-    }
+    let callIndex = 0
+    const streamId = `chatcmpl-${Date.now()}`
+    const streamCreated = Math.floor(Date.now() / 1000)
+    const mapFinishReason = this._mapFinishReason.bind(this)
+    const mapUsage = this._mapUsage.bind(this)
 
     return new Readable({
       async read() {
         try {
+          const emitLine = (rawLine) => {
+            const trimmed = rawLine.trim()
+            if (!trimmed) return true
+            if (trimmed === '[DONE]') {
+              this.push('data: [DONE]\n\n')
+              this.push(null)
+              return false
+            }
+
+            let geminiData
+            try {
+              geminiData = JSON.parse(trimmed)
+            } catch {
+              return true
+            }
+
+            if (geminiData.error) {
+              this.destroy(new Error(geminiData.error.message || 'Gemini stream error'))
+              return false
+            }
+
+            const delta = {}
+            if (isFirstChunk) {
+              delta.role = 'assistant'
+              isFirstChunk = false
+            }
+
+            const candidate = geminiData.candidates?.[0]
+            for (const part of candidate?.content?.parts || []) {
+              if (part.text) {
+                delta.content = (delta.content || '') + part.text
+              }
+              if (part.functionCall) {
+                if (!delta.tool_calls) delta.tool_calls = []
+                delta.tool_calls.push({
+                  index: callIndex,
+                  id: `call_${callIndex}`,
+                  type: 'function',
+                  function: {
+                    name: part.functionCall.name || '',
+                    arguments: JSON.stringify(part.functionCall.args || {}),
+                  },
+                })
+                callIndex++
+              }
+            }
+
+            const finishReason = candidate?.finishReason ? mapFinishReason(candidate.finishReason) : null
+            if (!delta.content && !delta.tool_calls && !delta.role && !finishReason) return true
+
+            const streamChunk = {
+              id: streamId,
+              object: 'chat.completion.chunk',
+              created: streamCreated,
+              model: geminiData.model || provider.model || 'gemini',
+              choices: [{
+                index: 0,
+                delta,
+                finish_reason: finishReason,
+              }],
+            }
+
+            const usage = mapUsage(geminiData.usageMetadata)
+            if (usage) {
+              streamChunk.usage = usage
+            }
+
+            this.push(`data: ${JSON.stringify(streamChunk)}\n\n`)
+            return true
+          }
+
           while (true) {
             const { done, value } = await reader.read()
             if (done) {
+              if (buffer.trim()) emitLine(buffer)
               this.push('data: [DONE]\n\n')
               this.push(null)
               break
@@ -334,48 +404,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
             buffer = lines.pop() || ''
 
             for (const line of lines) {
-              const trimmed = line.trim()
-              if (!trimmed) continue
-              if (trimmed === '[DONE]') {
-                this.push('data: [DONE]\n\n')
-                this.push(null)
-                return
-              }
-
-              let geminiData
-              try {
-                geminiData = JSON.parse(trimmed)
-              } catch {
-                continue
-              }
-
-              if (geminiData.error) {
-                this.destroy(new Error(geminiData.error.message || 'Gemini stream error'))
-                return
-              }
-
-              const canonical = this.transformResponse(geminiData)
-              const delta = extractDelta(canonical)
-
-              if (!delta.content && !delta.tool_calls && !delta.role) continue
-
-              const streamChunk = {
-                id: canonical.id,
-                object: 'chat.completion.chunk',
-                created: canonical.created,
-                model: canonical.model,
-                choices: [{
-                  index: 0,
-                  delta,
-                  finish_reason: canonical.choices[0]?.finish_reason || null,
-                }],
-              }
-
-              if (canonical.usage) {
-                streamChunk.usage = canonical.usage
-              }
-
-              this.push(`data: ${JSON.stringify(streamChunk)}\n\n`)
+              if (!emitLine(line)) return
             }
           }
         } catch (err) {

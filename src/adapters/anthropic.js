@@ -28,6 +28,14 @@ export default class AnthropicAdapter extends ProviderAdapter {
     }
   }
 
+  _mapStopReason(stopReason) {
+    if (stopReason === 'end_turn') return 'stop'
+    if (stopReason === 'tool_use') return 'tool_calls'
+    if (stopReason === 'max_tokens') return 'length'
+    if (stopReason === 'stop_sequence') return 'stop'
+    return stopReason || null
+  }
+
   transformRequest(body, provider) {
     const messages = []
     let systemPrompt = null
@@ -45,9 +53,6 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
       if (msg.role === 'tool') {
         const tcId = msg.tool_call_id || ''
-        const fnCall = body.messages
-          ?.flatMap(m => m.tool_calls || [])
-          ?.find(tc => tc.id === tcId)
         const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         messages.push({
           role: 'user',
@@ -95,6 +100,8 @@ export default class AnthropicAdapter extends ProviderAdapter {
       if (body.tool_choice) {
         if (body.tool_choice === 'auto') {
           result.tool_choice = { type: 'auto' }
+        } else if (body.tool_choice === 'none') {
+          result.tool_choice = { type: 'none' }
         } else if (body.tool_choice === 'required' || body.tool_choice === 'any') {
           result.tool_choice = { type: 'any' }
         } else if (typeof body.tool_choice === 'object') {
@@ -132,9 +139,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
         role: 'assistant',
         content: content || null,
       },
-      finish_reason: data.stop_reason === 'end_turn' ? 'stop' :
-                     data.stop_reason === 'tool_use' ? 'tool_calls' :
-                     data.stop_reason || 'stop',
+      finish_reason: this._mapStopReason(data.stop_reason) || 'stop',
     }
 
     if (toolCalls.length > 0) {
@@ -232,9 +237,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
     }
 
     if (data.type === 'message_delta') {
-      const stopReason = data.delta?.stop_reason === 'end_turn' ? 'stop' :
-                         data.delta?.stop_reason === 'tool_use' ? 'tool_calls' :
-                         data.delta?.stop_reason || null
+      const stopReason = this._mapStopReason(data.delta?.stop_reason)
 
       const result = {
         choices: [{
@@ -313,6 +316,8 @@ export default class AnthropicAdapter extends ProviderAdapter {
       err.data = data
       throw err
     }
+
+    await this.assertSseResponse(response)
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()

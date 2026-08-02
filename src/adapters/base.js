@@ -9,31 +9,45 @@ export default class ProviderAdapter {
     return data.error?.message || null
   }
 
-  async chat(provider, requestBody, signal) {
+  async assertSseResponse(response) {
+    const type = (response.headers.get('content-type') || '').toLowerCase()
+    if (!type.includes('application/json')) return
+    if (type.includes('jsonl') || type.includes('ndjson')) return
+
+    let data = null
+    try { data = await response.json() } catch { data = null }
+    const errMsg = ProviderAdapter.extractErrorMsg(data)
+    const err = new Error(errMsg || `Provider returned a non-streaming JSON response (status ${response.status})`)
+    err.status = 502
+    err.data = data
+    throw err
+  }
+
+  async chat(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement chat()`)
   }
 
-  async stream(provider, requestBody, signal) {
+  async stream(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement stream()`)
   }
 
-  async embeddings(provider, requestBody, signal) {
+  async embeddings(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement embeddings()`)
   }
 
-  async models(apiUrl, apiKey) {
+  async models(_apiUrl, _apiKey) {
     throw new Error(`${this.constructor.type} must implement models()`)
   }
 
-  async testConnection(apiUrl, apiKey) {
+  async testConnection(_apiUrl, _apiKey) {
     throw new Error(`${this.constructor.type} must implement testConnection()`)
   }
 
-  buildUrl(baseUrl) {
+  buildUrl(_baseUrl) {
     throw new Error(`${this.constructor.type} must implement buildUrl()`)
   }
 
-  buildHeaders(apiKey) {
+  buildHeaders(_apiKey) {
     throw new Error(`${this.constructor.type} must implement buildHeaders()`)
   }
 }

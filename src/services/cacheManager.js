@@ -1,5 +1,4 @@
 import crypto from 'crypto'
-import { v4 as uuidv4 } from 'uuid'
 import { dbGet, dbRun } from '../db.js'
 import { config } from '../config.js'
 
@@ -7,6 +6,10 @@ const MEM_TTL_MS = 300_000
 const MEM_MAX = 1000
 const memCache = new Map()
 const memOrder = []
+const HIT_QUEUE_BATCH = 200
+const HIT_FLUSH_MS = 1000
+let hitQueue = []
+let hitTimer = null
 
 function memGet(key) {
   const entry = memCache.get(key)
@@ -33,6 +36,30 @@ function memSet(key, data) {
   memOrder.push(key)
 }
 
+function flushHits() {
+  if (hitQueue.length === 0) return
+  const batch = hitQueue
+  hitQueue = []
+  for (const id of batch) {
+    dbRun('UPDATE cache SET hit_count = hit_count + 1 WHERE id = ?', [id])
+  }
+}
+
+function enqueueHit(id) {
+  hitQueue.push(id)
+  if (hitQueue.length >= HIT_QUEUE_BATCH) flushHits()
+}
+
+export function startCacheFlushTimer(intervalMs = HIT_FLUSH_MS) {
+  if (hitTimer) return
+  hitTimer = setInterval(flushHits, intervalMs)
+  if (hitTimer.unref) hitTimer.unref()
+}
+
+export function flushCacheHits() {
+  flushHits()
+}
+
 export function generateHash(body) {
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex')
 }
@@ -40,19 +67,19 @@ export function generateHash(body) {
 export function getCache(queryHash) {
   const fromMem = memGet(queryHash)
   if (fromMem) {
-    dbRun('UPDATE cache SET hit_count = hit_count + 1 WHERE id = ?', [fromMem.id])
+    enqueueHit(fromMem.id)
     return fromMem
   }
 
   const entry = dbGet(
     `SELECT * FROM cache
-     WHERE query_hash = ? AND (expires_at IS NULL OR expires_at > datetime('now'))`,
+     WHERE query_hash = ? AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))`,
     [queryHash]
   )
 
   if (entry) {
     memSet(queryHash, entry)
-    dbRun('UPDATE cache SET hit_count = hit_count + 1 WHERE id = ?', [entry.id])
+    enqueueHit(entry.id)
     return entry
   }
 
@@ -60,7 +87,7 @@ export function getCache(queryHash) {
 }
 
 export function setCache(endpoint, requestBody, responseBody, providerId) {
-  const id = uuidv4()
+  const id = crypto.randomUUID()
   const queryHash = generateHash(requestBody)
   const expiresAt = new Date(Date.now() + config.cache.ttlSeconds * 1000).toISOString()
 
@@ -79,6 +106,6 @@ export function cleanExpiredCache() {
   for (const [key, entry] of memCache) {
     if (now > entry.expiresAt) memCache.delete(key)
   }
-  const result = dbRun("DELETE FROM cache WHERE expires_at < datetime('now')")
+  const result = dbRun("DELETE FROM cache WHERE expires_at IS NOT NULL AND julianday(expires_at) < julianday('now')")
   return result.changes
 }

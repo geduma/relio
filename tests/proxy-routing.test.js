@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 
-let setDbPath, initDb, closeDb, dbRun, dbGet, encrypt
+let setDbPath, initDb, closeDb, dbRun, encrypt
 let FAILOVER_MODEL, parseModelSelector, resolveProvider, stripModel
 let processRequest
 
@@ -12,7 +12,6 @@ beforeAll(async () => {
   initDb = dbMod.initDb
   closeDb = dbMod.closeDb
   dbRun = dbMod.dbRun
-  dbGet = dbMod.dbGet
   encrypt = dbMod.encrypt
 
   setDbPath(':memory:')
@@ -187,6 +186,26 @@ describe('explicit provider errors', () => {
       apiKey: 'k',
       providerId: 'does-not-exist',
     })).rejects.toThrow('Provider not found')
+  })
+})
+
+describe('cache bypass for tool requests', () => {
+  it('does not cache or reuse cached responses when tools/tool_choice are present', async () => {
+    const cacheMod = await import('../src/services/cacheManager.js')
+    const body = {
+      messages: [{ role: 'user', content: 'tool-cache-bypass-1' }],
+      tools: [{ type: 'function', function: { name: 'get_weather', parameters: {} } }],
+      tool_choice: 'auto',
+    }
+    const countCalls = () => calls.filter(c => c.body?.messages?.[0]?.content === 'tool-cache-bypass-1').length
+
+    const before = countCalls()
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    expect(countCalls() - before).toBe(2)
+
+    const hash = cacheMod.generateHash({ _provider: 'pA', ...body })
+    expect(cacheMod.getCache(hash)).toBeNull()
   })
 })
 

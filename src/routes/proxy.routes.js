@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, listModels, parseModelSelector, stripModel, isProviderAvailable, FAILOVER_MODEL } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, listModels, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
-import { recordSuccess } from '../services/circuitBreaker.js'
+import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { pipeline } from 'stream/promises'
 import { normalizeError } from '../utils/logger.js'
+import { config } from '../config.js'
 
 const router = Router()
 
@@ -22,19 +23,29 @@ function selectionProviderId(selection) {
   return selection.mode === 'provider' ? selection.provider.id : null
 }
 
+const MODELS_CACHE_TTL_MS = 60_000
+let modelsCache = null
+let modelsCacheAt = 0
+
 router.get('/models', async (_req, res) => {
   try {
+    if (modelsCache && Date.now() - modelsCacheAt < MODELS_CACHE_TTL_MS) {
+      return res.json(modelsCache)
+    }
+
     const providers = selectProviders('chat')
-    const allModels = []
-    for (const p of providers) {
+    const results = await Promise.all(providers.map(async (p) => {
       try {
-        const models = await listModels(p)
-        allModels.push(...models)
+        return await listModels(p)
       } catch (err) {
         console.warn(`[proxy] Models endpoint failed for ${p.name}: ${err.message}`)
+        return []
       }
-    }
-    res.json({ object: 'list', data: allModels })
+    }))
+
+    modelsCache = { object: 'list', data: results.flat() }
+    modelsCacheAt = Date.now()
+    res.json(modelsCache)
   } catch (err) {
     res.status(503).json(normalizeError(Object.assign(err, { status: 503 })))
   }
@@ -92,7 +103,9 @@ async function handleStreamingRequest(req, res) {
   const startTime = Date.now()
   const controller = new AbortController()
 
-  req.on('close', () => controller.abort())
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
 
   const selection = parseModelSelector(req.body.model, 'chat')
   if (selection.error) {
@@ -100,24 +113,47 @@ async function handleStreamingRequest(req, res) {
     return
   }
 
-  try {
-    let provider
-    if (selection.mode === 'provider') {
-      if (!isProviderAvailable(selection.provider)) {
-        res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
-        return
-      }
-      provider = selection.provider
-    } else {
-      const providers = selectProviders('chat')
-      provider = providers[0]
-    }
-
-    if (!provider) {
-      res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
+  let provider
+  if (selection.mode === 'provider') {
+    if (!isProviderAvailable(selection.provider)) {
+      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
       return
     }
+    provider = selection.provider
+  } else {
+    const providers = selectProviders('chat')
+    for (const p of providers) {
+      if (!isProviderAvailable(p)) continue
+      if (isRateLimitExceeded(p)) continue
+      if (isDailyLimitExceeded(p)) continue
+      provider = p
+      break
+    }
+  }
 
+  if (!provider) {
+    res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
+    return
+  }
+
+  const maxDurationMs = config.relay.streamTimeoutSeconds * 1000
+  const idleMs = config.relay.streamIdleTimeoutMs
+
+  let idleTimer = null
+  const clearIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = null
+  }
+  const resetIdle = () => {
+    clearIdle()
+    idleTimer = setTimeout(() => controller.abort(), idleMs)
+    if (idleTimer.unref) idleTimer.unref()
+  }
+  const durationTimer = setTimeout(() => controller.abort(), maxDurationMs)
+  if (durationTimer.unref) durationTimer.unref()
+
+  try {
+    recordProviderRequest(provider.id)
     const stream = await streamProvider(provider, stripModel(req.body), controller.signal)
 
     res.writeHead(200, {
@@ -127,7 +163,13 @@ async function handleStreamingRequest(req, res) {
       'X-Accel-Buffering': 'no',
     })
 
+    resetIdle()
+    stream.on('data', resetIdle)
+
     await pipeline(stream, res)
+
+    clearIdle()
+    clearTimeout(durationTimer)
 
     recordSuccess(provider.id)
     enqueueLog({
@@ -141,7 +183,24 @@ async function handleStreamingRequest(req, res) {
       responseTimeMs: Date.now() - startTime, cacheHit: false,
     })
   } catch (err) {
+    clearIdle()
+    clearTimeout(durationTimer)
     if (res.headersSent) return
+
+    enqueueLog({
+      providerId: provider.id, endpoint: '/v1/chat/completions', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode: err.status || 503, errorMessage: err.message,
+      responseTimeMs: Date.now() - startTime,
+      authenticatedVia: 'api_key', cacheHit: false, retryCount: 0,
+    })
+    enqueueMetric(provider.id, {
+      error: true, responseTimeMs: Date.now() - startTime,
+    })
+
+    if (isRetryableError(err)) {
+      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+    }
     res.status(err.status || 503).json(normalizeError(err))
   }
 }

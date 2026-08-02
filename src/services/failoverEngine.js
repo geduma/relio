@@ -1,8 +1,59 @@
 import { dbAll, dbGet, decrypt } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
 
+const KEY_CACHE_TTL_MS = 60_000
+const keyCache = new Map()
+
 function decryptProvider(p) {
-  return { ...p, api_key: decrypt(p.api_key) }
+  const cached = keyCache.get(p.id)
+  if (cached && Date.now() < cached.expiresAt) {
+    return { ...p, api_key: cached.key }
+  }
+  const key = decrypt(p.api_key)
+  keyCache.set(p.id, { key, expiresAt: Date.now() + KEY_CACHE_TTL_MS })
+  return { ...p, api_key: key }
+}
+
+export function invalidateProviderCache(id) {
+  if (id) {
+    keyCache.delete(id)
+    for (const k of [...dailyLimitCache.keys()]) {
+      if (k.startsWith(`${id}:`)) dailyLimitCache.delete(k)
+    }
+  } else {
+    keyCache.clear()
+    dailyLimitCache.clear()
+  }
+}
+
+export function clearDailyLimitCache() {
+  dailyLimitCache.clear()
+}
+
+const rateBuckets = new Map()
+const DAILY_LIMIT_CACHE_TTL_MS = 10_000
+const dailyLimitCache = new Map()
+
+function trimBucket(providerId) {
+  const arr = rateBuckets.get(providerId)
+  if (!arr) return null
+  const windowStart = Date.now() - 60_000
+  while (arr.length && arr[0] <= windowStart) arr.shift()
+  if (arr.length === 0) rateBuckets.delete(providerId)
+  return arr
+}
+
+export function recordProviderRequest(providerId) {
+  const arr = rateBuckets.get(providerId) || []
+  rateBuckets.set(providerId, arr)
+  arr.push(Date.now())
+}
+
+export function isRateLimitExceeded(provider) {
+  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
+  const arr = trimBucket(provider.id)
+  if (!arr) return false
+  return arr.length >= provider.rate_limit_req_per_min
 }
 
 export const FAILOVER_MODEL = 'auto'
@@ -52,28 +103,35 @@ export function isProviderAvailable(provider) {
   return true
 }
 
-export function isRateLimitExceeded(provider) {
-  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
-
-  const windowStart = new Date(Date.now() - 60000).toISOString()
-  const count = dbGet(
-    `SELECT COUNT(id) AS cnt FROM requests_log
-     WHERE provider_id = ? AND request_at > ?`,
-    [provider.id, windowStart]
-  ).cnt
-
-  return count >= provider.rate_limit_req_per_min
+export function isRetryableError(err) {
+  if (!err) return false
+  if (err.name === 'AbortError') return true
+  const status = err.status
+  if (!status) return true
+  if (status >= 500) return true
+  if (status === 408 || status === 429) return true
+  return false
 }
 
 export function isDailyLimitExceeded(provider) {
   if (provider.tokens_per_day <= 0) return false
 
   const today = new Date().toISOString().slice(0, 10)
-  const used = dbGet(
-    `SELECT COALESCE(SUM(total_tokens), 0) AS used FROM requests_log
-     WHERE provider_id = ? AND request_at >= ?`,
-    [provider.id, today]
-  ).used
+  const cacheKey = `${provider.id}:${today}`
+  const cached = dailyLimitCache.get(cacheKey)
+  let used
+  if (cached && cached.expiresAt > Date.now()) {
+    used = cached.used
+  } else {
+    used = dbGet(
+      `SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) AS used
+       FROM metrics
+       WHERE provider_id = ? AND metric_date = ?`,
+      [provider.id, today]
+    ).used
+    dailyLimitCache.set(cacheKey, { used, expiresAt: Date.now() + DAILY_LIMIT_CACHE_TTL_MS })
+    if (dailyLimitCache.size > 500) dailyLimitCache.clear()
+  }
 
   return used >= provider.tokens_per_day
 }

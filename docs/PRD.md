@@ -69,36 +69,31 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 ### 3.5 Authentication & API Keys
 | ID | Requirement | Priority |
 |---|---|---|
-| F-19 | Login via Geduma API (3 endpoints: providers, login, user) | P0 |
-| F-20 | Local SQLite sessions (Geduma token is single-use) | P0 |
-| F-21 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
-| F-22 | API Key shown only once at creation | P0 |
-| F-23 | API Key revocation | P0 |
-| F-24 | httpOnly cookie for dashboard session | P0 |
+| F-19 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
+| F-20 | API Key shown only once at creation | P0 |
+| F-21 | API Key revocation | P0 |
 
 ### 3.6 Dashboard
 | ID | Requirement | Priority |
 |---|---|---|
-| F-25 | Login with OAuth providers (Google, GitHub, etc.) | P0 |
-| F-26 | List providers with order and status | P0 |
-| F-27 | Create/edit/delete providers | P0 |
-| F-28 | Reorder providers (Main, Fallback 1, 2...) | P0 |
-| F-29 | View metrics by date range | P0 |
-| F-30 | View recent request logs | P0 |
-| F-31 | Manage API Keys (create, list, revoke) | P0 |
-| F-32 | Health check endpoint | P1 |
-| F-38 | Chat dashboard for interactive provider testing | P1 |
-| F-39 | Dark mode with toggle and localStorage persistence | P2 |
-| F-40 | Provider connection test with API key validation and masked key handling | P1 |
+| F-22 | List providers with order and status | P0 |
+| F-23 | Create/edit/delete providers | P0 |
+| F-24 | Reorder providers (Main, Fallback 1, 2...) | P0 |
+| F-25 | View metrics by date range | P0 |
+| F-26 | View recent request logs | P0 |
+| F-27 | Manage API Keys (create, list, revoke) | P0 |
+| F-28 | Health check endpoint | P1 |
+| F-35 | Chat dashboard for interactive provider testing | P1 |
+| F-36 | Dark mode with toggle and localStorage persistence | P2 |
+| F-37 | Provider connection test with API key validation and masked key handling | P1 |
 
 ### 3.7 Audit & Metrics
 | ID | Requirement | Priority |
 |---|---|---|
-| F-33 | Log every request in `requests_log` | P0 |
-| F-34 | Calculate estimated cost per request | P0 |
-| F-35 | Daily aggregated metrics per provider | P0 |
-| F-36 | Login history in `login_history` | P1 |
-| F-37 | Automatic daily DB backup | P1 |
+| F-29 | Log every request in `requests_log` | P0 |
+| F-30 | Calculate estimated cost per request | P0 |
+| F-31 | Daily aggregated metrics per provider | P0 |
+| F-32 | Automatic daily DB backup | P1 |
 
 ---
 
@@ -113,7 +108,7 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 | NF-05 | Cache retention | 30 days TTL |
 | NF-06 | Metrics retention | 365 days |
 | NF-07 | Availability | No single point of failure (multiple providers) |
-| NF-08 | Security | API keys in plain text in local DB, httpOnly cookies |
+| NF-08 | Security | Provider API keys encrypted at rest (AES-256-GCM); client API keys stored as SHA-256 hashes |
 | NF-09 | Portability | Docker multi-stage, no external dependencies |
 
 ---
@@ -150,20 +145,18 @@ circuitBreaker + metricsLogger + SQLite
 | Database | SQLite (better-sqlite3) | 11.x |
 | Frontend | React + Vite | 18 + 5.x |
 | HTTP Client | Native fetch | Node 18+ |
-| Auth | Geduma API | External |
+| Auth | Local API Keys | Built-in |
 | Testing | Vitest | 1.x |
 | Container | Docker multi-stage | — |
 
 ### 5.3 Database Schema
 
-9 tables:
+7 tables:
 - `providers` — LLM provider configuration
 - `requests_log` — every proxy request
 - `cache` — cached responses by hash
 - `api_keys` — local API keys for AI agents
-- `login_history` — authentication history
 - `circuit_breaker_state` — circuit breaker status
-- `sessions` — dashboard sessions (Geduma token)
 - `metrics` — daily aggregated metrics
 
 ---
@@ -190,21 +183,7 @@ POST /v1/chat/completions
 6. All fail → 503 Service Unavailable
 ```
 
-### 6.2 Login
-
-```
-1. GET /admin/api/auth/providers → list OAuth providers
-2. User clicks "Login with Google"
-3. Redirect to OAuth provider → callback with code
-4. POST /admin/api/auth/login { provider, code }
-5. Backend → Geduma API → token + user info
-6. Create local session → set relio_session cookie
-7. Redirect to /admin/dashboard
-```
-
----
-
-### 6.3 Chat (Dashboard)
+### 6.2 Chat (Dashboard)
 
 ```
 POST /admin/api/chat/send
@@ -221,7 +200,7 @@ POST /admin/api/chat/send
 5. Response includes response_time_ms displayed in each assistant message bubble
 ```
 
-### 6.4 Provider Connection Test
+### 6.3 Provider Connection Test
 
 ```
 POST /admin/api/providers/test-connection
@@ -281,7 +260,6 @@ POST /admin/api/providers/test-connection
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Geduma API dependency | High — no auth without it | Session caching, local auth fallback (future) |
 | SQLite data loss | Medium — log loss | Daily automatic backup |
 | LLM provider outage | Low — automatic failover | Circuit breaker + multiple fallbacks |
 | Compromised API Key | High — unauthorized usage | Immediate revocation from dashboard |

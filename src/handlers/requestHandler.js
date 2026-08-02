@@ -1,21 +1,24 @@
-import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider } from '../services/failoverEngine.js'
+import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, isRetryableError, recordProviderRequest } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { config } from '../config.js'
 
-export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId, forceExposeProvider = false }) {
+export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, providerId, forceExposeProvider = false }) {
   const startTime = Date.now()
 
   const capability = getCapabilityFromBody(requestBody)
+
+  const hasTools = Array.isArray(requestBody.tools) && requestBody.tools.length > 0
+  const cacheable = !hasTools && !requestBody.tool_choice
 
   let lastError = null
   let lastProvider = null
   let retryCount = 0
 
   const cacheKeyBody = providerId ? { _provider: providerId, ...requestBody } : requestBody
-  const queryHash = generateHash(cacheKeyBody)
-  const cached = getCache(queryHash)
+  const queryHash = cacheable ? generateHash(cacheKeyBody) : null
+  const cached = cacheable ? getCache(queryHash) : null
   if (cached) {
     const responseBody = JSON.parse(cached.response_body)
     enqueueLog({
@@ -30,7 +33,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       })
     }
     const provider = cached.provider_id ? getProvider(cached.provider_id) : null
-    const exposeProvider = forceExposeProvider || (config.relay?.exposeProvider ?? true)
+      const exposeProvider = forceExposeProvider || config.relay.exposeProvider
     return {
       statusCode: 200,
       body: provider && exposeProvider
@@ -72,8 +75,9 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 30000)
+      const timeout = setTimeout(() => controller.abort(), config.relay.requestTimeoutMs)
 
+      recordProviderRequest(provider.id)
       const data = await callProvider(provider, requestBody, controller.signal, capability)
       clearTimeout(timeout)
 
@@ -84,7 +88,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
       recordSuccess(provider.id)
-      setCache(endpoint, cacheKeyBody, data, provider.id)
+      if (cacheable) setCache(endpoint, cacheKeyBody, data, provider.id)
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
@@ -98,7 +102,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         responseTimeMs, cacheHit: false,
       })
 
-      const exposeProvider = forceExposeProvider || (config.relay?.exposeProvider ?? true)
+    const exposeProvider = forceExposeProvider || config.relay.exposeProvider
       return {
         statusCode: 200,
         body: exposeProvider
@@ -110,8 +114,6 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       lastProvider = provider
       retryCount++
 
-      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
-
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
         statusCode: err.status || 503, errorMessage: err.message,
@@ -122,6 +124,16 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       enqueueMetric(provider.id, {
         error: true, responseTimeMs: Date.now() - startTime,
       })
+
+      if (!isRetryableError(err)) {
+        const finalErr = new Error(err.message)
+        finalErr.status = err.status || 400
+        finalErr.data = err.data || null
+        finalErr._provider = { id: provider.id, name: provider.name, model: provider.model }
+        throw finalErr
+      }
+
+      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
     }
   }
 

@@ -1,15 +1,12 @@
-import { v4 as uuidv4 } from 'uuid'
-import { dbAll, dbGet, dbRun } from '../db.js'
-import { getAuthProvider } from '../auth/index.js'
+import crypto from 'crypto'
+import { dbAll, dbGet, dbRun, hashApiKey } from '../db.js'
 import { enqueueApiKeyTouch } from './logQueue.js'
 
 const API_KEY_CACHE_TTL = 300_000
-const SESSION_CACHE_TTL = 60_000
 const CACHE_MAX = 500
+const API_KEY_PREFIX = 'llm_pk_'
 const apiKeyCache = new Map()
-const sessionCache = new Map()
 const apiKeyOrder = []
-const sessionOrder = []
 
 function boundedSet(map, order, key, value) {
   if (map.has(key)) {
@@ -24,61 +21,10 @@ function boundedSet(map, order, key, value) {
   order.push(key)
 }
 
-export async function login(credentials) {
-  const provider = await getAuthProvider()
-  return provider.login(credentials)
-}
-
-export async function logout(sessionId) {
-  sessionCache.delete(sessionId)
-  const idx = sessionOrder.indexOf(sessionId)
-  if (idx !== -1) sessionOrder.splice(idx, 1)
-  const provider = await getAuthProvider()
-  return provider.logout(sessionId)
-}
-
-export async function getSession(sessionId) {
-  const cached = sessionCache.get(sessionId)
-  if (cached && Date.now() < cached.expiresAt) return cached.data
-
-  if (cached) {
-    sessionCache.delete(sessionId)
-    const idx = sessionOrder.indexOf(sessionId)
-    if (idx !== -1) sessionOrder.splice(idx, 1)
-  }
-
-  const provider = await getAuthProvider()
-  const session = await provider.getSession(sessionId)
-  if (session) {
-    boundedSet(sessionCache, sessionOrder, sessionId, { data: session, expiresAt: Date.now() + SESSION_CACHE_TTL })
-  }
-  return session || null
-}
-
-export async function getLoginConfig() {
-  const provider = await getAuthProvider()
-  return provider.getLoginConfig()
-}
-
-export async function initiateLogin(credentials) {
-  const provider = await getAuthProvider()
-  return provider.initiateLogin(credentials)
-}
-
-export async function getLoginView() {
-  const provider = await getAuthProvider()
-  return provider.loginView
-}
-
-export async function autoLogin() {
-  const provider = await getAuthProvider()
-  return provider.login({})
-}
-
 export function createApiKey(name) {
-  const key = `llm_pk_${uuidv4().replace(/-/g, '')}${uuidv4().replace(/-/g, '')}`
-  const id = uuidv4()
-  dbRun('INSERT INTO api_keys (id, key, name) VALUES (?, ?, ?)', [id, key, name])
+  const key = `${API_KEY_PREFIX}${crypto.randomBytes(32).toString('hex')}`
+  const id = crypto.randomUUID()
+  dbRun('INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)', [id, hashApiKey(key), key.slice(0, 10), name])
   return key
 }
 
@@ -95,7 +41,7 @@ export function validateApiKey(key) {
     if (idx !== -1) apiKeyOrder.splice(idx, 1)
   }
 
-  const row = dbGet('SELECT * FROM api_keys WHERE key = ?', [key])
+  const row = dbGet('SELECT * FROM api_keys WHERE key_hash = ?', [hashApiKey(key)])
   if (row) {
     boundedSet(apiKeyCache, apiKeyOrder, key, { id: row.id, row, expiresAt: Date.now() + API_KEY_CACHE_TTL })
     enqueueApiKeyTouch(row.id)
@@ -105,7 +51,7 @@ export function validateApiKey(key) {
 
 export function listApiKeys() {
   const rows = dbAll(
-    'SELECT id, substr(key, 1, 10) AS key_prefix, name, created_at, last_used_at FROM api_keys ORDER BY created_at DESC'
+    'SELECT id, key_prefix, name, created_at, last_used_at FROM api_keys ORDER BY created_at DESC'
   )
   return rows.map(r => ({
     id: r.id,

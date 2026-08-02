@@ -49,6 +49,9 @@ export function normalizeError(err) {
   } else if (/timeout|timed out|abort/.test(msg)) {
     type = 'timeout_error'
     code = 'timeout'
+  } else if (status === 400 || /invalid|bad request|malformed|parse error|unexpected token/.test(msg)) {
+    type = 'invalid_request_error'
+    code = 'invalid_request'
   } else if (status >= 500) {
     type = 'server_error'
     code = 'provider_unavailable'
@@ -63,5 +66,4 @@ export const logger = {
   info: (msg, data) => log('info', msg, data),
   warn: (msg, data) => log('warn', msg, data),
   error: (msg, data) => log('error', msg, data),
-  debug: (msg, data) => log('debug', msg, data),
 }

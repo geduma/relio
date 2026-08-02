@@ -1,12 +1,4 @@
 {
-  "auth": {
-    "provider": "none",
-    "trustedProxy": false
-  },
-  "geduma": {
-    "apiUrl": "geduma-api-url",
-    "appId": "app_replace_with_your_app_id"
-  },
   "security": {
     "encryptionKey": "replace-with-a-random-64-char-hex-string"
   },
@@ -19,15 +11,11 @@
   "server": {
     "port": 3000,
     "host": "0.0.0.0",
-    "baseUrl": "http://localhost:3000",
-    "nodeEnv": "development"
-  },
-  "cookie": {
-    "secure": false,
-    "sameSite": "strict",
-    "httpOnly": true
+    "nodeEnv": "development",
+    "trustedProxy": false
   },
   "relay": {
-    "exposeProvider": false
+    "exposeProvider": false,
+    "requestTimeoutMs": 30000
   }
 }

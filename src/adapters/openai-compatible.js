@@ -102,6 +102,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
       throw err
     }
 
+    await this.assertSseResponse(response)
     return Readable.fromWeb(response.body)
   }
 

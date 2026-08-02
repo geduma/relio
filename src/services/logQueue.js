@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid'
+import crypto from 'crypto'
 import { getDb } from '../db.js'
 
 const MAX_BATCH = 500
@@ -34,7 +34,7 @@ function flush() {
            response_time_ms, authenticated_via, cache_hit, was_retry, retry_count, request_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
-          uuidv4(), d.providerId, d.endpoint,
+          crypto.randomUUID(), d.providerId, d.endpoint,
           JSON.stringify(d.requestBody), d.originIp, d.originHeader,
           d.statusCode, d.responseBody ? JSON.stringify(d.responseBody) : null, d.errorMessage,
           d.inputTokens || 0, d.outputTokens || 0, totalTokens, d.estimatedCost || 0,
@@ -64,7 +64,7 @@ function flush() {
             total_cost = total_cost + ?,
             error_count = error_count + ?,
             cache_hits = cache_hits + ?,
-            avg_response_time_ms = (avg_response_time_ms * (total_requests - 1) + ?) / total_requests`
+            avg_response_time_ms = (avg_response_time_ms * total_requests + ?) / (total_requests + 1)`
         ).run(
           id, providerId, today,
           inputTokens, outputTokens, cost,
@@ -108,11 +108,4 @@ export function startFlushTimer(intervalMs = 1000) {
   if (flushTimer) return
   flushTimer = setInterval(flush, intervalMs)
   if (flushTimer.unref) flushTimer.unref()
-}
-
-export function stopFlushTimer() {
-  if (flushTimer) {
-    clearInterval(flushTimer)
-    flushTimer = null
-  }
 }

@@ -1,19 +1,19 @@
 import express from 'express'
 import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
-import cookieParser from 'cookie-parser'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
+import crypto from 'crypto'
+import fs from 'fs'
 import path from 'path'
 import cron from 'node-cron'
 import { fileURLToPath } from 'url'
 import { initDb } from './db.js'
 import { runMaintenance, recoverCooldowns } from './maintenance.js'
-import { requireDashboardSession } from './middleware/authMiddleware.js'
 import { getSummary } from './handlers/dashboardHandler.js'
 import { config } from './config.js'
 import { logger, normalizeError } from './utils/logger.js'
 import { startFlushTimer, flushAll } from './services/logQueue.js'
+import { startCacheFlushTimer, flushCacheHits } from './services/cacheManager.js'
 
-import authRoutes from './routes/auth.routes.js'
 import providersRoutes from './routes/providers.routes.js'
 import metricsRoutes from './routes/metrics.routes.js'
 import keysRoutes from './routes/keys.routes.js'
@@ -26,7 +26,7 @@ const app = express()
 const PORT = config.server.port
 const HOST = config.server.host
 
-app.set('trust proxy', 1)
+app.set('trust proxy', config.server.trustedProxy ? 1 : false)
 app.use(helmet({
   crossOriginOpenerPolicy: false,
   originAgentCluster: false,
@@ -42,37 +42,37 @@ app.use(helmet({
   },
 }))
 app.use(express.json({ limit: '10mb' }))
-app.use(cookieParser())
 
 const rateLimitError = (message) => ({
   error: { message, type: 'rate_limit_error', code: 'rate_limit' },
 })
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: rateLimitError('Too many attempts, try again later'),
-})
+const proxyKeyGenerator = (req) => {
+  const auth = req.headers.authorization || ''
+  const ip = ipKeyGenerator(req.ip || 'unknown')
+  if (auth.startsWith('Bearer ')) {
+    return crypto.createHash('sha256').update(auth.slice(7) + '|' + ip).digest('hex').slice(0, 32)
+  }
+  return `ip:${ip}`
+}
 
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: config.rateLimit.proxyPerMinute,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: proxyKeyGenerator,
   message: rateLimitError('Too many requests, try again later'),
 })
 
 const dashboardLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 120,
+  max: config.rateLimit.dashboardPerMinute,
   standardHeaders: true,
   legacyHeaders: false,
   message: rateLimitError('Too many requests, try again later'),
 })
 
-app.use('/admin/api/auth', authLimiter, authRoutes)
 app.use('/v1', apiLimiter, proxyRoutes)
 
 initDb()
@@ -82,23 +82,37 @@ cron.schedule('0 * * * *', recoverCooldowns)
 
 app.use('/admin/api/providers', dashboardLimiter, providersRoutes)
 app.use('/admin/api/metrics', dashboardLimiter, metricsRoutes)
-app.use('/admin/api/auth/api-keys', dashboardLimiter, keysRoutes)
+app.use('/admin/api/keys', dashboardLimiter, keysRoutes)
 app.use('/admin/api/chat', dashboardLimiter, chatRoutes)
 
-app.get('/admin/api/summary', dashboardLimiter, requireDashboardSession, (req, res) => {
+app.get('/admin/api/summary', dashboardLimiter, (req, res) => {
   const summary = getSummary()
   res.json(summary)
 })
 
 const frontendDist = path.join(__dirname, '../frontend/dist')
+if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
+  logger.error('frontend/dist/index.html not found — the /admin dashboard will not be served. Run "npm run build" (after installing frontend dependencies) or use "npm run dev".')
+}
 app.use(express.static(frontendDist))
-app.get(['/admin', '/admin/*'], (_, res) => {
-  res.sendFile(path.join(frontendDist, 'index.html'))
+app.get(['/admin', '/admin/*'], (req, res) => {
+  const indexHtml = path.join(frontendDist, 'index.html')
+  if (!fs.existsSync(indexHtml)) {
+    return res.status(503).json({
+      error: { message: 'Dashboard not built. Run `npm run build` (after installing frontend dependencies) and restart the server.', type: 'server_error', code: 'dashboard_missing' },
+    })
+  }
+  res.sendFile(indexHtml)
 })
 
 app.use((err, _req, res, _next) => {
   logger.error('Unhandled error', { error: err.message })
-  res.status(500).json(normalizeError(Object.assign(err, { status: 500, message: 'Internal server error' })))
+  const rawStatus = err.status || err.statusCode || 500
+  const status = rawStatus >= 400 && rawStatus < 500 ? rawStatus : 500
+  res.status(status).json(normalizeError(Object.assign(err, {
+    status,
+    message: status < 500 ? err.message : 'Internal server error',
+  })))
 })
 
 app.use((_req, res) => {
@@ -107,12 +121,14 @@ app.use((_req, res) => {
 
 const server = app.listen(PORT, HOST, () => {
   startFlushTimer()
+  startCacheFlushTimer()
   logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
 
 function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`)
   cron.getTasks().forEach(t => t.stop())
+  flushCacheHits()
   flushAll()
   server.close(() => {
     logger.info('Server closed')
@@ -123,5 +139,11 @@ function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { error: err.message, stack: err.stack })
+})
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection', { error: reason?.message || String(reason), stack: reason?.stack })
+})
 
 export default app

@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
+
+function parseDate(dateStr) {
+  if (!dateStr) return null
+  if (dateStr.endsWith('Z') || dateStr.includes('+') || dateStr.includes('T')) {
+    return new Date(dateStr)
+  }
+  return new Date(dateStr.replace(' ', 'T') + 'Z')
+}
 
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
@@ -7,37 +16,50 @@ export default function ApiKeys() {
   const [newKey, setNewKey] = useState(null)
   const [revokeTarget, setRevokeTarget] = useState(null) // { id, name }
   const toast = useToast()
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(keys)
 
   useEffect(() => {
-    fetch('/admin/api/auth/api-keys')
-      .then(r => r.json())
+    fetch('/admin/api/keys')
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load keys (${r.status})`)
+        return r.json()
+      })
       .then(setKeys)
+      .catch(err => toast(errorMessage(err), 'error'))
   }, [])
 
   async function handleCreate(e) {
     e.preventDefault()
-    const res = await fetch('/admin/api/auth/api-keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (!res.ok) {
+    try {
+      const res = await fetch('/admin/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
       const data = await res.json().catch(() => ({}))
-      toast(errorMessage(data.error || 'Failed to create key'), 'error')
-      return
+      if (!res.ok) {
+        toast(errorMessage(data.error || 'Failed to create key'), 'error')
+        return
+      }
+      setNewKey(data.apiKey)
+      setName('')
+      const updated = await fetch('/admin/api/keys')
+      if (!updated.ok) throw new Error(`Failed to reload keys (${updated.status})`)
+      setKeys(await updated.json())
+      toast('API key created', 'success')
+    } catch (err) {
+      toast(errorMessage(err), 'error')
     }
-    const data = await res.json()
-    setNewKey(data.apiKey)
-    setName('')
-    const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
-    setKeys(updated)
-    toast('API key created', 'success')
   }
 
   async function handleRevoke(id) {
-    await fetch(`/admin/api/auth/api-keys/${id}`, { method: 'DELETE' })
-    const updated = await fetch('/admin/api/auth/api-keys').then(r => r.json())
-    setKeys(updated)
+    const res = await fetch(`/admin/api/keys/${id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast(errorMessage(data.error || 'Failed to revoke key'), 'error')
+      return
+    }
+    setKeys(prev => prev.filter(k => k.id !== id))
     toast('API key revoked', 'success')
   }
 
@@ -47,7 +69,7 @@ export default function ApiKeys() {
 
       {newKey && (
         <div className="alert alert-warning">
-          <strong>Save this key — it won't be shown again:</strong>
+          <strong>Save this key {`\u2014`} it won&apos;t be shown again:</strong>
           <code>{newKey}</code>
           <button className="btn btn-sm" onClick={() => setNewKey(null)}>Dismiss</button>
         </div>
@@ -74,12 +96,12 @@ export default function ApiKeys() {
           </tr>
         </thead>
         <tbody>
-          {keys.map(k => (
+          {pageRows.map(k => (
             <tr key={k.id}>
               <td>{k.name}</td>
               <td><code>{k.key_preview}</code></td>
-              <td>{new Date(k.created_at).toLocaleDateString()}</td>
-              <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : '-'}</td>
+              <td>{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
+              <td>{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
               <td>
                 <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k)}>
                   Revoke
@@ -89,6 +111,14 @@ export default function ApiKeys() {
           ))}
         </tbody>
       </table></div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={keys.length}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
 
       {revokeTarget && (
         <div className="modal-overlay" onClick={() => setRevokeTarget(null)}>

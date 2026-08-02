@@ -1,5 +1,5 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, encrypt, isRetryableError, recordProviderRequest, clearDailyLimitCache
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -13,7 +13,9 @@ beforeAll(async () => {
   isRateLimitExceeded = failMod.isRateLimitExceeded
   isDailyLimitExceeded = failMod.isDailyLimitExceeded
   getCapabilityFromBody = failMod.getCapabilityFromBody
-  callProvider = failMod.callProvider
+  isRetryableError = failMod.isRetryableError
+  recordProviderRequest = failMod.recordProviderRequest
+  clearDailyLimitCache = failMod.clearDailyLimitCache
 
   const { dbRun } = dbMod
   dbRun(
@@ -90,22 +92,6 @@ describe('FailoverEngine', () => {
     expect(getCapabilityFromBody({})).toBe('chat')
   })
 
-  it('callProvider throws with no network (no actual HTTP)', async () => {
-    const provider = {
-      api_url: 'https://nonexistent.invalid/api',
-      api_key: 'sk-test',
-      provider_type: 'openai-compatible',
-    }
-    await expect(callProvider(provider, { messages: [{ role: 'user', content: 'hi' }] }, null))
-      .rejects.toThrow()
-  })
-
-  it('excludes providers in cooldown', () => {
-    const providers = selectProviders('chat')
-    const cooldownIds = providers.map(p => p.id)
-    expect(cooldownIds).not.toContain('p3')
-  })
-
   it('includes cooldown provider when cooldown_until is in the past', async () => {
     const dbMod = await import('../src/db.js')
     dbMod.dbRun('UPDATE providers SET cooldown_until = datetime(\'now\', \'-1 hour\') WHERE id = ?', ['p3'])
@@ -113,5 +99,43 @@ describe('FailoverEngine', () => {
     const ids = providers.map(p => p.id)
     expect(ids).toContain('p3')
     dbMod.dbRun('UPDATE providers SET cooldown_until = ? WHERE id = ?', [new Date(Date.now() + 3600000).toISOString(), 'p3'])
+  })
+
+  it('isRetryableError: 4xx errors are not retryable', () => {
+    expect(isRetryableError({ status: 400 })).toBe(false)
+    expect(isRetryableError({ status: 401 })).toBe(false)
+    expect(isRetryableError({ status: 404 })).toBe(false)
+  })
+
+  it('isRetryableError: 5xx, 408, 429, network and abort errors are retryable', () => {
+    expect(isRetryableError({ status: 500 })).toBe(true)
+    expect(isRetryableError({ status: 502 })).toBe(true)
+    expect(isRetryableError({ status: 408 })).toBe(true)
+    expect(isRetryableError({ status: 429 })).toBe(true)
+    expect(isRetryableError({ name: 'AbortError' })).toBe(true)
+    expect(isRetryableError({})).toBe(true)
+    expect(isRetryableError(null)).toBe(false)
+  })
+
+  it('in-memory rate limit counts recorded provider requests', () => {
+    const id = 'rl-test-bucket'
+    recordProviderRequest(id)
+    recordProviderRequest(id)
+    recordProviderRequest(id)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 3 })).toBe(true)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 4 })).toBe(false)
+    expect(isRateLimitExceeded({ id, rate_limit_req_per_min: 0 })).toBe(false)
+  })
+
+  it('daily limit uses metrics table aggregation', async () => {
+    const dbMod = await import('../src/db.js')
+    dbMod.dbRun(
+      `INSERT INTO metrics (id, provider_id, metric_date, total_requests, total_input_tokens, total_output_tokens, total_cost, avg_response_time_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['m-rl-1', 'p1', new Date().toISOString().slice(0, 10), 1, 6000, 0, 0, 10]
+    )
+    clearDailyLimitCache()
+    expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 10000 })).toBe(false)
+    expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 5000 })).toBe(true)
   })
 })

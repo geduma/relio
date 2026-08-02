@@ -1,11 +1,10 @@
 
-let initDb, getDb, closeDb, dbAll, dbGet, dbRun
+let initDb, closeDb, dbAll, dbGet, dbRun
 
 beforeAll(async () => {
   const mod = await import('../src/db.js')
   mod.setDbPath(':memory:')
   initDb = mod.initDb
-  getDb = mod.getDb
   closeDb = mod.closeDb
   dbAll = mod.dbAll
   dbGet = mod.dbGet
@@ -25,10 +24,10 @@ describe('Database', () => {
     expect(names).toContain('requests_log')
     expect(names).toContain('cache')
     expect(names).toContain('api_keys')
-    expect(names).toContain('login_history')
     expect(names).toContain('circuit_breaker_state')
-    expect(names).toContain('sessions')
     expect(names).toContain('metrics')
+    expect(names).not.toContain('sessions')
+    expect(names).not.toContain('login_history')
   })
 
   it('has provider_type and capability columns', () => {

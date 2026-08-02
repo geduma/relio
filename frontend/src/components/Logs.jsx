@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import Pagination from './Pagination.jsx'
 
 function parseDate(dateStr) {
   if (!dateStr) return new Date()
@@ -11,33 +12,44 @@ function parseDate(dateStr) {
 function formatLogLine(log) {
   const time = parseDate(log.request_at).toLocaleString()
   const tokens = (log.input_tokens || 0) + (log.output_tokens || 0)
-  const provider = log.provider_id ? log.provider_id.slice(0, 8) : '-'
+  const provider = (log.provider_id || '-').slice(0, 8)
   const cache = log.cache_hit ? 'HIT' : 'MISS'
   const error = log.error_message || '-'
-  return `${time}  ${log.endpoint.padEnd(30)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(tokens).padStart(5)} tok  ${cache.padEnd(4)}  ${provider.slice(0, 8).padEnd(8)}  ${error}`
+  return `${time}  ${log.endpoint.padEnd(30)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(tokens).padStart(5)} tok  ${cache.padEnd(4)}  ${provider.padEnd(8)}  ${error}`
 }
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [view, setView] = useState('table')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   useEffect(() => {
-    fetch('/admin/api/metrics/logs?limit=100')
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    fetch(`/admin/api/metrics/logs?limit=${pageSize}&offset=${(page - 1) * pageSize}`)
       .then(r => {
         if (!r.ok) throw new Error('Failed to load logs')
         return r.json()
       })
       .then(data => {
-        if (Array.isArray(data)) setLogs(data)
+        if (cancelled) return
+        setLogs(data.logs)
+        setTotal(data.total)
         setLoading(false)
       })
       .catch(e => {
+        if (cancelled) return
         setError(e.message)
         setLoading(false)
       })
-  }, [])
+    return () => { cancelled = true }
+  }, [page, pageSize])
 
   function exportTxt() {
     const header = 'Time                          Endpoint                       Status  Time      Tokens   Cache  Provider   Error'
@@ -48,7 +60,9 @@ export default function Logs() {
     const a = document.createElement('a')
     a.href = url
     a.download = `relio-logs-${new Date().toISOString().slice(0, 10)}.txt`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
   }
 
@@ -70,7 +84,7 @@ export default function Logs() {
     )
   }
 
-  if (logs.length === 0) {
+  if (total === 0) {
     return (
       <div>
         <h2>Request Logs</h2>
@@ -100,34 +114,44 @@ export default function Logs() {
       </div>
 
       {view === 'table' ? (
-        <div className="table-wrapper"><table className="table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Endpoint</th>
-              <th>Provider</th>
-              <th>Status</th>
-              <th>Tokens</th>
-              <th>Time (ms)</th>
-              <th>Cache</th>
-              <th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map(log => (
-              <tr key={log.id}>
-                <td>{parseDate(log.request_at).toLocaleString()}</td>
-                <td><code>{log.endpoint}</code></td>
-                <td>{log.provider_id?.slice(0, 8) || '-'}</td>
-                <td><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>
-                <td>{(log.input_tokens || 0) + (log.output_tokens || 0)}</td>
-                <td>{log.response_time_ms}</td>
-                <td>{log.cache_hit ? 'HIT' : 'MISS'}</td>
-                <td className="error-cell">{log.error_message || '-'}</td>
+        <>
+          <div className="table-wrapper"><table className="table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Endpoint</th>
+                <th>Provider</th>
+                <th>Status</th>
+                <th>Tokens</th>
+                <th>Time (ms)</th>
+                <th>Cache</th>
+                <th>Error</th>
               </tr>
-            ))}
-          </tbody>
-        </table></div>
+            </thead>
+            <tbody>
+              {logs.map(log => (
+                <tr key={log.id}>
+                  <td>{parseDate(log.request_at).toLocaleString()}</td>
+                  <td><code>{log.endpoint}</code></td>
+                  <td>{log.provider_id?.slice(0, 8) || '-'}</td>
+                  <td><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>
+                  <td>{(log.input_tokens || 0) + (log.output_tokens || 0)}</td>
+                  <td>{log.response_time_ms}</td>
+                  <td>{log.cache_hit ? 'HIT' : 'MISS'}</td>
+                  <td className="error-cell">{log.error_message || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </>
       ) : (
         <div>
           <textarea

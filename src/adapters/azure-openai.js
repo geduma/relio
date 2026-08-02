@@ -97,6 +97,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       throw err
     }
 
+    await this.assertSseResponse(response)
     return Readable.fromWeb(response.body)
   }
 

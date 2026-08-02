@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 export default function Metrics() {
   const [metrics, setMetrics] = useState(null)
+  const [error, setError] = useState(null)
   const [from, setFrom] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 7)
     return d.toISOString().slice(0, 10)
   })
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const providers = metrics?.providers || []
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
 
   useEffect(() => {
-    fetch(`/admin/api/metrics?from=${from}&to=${to}`)
-      .then(r => r.json())
+    setError(null)
+    const controller = new AbortController()
+    fetch(`/admin/api/metrics?from=${from}&to=${to}`, { signal: controller.signal })
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to load metrics (${r.status})`)
+        return r.json()
+      })
       .then(setMetrics)
+      .catch(err => { if (err.name !== 'AbortError') setError(err.message) })
+    return () => controller.abort()
   }, [from, to])
 
   return (
@@ -22,6 +33,8 @@ export default function Metrics() {
         <label>From <input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
         <label>To <input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
       </div>
+      {error && <p className="empty-state empty-state--error">{error}</p>}
+      {!metrics && !error && <p className="empty-state">Loading metrics...</p>}
       {metrics && (
         <>
           {metrics.totals && (
@@ -66,7 +79,7 @@ export default function Metrics() {
               </tr>
             </thead>
             <tbody>
-              {metrics.providers?.map(p => (
+              {pageRows.map(p => (
                 <tr key={p.provider_id}>
                   <td>{p.provider_name}</td>
                   <td>{p.total_requests}</td>
@@ -80,6 +93,14 @@ export default function Metrics() {
               ))}
             </tbody>
           </table></div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={providers.length}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
     </div>
