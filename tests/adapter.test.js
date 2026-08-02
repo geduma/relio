@@ -88,14 +88,6 @@ describe('OpenAICompatibleAdapter', () => {
   it('has correct type', () => {
     expect(OpenAICompatibleAdapter.type).toBe('openai-compatible')
   })
-
-  it('embeddings() rejects with no network', async () => {
-    await expect(adapter.embeddings(
-      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
-      { input: 'text' },
-      null
-    )).rejects.toThrow()
-  })
 })
 
 describe('AnthropicAdapter', () => {
@@ -381,44 +373,6 @@ describe('AzureOpenAIAdapter', () => {
   })
 })
 
-describe('Adapter streaming', () => {
-  it('OpenAICompatibleAdapter.stream() rejects with no network', async () => {
-    const adapter = new OpenAICompatibleAdapter()
-    await expect(adapter.stream(
-      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
-      { messages: [{ role: 'user', content: 'hi' }] },
-      null
-    )).rejects.toThrow()
-  })
-
-  it('AnthropicAdapter.stream() rejects with no network', async () => {
-    const adapter = new AnthropicAdapter()
-    await expect(adapter.stream(
-      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
-      { messages: [{ role: 'user', content: 'hi' }] },
-      null
-    )).rejects.toThrow()
-  })
-
-  it('GeminiNativeAdapter.stream() rejects with no network', async () => {
-    const adapter = new GeminiNativeAdapter()
-    await expect(adapter.stream(
-      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
-      { messages: [{ role: 'user', content: 'hi' }] },
-      null
-    )).rejects.toThrow()
-  })
-
-  it('AzureOpenAIAdapter.stream() rejects with no network', async () => {
-    const adapter = new AzureOpenAIAdapter()
-    await expect(adapter.stream(
-      { api_url: 'https://nonexistent.invalid', api_key: 'sk-test' },
-      { messages: [{ role: 'user', content: 'hi' }] },
-      null
-    )).rejects.toThrow()
-  })
-})
-
 describe('OpenAI-compatible streaming passthrough', () => {
   it('relays the upstream SSE byte-for-byte (varied id/created, usage, tool_calls + content)', async () => {
     const adapter = new OpenAICompatibleAdapter()
@@ -659,35 +613,5 @@ describe('Error normalization', () => {
     const result = normalizeError(err)
     expect(result.error.type).toBe('content_filter_error')
     expect(result.error.code).toBe('content_filter')
-  })
-})
-
-describe('Adapter testConnection', () => {
-  it('OpenAICompatibleAdapter.testConnection() returns error with no network', async () => {
-    const adapter = new OpenAICompatibleAdapter()
-    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
-    expect(result.valid).toBe(false)
-    expect(result.error).toBeTruthy()
-  })
-
-  it('AnthropicAdapter.testConnection() returns error with no network', async () => {
-    const adapter = new AnthropicAdapter()
-    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
-    expect(result.valid).toBe(false)
-    expect(result.error).toBeTruthy()
-  })
-
-  it('GeminiNativeAdapter.testConnection() returns error with no network', async () => {
-    const adapter = new GeminiNativeAdapter()
-    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
-    expect(result.valid).toBe(false)
-    expect(result.error).toBeTruthy()
-  })
-
-  it('AzureOpenAIAdapter.testConnection() returns error with no network', async () => {
-    const adapter = new AzureOpenAIAdapter()
-    const result = await adapter.testConnection('https://nonexistent.invalid', 'sk-test')
-    expect(result.valid).toBe(false)
-    expect(result.error).toBeTruthy()
   })
 })

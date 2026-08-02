@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
 
-function msgLabel(msg, providers) {
+function msgLabel(msg) {
   if (msg.role === 'user') return 'You'
   if (msg._providerName) return msg._providerName
   return 'Assistant'
@@ -123,7 +123,7 @@ export default function Chat() {
         {messages.map((msg, i) => (
           <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
             <div className="chat-msg-role">
-              {msgLabel(msg, providers)}
+              {msgLabel(msg)}
               {msg.responseTimeMs != null && <span className="chat-msg-time">{msg.responseTimeMs}ms</span>}
             </div>
             <div className="chat-msg-content">{msg.content}</div>

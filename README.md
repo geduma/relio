@@ -67,7 +67,6 @@ All settings are in `config.json` at the project root. Copy `config.example.json
   "server": {
     "port": 3000,
     "host": "0.0.0.0",
-    "baseUrl": "http://localhost:3000",
     "nodeEnv": "development",
     "trustedProxy": false
   }
@@ -81,7 +80,6 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port (overridable via `PORT` env) |
 | `server.host` | Server host (overridable via `HOST` env) |
-| `server.baseUrl` | Public URL |
 | `server.nodeEnv` | `development` or `production` (overridable via `NODE_ENV` env) |
 | `server.trustedProxy` | `false` (default). Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
 | `relay.exposeProvider` | `false` (default) — includes `_provider` in proxy responses. Set to `true` to expose resolved provider metadata |

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { v4 as uuidv4 } from 'uuid'
-import { dbAll, dbGet, dbRun, getDb, encrypt, decrypt } from '../db.js'
+import { dbAll, dbGet, dbRun, getDb, encrypt } from '../db.js'
 import { getProvider, invalidateProviderCache } from '../services/failoverEngine.js'
 import { getAdapter } from '../adapters/index.js'
 import { logger } from '../utils/logger.js'

@@ -61,13 +61,6 @@ export function flushCacheHits() {
   flushHits()
 }
 
-export function stopCacheFlushTimer() {
-  if (hitTimer) {
-    clearInterval(hitTimer)
-    hitTimer = null
-  }
-}
-
 export function generateHash(body) {
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex')
 }

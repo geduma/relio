@@ -42,10 +42,6 @@ export function setDbPath(path) {
   _overrideDbPath = path
 }
 
-export function resetDbPath() {
-  _overrideDbPath = undefined
-}
-
 function resolveDbPath() {
   if (_overrideDbPath) return _overrideDbPath
   const raw = config.db.path

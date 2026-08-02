@@ -109,10 +109,3 @@ export function startFlushTimer(intervalMs = 1000) {
   flushTimer = setInterval(flush, intervalMs)
   if (flushTimer.unref) flushTimer.unref()
 }
-
-export function stopFlushTimer() {
-  if (flushTimer) {
-    clearInterval(flushTimer)
-    flushTimer = null
-  }
-}

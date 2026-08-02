@@ -625,7 +625,6 @@ All configuration lives in `config.json` at the project root. Copy `config.examp
 | `security.encryptionKey` | string | auto-derived | AES-256-GCM key for API key encryption at rest |
 | `server.port` | number | `3000` | Server port |
 | `server.host` | string | `0.0.0.0` | Server host |
-| `server.baseUrl` | string | `http://localhost:3000` | Public URL |
 | `server.nodeEnv` | string | `development` | `development` or `production` |
 | `server.trustedProxy` | boolean | `false` | Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
 | `relay.exposeProvider` | boolean | `false` | Include `_provider` metadata in proxy responses |

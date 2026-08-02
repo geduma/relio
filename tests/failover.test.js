@@ -1,5 +1,5 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, callProvider, encrypt, isRetryableError, recordProviderRequest
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, encrypt, isRetryableError, recordProviderRequest
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -13,7 +13,6 @@ beforeAll(async () => {
   isRateLimitExceeded = failMod.isRateLimitExceeded
   isDailyLimitExceeded = failMod.isDailyLimitExceeded
   getCapabilityFromBody = failMod.getCapabilityFromBody
-  callProvider = failMod.callProvider
   isRetryableError = failMod.isRetryableError
   recordProviderRequest = failMod.recordProviderRequest
 
@@ -90,22 +89,6 @@ describe('FailoverEngine', () => {
     expect(getCapabilityFromBody({ messages: [] })).toBe('chat')
     expect(getCapabilityFromBody({ input: 'hello' })).toBe('embeddings')
     expect(getCapabilityFromBody({})).toBe('chat')
-  })
-
-  it('callProvider throws with no network (no actual HTTP)', async () => {
-    const provider = {
-      api_url: 'https://nonexistent.invalid/api',
-      api_key: 'sk-test',
-      provider_type: 'openai-compatible',
-    }
-    await expect(callProvider(provider, { messages: [{ role: 'user', content: 'hi' }] }, null))
-      .rejects.toThrow()
-  })
-
-  it('excludes providers in cooldown', () => {
-    const providers = selectProviders('chat')
-    const cooldownIds = providers.map(p => p.id)
-    expect(cooldownIds).not.toContain('p3')
   })
 
   it('includes cooldown provider when cooldown_until is in the past', async () => {

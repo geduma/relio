@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { dbGet, dbAll } from '../db.js'
+import { dbAll } from '../db.js'
 import { callProvider, getProvider } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
