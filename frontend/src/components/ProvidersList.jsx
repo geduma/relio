@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast, errorMessage } from './Toast.jsx'
-import Pagination, { usePagination, FillerRows } from './Pagination.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 const TYPE_LABELS = {
   'openai-compatible': 'OpenAI Compatible',
@@ -163,7 +163,6 @@ export default function ProvidersList() {
               )
             })()
           ))}
-          <FillerRows rows={pageRows} pageSize={pageSize} colSpan={7} />
         </tbody>
       </table></div>
       <Pagination

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import Pagination, { usePagination, FillerRows } from './Pagination.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 export default function Metrics() {
   const [metrics, setMetrics] = useState(null)
@@ -91,7 +91,6 @@ export default function Metrics() {
                   <td>{Math.round(p.avg_response_time_ms)}</td>
                 </tr>
               ))}
-              <FillerRows rows={pageRows} pageSize={pageSize} colSpan={8} />
             </tbody>
           </table></div>
           <Pagination

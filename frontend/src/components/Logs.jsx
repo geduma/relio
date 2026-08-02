@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import Pagination, { FillerRows } from './Pagination.jsx'
+import Pagination from './Pagination.jsx'
 
 function parseDate(dateStr) {
   if (!dateStr) return new Date()
@@ -141,7 +141,6 @@ export default function Logs() {
                   <td className="error-cell">{log.error_message || '-'}</td>
                 </tr>
               ))}
-              <FillerRows rows={logs} pageSize={pageSize} colSpan={8} />
             </tbody>
           </table></div>
           <Pagination
