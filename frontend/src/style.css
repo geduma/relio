@@ -150,11 +150,12 @@ body {
 .mobile-topbar { display: none; }
 
 /* Table */
-.table-wrapper { overflow: auto; max-height: min(60vh, 480px); }
+.table-wrapper { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; background: var(--bg-surface); border-radius: 8px; overflow: hidden; }
 .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-light); }
 .table th { background: var(--bg-elevated); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); position: sticky; top: 0; }
 .table tr:hover { background: var(--bg-elevated); }
+.table tr.row-empty:hover { background: transparent; }
 .row-paused { opacity: 0.55; }
 .actions-cell { display: flex; gap: 0.5rem; }
 

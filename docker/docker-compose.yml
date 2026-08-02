@@ -1,8 +1,8 @@
 name: relio-app
-container_name: relio-app
 
 services:
   relio:
+    container_name: relio-app
     build:
       context: ..
       dockerfile: docker/Dockerfile
