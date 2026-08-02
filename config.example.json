@@ -16,6 +16,7 @@
     "trustedProxy": false
   },
   "relay": {
-    "exposeProvider": false
+    "exposeProvider": false,
+    "requestTimeoutMs": 30000
   }
 }

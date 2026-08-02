@@ -87,6 +87,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `relay.exposeProvider` | `false` (default) — includes `_provider` in proxy responses. Set to `true` to expose resolved provider metadata |
 | `relay.streamTimeoutSeconds` | Max duration for streaming requests (default `300`) |
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
+| `relay.requestTimeoutMs` | Max duration for non-streaming requests (default `30000`) |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `60`) |
 

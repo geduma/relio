@@ -31,6 +31,7 @@ function loadConfig() {
   cfg.relay.exposeProvider ??= false
   cfg.relay.streamTimeoutSeconds ??= 300
   cfg.relay.streamIdleTimeoutMs ??= 30000
+  cfg.relay.requestTimeoutMs ??= 30000
 
   cfg.rateLimit ??= {}
   cfg.rateLimit.proxyPerMinute ??= 60

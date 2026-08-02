@@ -97,7 +97,12 @@ app.get(['/admin', '/admin/*'], (_, res) => {
 
 app.use((err, _req, res, _next) => {
   logger.error('Unhandled error', { error: err.message })
-  res.status(500).json(normalizeError(Object.assign(err, { status: 500, message: 'Internal server error' })))
+  const rawStatus = err.status || err.statusCode || 500
+  const status = rawStatus >= 400 && rawStatus < 500 ? rawStatus : 500
+  res.status(status).json(normalizeError(Object.assign(err, {
+    status,
+    message: status < 500 ? err.message : 'Internal server error',
+  })))
 })
 
 app.use((_req, res) => {

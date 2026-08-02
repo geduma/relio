@@ -103,7 +103,9 @@ async function handleStreamingRequest(req, res) {
   const startTime = Date.now()
   const controller = new AbortController()
 
-  req.on('close', () => controller.abort())
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
 
   const selection = parseModelSelector(req.body.model, 'chat')
   if (selection.error) {

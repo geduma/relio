@@ -9,6 +9,20 @@ export default class ProviderAdapter {
     return data.error?.message || null
   }
 
+  async assertSseResponse(response) {
+    const type = (response.headers.get('content-type') || '').toLowerCase()
+    if (!type.includes('application/json')) return
+    if (type.includes('jsonl') || type.includes('ndjson')) return
+
+    let data = null
+    try { data = await response.json() } catch { data = null }
+    const errMsg = ProviderAdapter.extractErrorMsg(data)
+    const err = new Error(errMsg || `Provider returned a non-streaming JSON response (status ${response.status})`)
+    err.status = 502
+    err.data = data
+    throw err
+  }
+
   async chat(provider, requestBody, signal) {
     throw new Error(`${this.constructor.type} must implement chat()`)
   }

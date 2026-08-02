@@ -197,6 +197,37 @@ describe('AnthropicAdapter', () => {
     expect(result.tool_choice).toEqual({ type: 'auto' })
   })
 
+  it('transforms tool_choice none correctly', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'Hi' }],
+      tools: [{ function: { name: 'get_weather' } }],
+      tool_choice: 'none',
+    })
+    expect(result.tool_choice).toEqual({ type: 'none' })
+  })
+
+  it('maps max_tokens stop_reason to length', () => {
+    const result = adapter.transformResponse({
+      id: 'msg_1',
+      model: 'claude-3-opus',
+      content: [{ type: 'text', text: 'cut off' }],
+      stop_reason: 'max_tokens',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+    expect(result.choices[0].finish_reason).toBe('length')
+  })
+
+  it('maps stop_sequence stop_reason to stop', () => {
+    const result = adapter.transformResponse({
+      id: 'msg_1',
+      model: 'claude-3-opus',
+      content: [{ type: 'text', text: 'done' }],
+      stop_reason: 'stop_sequence',
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+    expect(result.choices[0].finish_reason).toBe('stop')
+  })
+
   it('has correct type', () => {
     expect(AnthropicAdapter.type).toBe('anthropic')
   })
@@ -300,6 +331,15 @@ describe('GeminiNativeAdapter', () => {
     expect(result.toolConfig.functionCallingConfig.allowedFunctionNames).toEqual(['get_weather'])
   })
 
+  it('transforms tool_choice none to mode NONE', () => {
+    const result = adapter.transformRequest({
+      messages: [{ role: 'user', content: 'No tools' }],
+      tools: [{ function: { name: 'get_weather' } }],
+      tool_choice: 'none',
+    })
+    expect(result.toolConfig.functionCallingConfig.mode).toBe('NONE')
+  })
+
   it('transforms Gemini response with functionCall to OpenAI tool_calls', () => {
     const result = adapter.transformResponse({
       candidates: [{
@@ -379,7 +419,212 @@ describe('Adapter streaming', () => {
   })
 })
 
-describe('Error normalization', () => {
+describe('OpenAI-compatible streaming passthrough', () => {
+  it('relays the upstream SSE byte-for-byte (varied id/created, usage, tool_calls + content)', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    const chunkBodies = [
+      { id: 'chatcmpl-A', created: 1000, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] },
+      { id: 'chatcmpl-B', created: 2000, choices: [{ index: 0, delta: { content: 'Hello' }, finish_reason: null }] },
+      {
+        id: 'chatcmpl-C',
+        created: 3000,
+        choices: [{
+          index: 0,
+          delta: {
+            content: '!',
+            tool_calls: [{
+              index: 0,
+              id: 'call_x',
+              type: 'function',
+              function: { name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) },
+            }],
+          },
+          finish_reason: null,
+        }],
+      },
+      { id: 'chatcmpl-D', created: 4000, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 9, completion_tokens: 12, total_tokens: 21 } },
+    ]
+    const sse = chunkBodies
+      .map(c => `data: ${JSON.stringify({ object: 'chat.completion.chunk', model: 'gpt-4o', ...c })}\n\n`)
+      .join('') + 'data: [DONE]\n\n'
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(sse))
+          controller.close()
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+    )
+
+    try {
+      const nodeStream = await adapter.stream(
+        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      const chunks = []
+      for await (const buf of nodeStream) chunks.push(buf.toString())
+      const text = chunks.join('')
+      expect(text).toBe(sse)
+
+      const events = text
+        .split('\n\n')
+        .filter(l => l.startsWith('data: ') && l !== 'data: [DONE]')
+        .map(l => JSON.parse(l.slice(6)))
+      expect(events.map(e => e.id)).toEqual(['chatcmpl-A', 'chatcmpl-B', 'chatcmpl-C', 'chatcmpl-D'])
+      expect(events.map(e => e.created)).toEqual([1000, 2000, 3000, 4000])
+      expect(events[2].choices[0].delta.tool_calls[0].function.arguments).toBe('{"city":"Paris"}')
+      expect(events[3].usage).toEqual({ prompt_tokens: 9, completion_tokens: 12, total_tokens: 21 })
+      expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('passes through an empty-delta chunk without dropping usage or finish_reason', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    const sse = [
+      'data: {"id":"chatcmpl-Z","object":"chat.completion.chunk","created":5000,"model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}\n\n',
+      'data: [DONE]\n\n',
+    ].join('')
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(sse))
+          controller.close()
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+    )
+
+    try {
+      const nodeStream = await adapter.stream(
+        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      const chunks = []
+      for await (const buf of nodeStream) chunks.push(buf.toString())
+      const text = chunks.join('')
+      expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+      expect(text).toContain('"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}')
+      expect(text).toContain('"finish_reason":"stop"')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+})
+
+describe('Streaming content-type guard', () => {
+  async function jsonResponse(body, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  it('rejects a JSON error body with status 200 for openai-compatible', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => jsonResponse({ error: { message: 'upstream exploded' } })
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toThrow('upstream exploded')
+      await expect(adapter.stream(
+        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toMatchObject({ status: 502 })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('rejects a non-streaming JSON completion with status 200 for openai-compatible', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => jsonResponse({ choices: [{ message: { role: 'assistant', content: 'not a stream' } }] })
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toThrow(/non-streaming JSON response/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('rejects a JSON error body with status 200 for azure-openai', async () => {
+    const adapter = new AzureOpenAIAdapter()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => jsonResponse({ error: { message: 'azure exploded' } })
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://azure.example.com/openai/deployments/gpt-4o', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toThrow('azure exploded')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('rejects a JSON error body with status 200 for anthropic', async () => {
+    const adapter = new AnthropicAdapter()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async () => jsonResponse({ type: 'error', error: { message: 'anthropic exploded' } })
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://api.anthropic.com/v1', api_key: 'sk-x' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toThrow('anthropic exploded')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not affect gemini-native JSON streaming', async () => {
+    const adapter = new GeminiNativeAdapter()
+    const originalFetch = globalThis.fetch
+    const payload = [
+      { candidates: [{ content: { role: 'model', parts: [{ text: 'Hi' }] } }] },
+      { candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 } },
+    ].map(l => JSON.stringify(l)).join('\n')
+    globalThis.fetch = async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload))
+          controller.close()
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
+    try {
+      const nodeStream = await adapter.stream(
+        { api_url: 'https://gamma.example.com', api_key: 'sk-x', model: 'gemini-pro' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      const chunks = []
+      for await (const buf of nodeStream) chunks.push(buf.toString())
+      const text = chunks.join('')
+      expect(text).toContain('Hi')
+      expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+})
   it('normalizes rate limit errors', async () => {
     const { normalizeError } = await import('../src/utils/logger.js')
     const err = new Error('Rate limit exceeded')

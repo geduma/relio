@@ -72,7 +72,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 30000)
+      const timeout = setTimeout(() => controller.abort(), config.relay.requestTimeoutMs)
 
       recordProviderRequest(provider.id)
       const data = await callProvider(provider, requestBody, controller.signal, capability)
