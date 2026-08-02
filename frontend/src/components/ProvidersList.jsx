@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast, errorMessage } from './Toast.jsx'
-import Pagination, { usePagination } from './Pagination.jsx'
+import Pagination, { usePagination, FillerRows } from './Pagination.jsx'
 
 const TYPE_LABELS = {
   'openai-compatible': 'OpenAI Compatible',
@@ -41,7 +41,12 @@ export default function ProvidersList() {
   }
 
   const activeProviders = providers.filter(p => p.status !== 'paused')
-  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
+  const orderedProviders = [...providers].sort((a, b) => {
+    if (a.status === 'paused' && b.status !== 'paused') return 1
+    if (a.status !== 'paused' && b.status === 'paused') return -1
+    return (a.order_position ?? 0) - (b.order_position ?? 0)
+  })
+  const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(orderedProviders)
 
   function sameCapabilityActive(provider) {
     return activeProviders.filter(p => p.capability === provider.capability)
@@ -158,12 +163,13 @@ export default function ProvidersList() {
               )
             })()
           ))}
+          <FillerRows rows={pageRows} pageSize={pageSize} colSpan={7} />
         </tbody>
       </table></div>
       <Pagination
         page={page}
         pageSize={pageSize}
-        total={providers.length}
+        total={orderedProviders.length}
         totalPages={totalPages}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}

@@ -21,6 +21,20 @@ export function usePagination(rows = []) {
   }
 }
 
+export function FillerRows({ rows, pageSize, colSpan }) {
+  const count = Math.max(0, pageSize - rows.length)
+  if (count === 0) return null
+  return (
+    <>
+      {Array.from({ length: count }, (_, i) => (
+        <tr key={`filler-${i}`} className="row-empty">
+          <td colSpan={colSpan}></td>
+        </tr>
+      ))}
+    </>
+  )
+}
+
 const PAGE_SIZES = [10, 20, 50, 100]
 
 export default function Pagination({ page, pageSize, total, totalPages, onPageChange, onPageSizeChange }) {
