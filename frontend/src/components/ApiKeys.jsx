@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
-import Pagination, { usePagination, FillerRows } from './Pagination.jsx'
+import Pagination, { usePagination } from './Pagination.jsx'
 
 function parseDate(dateStr) {
   if (!dateStr) return null
@@ -109,7 +109,6 @@ export default function ApiKeys() {
               </td>
             </tr>
           ))}
-          <FillerRows rows={pageRows} pageSize={pageSize} colSpan={5} />
         </tbody>
       </table></div>
       <Pagination
