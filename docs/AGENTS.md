@@ -142,7 +142,7 @@ To add a new key, add it to `config.json`, `config.example.json`, and update the
 - `relay.streamTimeoutSeconds` (default `300`): max duration for streaming requests.
 - `relay.streamIdleTimeoutMs` (default `30000`): abort a stream if no data arrives for this long.
 - `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
-- `rateLimit.proxyPerMinute` (default `60`): `/v1` requests per min, keyed by API key + IP.
+- `rateLimit.proxyPerMinute` (default `120`): `/v1` requests per min, keyed by API key + IP.
 
 ## Tests
 

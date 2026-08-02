@@ -34,7 +34,7 @@ function loadConfig() {
   cfg.relay.requestTimeoutMs ??= 30000
 
   cfg.rateLimit ??= {}
-  cfg.rateLimit.proxyPerMinute ??= 60
+  cfg.rateLimit.proxyPerMinute ??= 120
   cfg.rateLimit.dashboardPerMinute ??= 120
 
   return cfg

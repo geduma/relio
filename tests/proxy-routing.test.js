@@ -190,6 +190,26 @@ describe('explicit provider errors', () => {
   })
 })
 
+describe('cache bypass for tool requests', () => {
+  it('does not cache or reuse cached responses when tools/tool_choice are present', async () => {
+    const cacheMod = await import('../src/services/cacheManager.js')
+    const body = {
+      messages: [{ role: 'user', content: 'tool-cache-bypass-1' }],
+      tools: [{ type: 'function', function: { name: 'get_weather', parameters: {} } }],
+      tool_choice: 'auto',
+    }
+    const countCalls = () => calls.filter(c => c.body?.messages?.[0]?.content === 'tool-cache-bypass-1').length
+
+    const before = countCalls()
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    expect(countCalls() - before).toBe(2)
+
+    const hash = cacheMod.generateHash({ _provider: 'pA', ...body })
+    expect(cacheMod.getCache(hash)).toBeNull()
+  })
+})
+
 describe('failover mode', () => {
   it('uses each provider configured model and falls back when the first fails', async () => {
     const originalFetch = globalThis.fetch

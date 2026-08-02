@@ -9,13 +9,16 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
   const capability = getCapabilityFromBody(requestBody)
 
+  const hasTools = Array.isArray(requestBody.tools) && requestBody.tools.length > 0
+  const cacheable = !hasTools && !requestBody.tool_choice
+
   let lastError = null
   let lastProvider = null
   let retryCount = 0
 
   const cacheKeyBody = providerId ? { _provider: providerId, ...requestBody } : requestBody
-  const queryHash = generateHash(cacheKeyBody)
-  const cached = getCache(queryHash)
+  const queryHash = cacheable ? generateHash(cacheKeyBody) : null
+  const cached = cacheable ? getCache(queryHash) : null
   if (cached) {
     const responseBody = JSON.parse(cached.response_body)
     enqueueLog({
@@ -85,7 +88,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
       recordSuccess(provider.id)
-      setCache(endpoint, cacheKeyBody, data, provider.id)
+      if (cacheable) setCache(endpoint, cacheKeyBody, data, provider.id)
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,

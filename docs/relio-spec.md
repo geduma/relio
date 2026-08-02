@@ -632,7 +632,7 @@ All configuration lives in `config.json` at the project root. Copy `config.examp
 | `relay.streamTimeoutSeconds` | number | `300` | Max duration for streaming requests |
 | `relay.streamIdleTimeoutMs` | number | `30000` | Abort a stream if no data arrives for this long |
 | `rateLimit.dashboardPerMinute` | number | `120` | Dashboard API requests per minute |
-| `rateLimit.proxyPerMinute` | number | `60` | `/v1` requests per minute, keyed by API key + IP |
+| `rateLimit.proxyPerMinute` | number | `120` | `/v1` requests per minute, keyed by API key + IP |
 
 Env var overrides (for testing): `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, `CONFIG_PATH`.
 

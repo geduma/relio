@@ -89,7 +89,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
 | `relay.requestTimeoutMs` | Max duration for non-streaming requests (default `30000`) |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
-| `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `60`) |
+| `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `120`) |
 
 ## Development
 
