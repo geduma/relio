@@ -1,8 +1,7 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 import express from 'express'
-import { Readable } from 'stream'
 
-let setDbPath, initDb, closeDb, dbRun, dbGet, encrypt
+let setDbPath, initDb, closeDb, dbRun, encrypt, hashApiKey
 let proxyRoutes
 let server
 let baseUrl
@@ -71,8 +70,8 @@ beforeAll(async () => {
   initDb = dbMod.initDb
   closeDb = dbMod.closeDb
   dbRun = dbMod.dbRun
-  dbGet = dbMod.dbGet
   encrypt = dbMod.encrypt
+  hashApiKey = dbMod.hashApiKey
 
   setDbPath(':memory:')
   initDb()
@@ -82,7 +81,7 @@ beforeAll(async () => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ['pA', 'AlphaChat', 'https://alpha.example.com/v1', encrypt('sk-a'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main']
   )
-  dbRun("INSERT INTO api_keys (id, key, name) VALUES (?, ?, ?)", ['k1', 'llm_pk_test_stream_key', 'test'])
+  dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['k1', hashApiKey('llm_pk_test_stream_key'), 'llm_pk_te', 'test'])
 
   proxyRoutes = (await import('../src/routes/proxy.routes.js')).default
 

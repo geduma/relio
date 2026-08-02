@@ -17,12 +17,22 @@ function decryptProvider(p) {
 export function invalidateProviderCache(id) {
   if (id) {
     keyCache.delete(id)
+    for (const k of [...dailyLimitCache.keys()]) {
+      if (k.startsWith(`${id}:`)) dailyLimitCache.delete(k)
+    }
   } else {
     keyCache.clear()
+    dailyLimitCache.clear()
   }
 }
 
+export function clearDailyLimitCache() {
+  dailyLimitCache.clear()
+}
+
 const rateBuckets = new Map()
+const DAILY_LIMIT_CACHE_TTL_MS = 10_000
+const dailyLimitCache = new Map()
 
 function trimBucket(providerId) {
   const arr = rateBuckets.get(providerId)
@@ -107,12 +117,21 @@ export function isDailyLimitExceeded(provider) {
   if (provider.tokens_per_day <= 0) return false
 
   const today = new Date().toISOString().slice(0, 10)
-  const used = dbGet(
-    `SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) AS used
-     FROM metrics
-     WHERE provider_id = ? AND metric_date = ?`,
-    [provider.id, today]
-  ).used
+  const cacheKey = `${provider.id}:${today}`
+  const cached = dailyLimitCache.get(cacheKey)
+  let used
+  if (cached && cached.expiresAt > Date.now()) {
+    used = cached.used
+  } else {
+    used = dbGet(
+      `SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) AS used
+       FROM metrics
+       WHERE provider_id = ? AND metric_date = ?`,
+      [provider.id, today]
+    ).used
+    dailyLimitCache.set(cacheKey, { used, expiresAt: Date.now() + DAILY_LIMIT_CACHE_TTL_MS })
+    if (dailyLimitCache.size > 500) dailyLimitCache.clear()
+  }
 
   return used >= provider.tokens_per_day
 }

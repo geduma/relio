@@ -10,9 +10,13 @@ function loadConfig() {
   try {
     raw = readFileSync(configPath, 'utf-8')
   } catch {
-    throw new Error(
-      `config.json not found at ${configPath}. Copy config.example.json to config.json and fill in values.`
-    )
+    try {
+      raw = readFileSync(join(__dirname, '..', 'config.example.json'), 'utf-8')
+    } catch {
+      throw new Error(
+        `config.json not found at ${configPath}. Copy config.example.json to config.json and fill in values.`
+      )
+    }
   }
   const cfg = JSON.parse(raw)
 
@@ -26,6 +30,20 @@ function loadConfig() {
   cfg.db.path = process.env.DB_PATH || cfg.db.path || ''
 
   cfg.security ??= {}
+  cfg.security.encryptionKey = process.env.ENCRYPTION_KEY || cfg.security.encryptionKey
+  if (!cfg.security.encryptionKey || typeof cfg.security.encryptionKey !== 'string') {
+    throw new Error(
+      'config.security.encryptionKey is required. Generate one with: openssl rand -hex 32'
+    )
+  }
+  if (cfg.security.encryptionKey.length < 32) {
+    throw new Error('config.security.encryptionKey must be at least 32 characters long')
+  }
+  if (cfg.security.encryptionKey.includes('replace-with-a-random')) {
+    throw new Error(
+      'config.security.encryptionKey is still the example placeholder. Generate a real one with: openssl rand -hex 32'
+    )
+  }
 
   cfg.relay ??= {}
   cfg.relay.exposeProvider ??= false

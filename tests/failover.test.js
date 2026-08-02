@@ -1,5 +1,5 @@
 
-let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, encrypt, isRetryableError, recordProviderRequest
+let selectProviders, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, getCapabilityFromBody, encrypt, isRetryableError, recordProviderRequest, clearDailyLimitCache
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -15,6 +15,7 @@ beforeAll(async () => {
   getCapabilityFromBody = failMod.getCapabilityFromBody
   isRetryableError = failMod.isRetryableError
   recordProviderRequest = failMod.recordProviderRequest
+  clearDailyLimitCache = failMod.clearDailyLimitCache
 
   const { dbRun } = dbMod
   dbRun(
@@ -127,13 +128,13 @@ describe('FailoverEngine', () => {
   })
 
   it('daily limit uses metrics table aggregation', async () => {
-    const today = new Date().toISOString().slice(0, 10)
     const dbMod = await import('../src/db.js')
     dbMod.dbRun(
       `INSERT INTO metrics (id, provider_id, metric_date, total_requests, total_input_tokens, total_output_tokens, total_cost, avg_response_time_ms)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['m-rl-1', 'p1', today, 1, 6000, 0, 0, 10]
+      ['m-rl-1', 'p1', new Date().toISOString().slice(0, 10), 1, 6000, 0, 0, 10]
     )
+    clearDailyLimitCache()
     expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 10000 })).toBe(false)
     expect(isDailyLimitExceeded({ id: 'p1', tokens_per_day: 5000 })).toBe(true)
   })

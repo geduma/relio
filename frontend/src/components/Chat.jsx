@@ -55,7 +55,14 @@ export default function Chat() {
         }),
       })
       const data = await res.json().catch(() => ({}))
-      const content = data.choices?.[0]?.message?.content || errorMessage(data.error || (res.ok ? JSON.stringify(data) : `Request failed (${res.status})`))
+      const choice = data.choices?.[0]?.message
+      const content = choice?.content || (
+        data.error
+          ? errorMessage(data.error)
+          : res.ok
+            ? 'No content in response'
+            : `Request failed (${res.status})`
+      )
       const prov = data._provider
       const providerName = prov ? `${prov.name} (${prov.model})` : null
       setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])

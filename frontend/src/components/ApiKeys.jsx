@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
 import Pagination, { usePagination } from './Pagination.jsx'
 
+function parseDate(dateStr) {
+  if (!dateStr) return null
+  if (dateStr.endsWith('Z') || dateStr.includes('+') || dateStr.includes('T')) {
+    return new Date(dateStr)
+  }
+  return new Date(dateStr.replace(' ', 'T') + 'Z')
+}
+
 export default function ApiKeys() {
   const [keys, setKeys] = useState([])
   const [name, setName] = useState('')
@@ -22,22 +30,26 @@ export default function ApiKeys() {
 
   async function handleCreate(e) {
     e.preventDefault()
-    const res = await fetch('/admin/api/keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (!res.ok) {
+    try {
+      const res = await fetch('/admin/api/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
       const data = await res.json().catch(() => ({}))
-      toast(errorMessage(data.error || 'Failed to create key'), 'error')
-      return
+      if (!res.ok) {
+        toast(errorMessage(data.error || 'Failed to create key'), 'error')
+        return
+      }
+      setNewKey(data.apiKey)
+      setName('')
+      const updated = await fetch('/admin/api/keys')
+      if (!updated.ok) throw new Error(`Failed to reload keys (${updated.status})`)
+      setKeys(await updated.json())
+      toast('API key created', 'success')
+    } catch (err) {
+      toast(errorMessage(err), 'error')
     }
-    const data = await res.json()
-    setNewKey(data.apiKey)
-    setName('')
-    const updated = await fetch('/admin/api/keys').then(r => r.json())
-    setKeys(updated)
-    toast('API key created', 'success')
   }
 
   async function handleRevoke(id) {
@@ -57,7 +69,7 @@ export default function ApiKeys() {
 
       {newKey && (
         <div className="alert alert-warning">
-          <strong>Save this key — it won't be shown again:</strong>
+          <strong>Save this key {`\u2014`} it won&apos;t be shown again:</strong>
           <code>{newKey}</code>
           <button className="btn btn-sm" onClick={() => setNewKey(null)}>Dismiss</button>
         </div>
@@ -88,8 +100,8 @@ export default function ApiKeys() {
             <tr key={k.id}>
               <td>{k.name}</td>
               <td><code>{k.key_preview}</code></td>
-              <td>{new Date(k.created_at).toLocaleDateString()}</td>
-              <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : '-'}</td>
+              <td>{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
+              <td>{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
               <td>
                 <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k)}>
                   Revoke

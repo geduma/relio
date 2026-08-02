@@ -1,11 +1,10 @@
 
-let initDb, getDb, closeDb, dbAll, dbGet, dbRun
+let initDb, closeDb, dbAll, dbGet, dbRun
 
 beforeAll(async () => {
   const mod = await import('../src/db.js')
   mod.setDbPath(':memory:')
   initDb = mod.initDb
-  getDb = mod.getDb
   closeDb = mod.closeDb
   dbAll = mod.dbAll
   dbGet = mod.dbGet

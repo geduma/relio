@@ -875,7 +875,9 @@ TOTAL OVERHEAD:                        ~15-25ms (0.3%-2.5% of total)
 - ✅ Full access audit (requests_log)
 - ✅ Input validation on all endpoints
 - ✅ `/v1` rate limiting per API Key + IP (`rateLimit.proxyPerMinute`)
-- ⬜ API key encryption at rest (planned)
+- ✅ Provider API keys encrypted at rest (AES-256-GCM with `security.encryptionKey`)
+- ✅ Client API keys stored as SHA-256 hashes (`api_keys.key_hash`); only a prefix is shown
+- ✅ SSRF guard on provider URL create/update/test (rejects localhost/loopback/private/link-local)
 
 ---
 

@@ -53,9 +53,6 @@ export default class AnthropicAdapter extends ProviderAdapter {
 
       if (msg.role === 'tool') {
         const tcId = msg.tool_call_id || ''
-        const fnCall = body.messages
-          ?.flatMap(m => m.tool_calls || [])
-          ?.find(tc => tc.id === tcId)
         const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
         messages.push({
           role: 'user',

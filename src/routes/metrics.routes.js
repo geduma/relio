@@ -22,8 +22,7 @@ router.get('/logs', wrap((req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 1000)
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0)
 
-  const logs = getLogs(limit, offset)
-  res.json(logs)
+  res.json(getLogs(limit, offset))
 }))
 
 router.get('/health', wrap((req, res) => {

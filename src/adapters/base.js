@@ -23,31 +23,31 @@ export default class ProviderAdapter {
     throw err
   }
 
-  async chat(provider, requestBody, signal) {
+  async chat(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement chat()`)
   }
 
-  async stream(provider, requestBody, signal) {
+  async stream(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement stream()`)
   }
 
-  async embeddings(provider, requestBody, signal) {
+  async embeddings(_provider, _requestBody, _signal) {
     throw new Error(`${this.constructor.type} must implement embeddings()`)
   }
 
-  async models(apiUrl, apiKey) {
+  async models(_apiUrl, _apiKey) {
     throw new Error(`${this.constructor.type} must implement models()`)
   }
 
-  async testConnection(apiUrl, apiKey) {
+  async testConnection(_apiUrl, _apiKey) {
     throw new Error(`${this.constructor.type} must implement testConnection()`)
   }
 
-  buildUrl(baseUrl) {
+  buildUrl(_baseUrl) {
     throw new Error(`${this.constructor.type} must implement buildUrl()`)
   }
 
-  buildHeaders(apiKey) {
+  buildHeaders(_apiKey) {
     throw new Error(`${this.constructor.type} must implement buildHeaders()`)
   }
 }

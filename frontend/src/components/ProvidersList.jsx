@@ -18,13 +18,15 @@ export default function ProvidersList() {
 
   useEffect(() => {
     const query = filter ? `?capability=${filter}` : ''
-    fetch(`/admin/api/providers${query}`)
+    const controller = new AbortController()
+    fetch(`/admin/api/providers${query}`, { signal: controller.signal })
       .then(async r => {
         if (!r.ok) throw new Error(`Failed to load providers (${r.status})`)
         return r.json()
       })
       .then(setProviders)
-      .catch(err => toast(errorMessage(err), 'error'))
+      .catch(err => { if (err.name !== 'AbortError') toast(errorMessage(err), 'error') })
+    return () => controller.abort()
   }, [filter])
 
   async function handleDelete(id) {
@@ -39,20 +41,27 @@ export default function ProvidersList() {
   }
 
   const activeProviders = providers.filter(p => p.status !== 'paused')
-  const pausedProviders = providers.filter(p => p.status === 'paused')
   const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
 
+  function sameCapabilityActive(provider) {
+    return activeProviders.filter(p => p.capability === provider.capability)
+  }
+
   async function handleReorder(dragId, targetId) {
-    const ids = activeProviders.map(p => p.id)
+    const dragProvider = providers.find(p => p.id === dragId)
+    if (!dragProvider) return
+    const ids = sameCapabilityActive(dragProvider).map(p => p.id)
     const dragIdx = ids.indexOf(dragId)
     const targetIdx = ids.indexOf(targetId)
+    if (dragIdx === -1 || targetIdx === -1) return
+
     ids.splice(dragIdx, 1)
     ids.splice(targetIdx, 0, dragId)
 
     const res = await fetch('/admin/api/providers/reorder', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider_ids: ids }),
+      body: JSON.stringify({ provider_ids: ids, capability: dragProvider.capability }),
     })
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
@@ -60,16 +69,12 @@ export default function ProvidersList() {
       return
     }
 
-    setProviders(prev => {
-      const map = Object.fromEntries(prev.map(p => [p.id, p]))
-      const reordered = ids.map((id, i) => ({
-        ...map[id],
-        order_position: i,
-        order_label: ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4'][i] || `Fallback ${i}`,
-      }))
-      const pausedOnes = prev.filter(p => p.status === 'paused')
-      return [...reordered, ...pausedOnes]
-    })
+    const orderLabels = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4']
+    setProviders(prev => prev.map(p => {
+      const idx = ids.indexOf(p.id)
+      if (idx === -1) return p
+      return { ...p, order_position: idx, order_label: orderLabels[idx] || `Fallback ${idx}` }
+    }))
   }
 
   return (
@@ -117,7 +122,8 @@ export default function ProvidersList() {
             </tr>
           ) : (
             (() => {
-              const idx = activeProviders.findIndex(ap => ap.id === p.id)
+              const sameCap = sameCapabilityActive(p)
+              const idx = sameCap.findIndex(ap => ap.id === p.id)
               return (
                 <tr key={p.id}>
                   <td>
@@ -125,11 +131,11 @@ export default function ProvidersList() {
                     <div className="order-arrows">
                       <button
                         disabled={idx === 0}
-                        onClick={() => handleReorder(p.id, activeProviders[idx - 1]?.id)}
+                        onClick={() => handleReorder(p.id, sameCap[idx - 1]?.id)}
                       >&#9650;</button>
                       <button
-                        disabled={idx === activeProviders.length - 1}
-                        onClick={() => handleReorder(p.id, activeProviders[idx + 1]?.id)}
+                        disabled={idx === sameCap.length - 1}
+                        onClick={() => handleReorder(p.id, sameCap[idx + 1]?.id)}
                       >&#9660;</button>
                     </div>
                   </td>

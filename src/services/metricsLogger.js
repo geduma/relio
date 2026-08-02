@@ -1,4 +1,4 @@
-import { dbAll } from '../db.js'
+import { dbAll, dbGet } from '../db.js'
 
 export function getMetrics(from, to) {
   const rows = dbAll(
@@ -40,7 +40,7 @@ export function getMetrics(from, to) {
 }
 
 export function getLogs(limit = 50, offset = 0) {
-  return dbAll(
+  const logs = dbAll(
     `SELECT id, provider_id, endpoint, status_code, input_tokens, output_tokens,
             response_time_ms, cache_hit, authenticated_via, request_at, error_message
      FROM requests_log
@@ -48,6 +48,8 @@ export function getLogs(limit = 50, offset = 0) {
      LIMIT ? OFFSET ?`,
     [limit, offset]
   )
+  const total = dbGet('SELECT COUNT(*) AS count FROM requests_log').count
+  return { logs, total }
 }
 
 export function getHealth() {

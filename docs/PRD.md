@@ -108,7 +108,7 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 | NF-05 | Cache retention | 30 days TTL |
 | NF-06 | Metrics retention | 365 days |
 | NF-07 | Availability | No single point of failure (multiple providers) |
-| NF-08 | Security | API keys in plain text in local DB |
+| NF-08 | Security | Provider API keys encrypted at rest (AES-256-GCM); client API keys stored as SHA-256 hashes |
 | NF-09 | Portability | Docker multi-stage, no external dependencies |
 
 ---

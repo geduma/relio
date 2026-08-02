@@ -2,6 +2,7 @@ import express from 'express'
 import helmet from 'helmet'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import crypto from 'crypto'
+import fs from 'fs'
 import path from 'path'
 import cron from 'node-cron'
 import { fileURLToPath } from 'url'
@@ -90,9 +91,18 @@ app.get('/admin/api/summary', dashboardLimiter, (req, res) => {
 })
 
 const frontendDist = path.join(__dirname, '../frontend/dist')
+if (!fs.existsSync(path.join(frontendDist, 'index.html'))) {
+  logger.error('frontend/dist/index.html not found — the /admin dashboard will not be served. Run "npm run build" (after installing frontend dependencies) or use "npm run dev".')
+}
 app.use(express.static(frontendDist))
-app.get(['/admin', '/admin/*'], (_, res) => {
-  res.sendFile(path.join(frontendDist, 'index.html'))
+app.get(['/admin', '/admin/*'], (req, res) => {
+  const indexHtml = path.join(frontendDist, 'index.html')
+  if (!fs.existsSync(indexHtml)) {
+    return res.status(503).json({
+      error: { message: 'Dashboard not built. Run `npm run build` (after installing frontend dependencies) and restart the server.', type: 'server_error', code: 'dashboard_missing' },
+    })
+  }
+  res.sendFile(indexHtml)
 })
 
 app.use((err, _req, res, _next) => {

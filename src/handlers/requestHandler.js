@@ -4,7 +4,7 @@ import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { config } from '../config.js'
 
-export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, apiKey, providerId, forceExposeProvider = false }) {
+export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, providerId, forceExposeProvider = false }) {
   const startTime = Date.now()
 
   const capability = getCapabilityFromBody(requestBody)

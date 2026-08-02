@@ -7,8 +7,10 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "${PORT:-3000}:3000"
+    environment:
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-      - ../config.json:/app/config.json
+      - ../config.json:/app/config.json:ro
     restart: unless-stopped

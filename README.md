@@ -9,7 +9,7 @@
 | Backend | Node.js + Express.js |
 | Database | SQLite (better-sqlite3) |
 | Frontend | React + Vite (self-served by Express) |
-| HTTP Client | Native fetch (Node 18+) |
+| HTTP Client | Native fetch (Node 20+) |
 | Auth | Local API Keys (`/v1/*`) |
 | Testing | Vitest |
 | Infra | Docker multi-stage (`docker/`) |
@@ -36,7 +36,7 @@
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - npm
 
 ## Quick Start
@@ -46,7 +46,7 @@ git clone <repo> relio
 cd relio
 
 cp config.example.json config.json
-# Edit config.json — set your provider settings
+# Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
 
 npm install
 cd frontend && npm install && cd ..
@@ -62,6 +62,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 ```json
 {
+  "security": { "encryptionKey": "replace-with-a-random-64-char-hex-string" },
   "db": { "path": "./db/db.sqlite" },
   "cache": { "ttlSeconds": 2592000 },
   "server": {
@@ -75,7 +76,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 | Key | Description |
 |---|---|
-| `security.encryptionKey` | AES-256-GCM key for API key encryption at rest (auto-derived if omitted) |
+| `security.encryptionKey` | **Required.** AES-256-GCM key used to encrypt provider API keys at rest and to hash API keys. Generate with `openssl rand -hex 32`. Overridable via `ENCRYPTION_KEY` env. The server refuses to start with the example placeholder or a key shorter than 32 chars |
 | `db.path` | SQLite database file path (overridable via `DB_PATH` env) |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port (overridable via `PORT` env) |
@@ -105,7 +106,15 @@ In dev mode, the frontend runs on `http://localhost:5173` and proxies API reques
 
 ## Authentication
 
-The dashboard requires no login. Only the proxy API (`/v1/*`) is protected by **local API Keys** (`llm_pk_xxx`), managed in the dashboard under *Keys*.
+The dashboard requires no login and is intended for **trusted networks only**. Only the proxy API (`/v1/*`) is protected by **local API Keys** (`llm_pk_xxx`), managed in the dashboard under *Keys*.
+
+## Security
+
+- **API keys at rest** — provider API keys are encrypted with AES-256-GCM using `security.encryptionKey`. Rotate the key by updating the config and re-entering provider keys.
+- **Client API keys hashed** — your `llm_pk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation.
+- **SSRF guard** — provider URLs are validated on create/update/test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols.
+- **Dashboard exposure** — the dashboard has no login; put it behind a trusted reverse proxy with authentication if exposed beyond your local network.
+- **Encryption key** — `security.encryptionKey` is required (min 32 chars); the server refuses the example placeholder. Set it via `ENCRYPTION_KEY` in production.
 
 ## LLM Provider Adapters
 
@@ -128,12 +137,15 @@ Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register i
 
 ```bash
 cp config.example.json config.json
-# Edit config.json — set your provider settings
+# Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
+
+# docker/docker-compose.yml reads ENCRYPTION_KEY from the environment/.env:
+echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
 
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-The compose file mounts `config.json`, `db/`, and `logs/` from the host so data persists across restarts.
+The image runs as a non-root user (`node`) and includes a healthcheck on `/admin/api/metrics/health`. The compose file mounts `config.json`, `db/`, and `logs/` from the host so data persists across restarts.
 
 ## Usage
 
@@ -204,8 +216,12 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 ## Tests
 
 ```bash
-npm test
+npm test          # run the suite
+npm run test:coverage  # coverage report
+npm run lint      # ESLint (src, tests, scripts, frontend)
 ```
+
+CI (GitHub Actions) runs lint + tests + frontend build on every push/PR.
 
 ## Project Structure
 

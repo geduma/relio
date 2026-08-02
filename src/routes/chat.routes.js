@@ -11,8 +11,12 @@ router.post('/send', async (req, res) => {
   const { provider_id, messages, use_proxy } = req.body
   const start = Date.now()
 
-  if (!provider_id || !messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'provider_id and messages array are required' })
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array is required' })
+  }
+
+  if (!use_proxy && !provider_id) {
+    return res.status(400).json({ error: 'provider_id is required when proxy is disabled' })
   }
 
   function addTime(data) {
@@ -86,7 +90,7 @@ router.post('/send', async (req, res) => {
 
 router.get('/providers', (req, res) => {
   const rows = dbAll(
-    "SELECT id, name, model, api_url, provider_type FROM providers WHERE capability = 'chat' AND status != 'paused' ORDER BY order_position ASC"
+    "SELECT id, name, model, provider_type FROM providers WHERE capability = 'chat' AND status != 'paused' ORDER BY order_position ASC"
   )
   res.json(rows)
 })

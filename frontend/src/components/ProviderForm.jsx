@@ -88,26 +88,33 @@ export default function ProviderForm() {
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
-    const url = isEdit ? `/admin/api/providers/${id}` : '/admin/api/providers'
-    const method = isEdit ? 'PATCH' : 'POST'
+    try {
+      const url = isEdit ? `/admin/api/providers/${id}` : '/admin/api/providers'
+      const method = isEdit ? 'PATCH' : 'POST'
 
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
 
-    if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      const msg = errorMessage(data.error || 'Failed to save provider')
+      if (!res.ok) {
+        const msg = errorMessage(data.error || 'Failed to save provider')
+        setFormError(msg)
+        toast(msg, 'error')
+        return
+      }
+
+      toast(isEdit ? 'Provider updated' : 'Provider created', 'success')
+      navigate('/admin/providers')
+    } catch {
+      const msg = 'Failed to save provider'
       setFormError(msg)
       toast(msg, 'error')
+    } finally {
       setSaving(false)
-      return
     }
-
-    toast(isEdit ? 'Provider updated' : 'Provider created', 'success')
-    navigate('/admin/providers')
   }
 
   return (

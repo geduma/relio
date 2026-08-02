@@ -6,12 +6,15 @@ import { config } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ALGORITHM = 'aes-256-gcm'
-const FALLBACK_KEY = 'relio-default-key-change-me'
-const RAW_KEY = config.security?.encryptionKey || FALLBACK_KEY
-if (RAW_KEY === FALLBACK_KEY) {
-  console.warn('config.security.encryptionKey not set; using insecure fallback key')
+const RAW_KEY = config.security?.encryptionKey
+if (!RAW_KEY || typeof RAW_KEY !== 'string') {
+  throw new Error('config.security.encryptionKey is required. Set it in config.json or ENCRYPTION_KEY.')
 }
 const KEY = crypto.createHash('sha256').update(RAW_KEY).digest()
+
+export function hashApiKey(key) {
+  return crypto.createHash('sha256').update(key).digest('hex')
+}
 
 export function encrypt(text) {
   const iv = crypto.randomBytes(16)
@@ -135,7 +138,8 @@ export function initDb() {
 
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY,
-      key TEXT NOT NULL UNIQUE,
+      key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL,
       name TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_used_at DATETIME
@@ -186,6 +190,34 @@ function runMigrations(d) {
   if (!cacheColumns.includes('provider_id')) {
     d.exec("ALTER TABLE cache ADD COLUMN provider_id TEXT REFERENCES providers(id)")
   }
+
+  migrateApiKeys(d)
+}
+
+function migrateApiKeys(d) {
+  const columns = d.prepare("PRAGMA table_info('api_keys')").all().map(c => c.name)
+  if (!columns.includes('key')) return
+
+  const rows = d.prepare('SELECT id, key, name, created_at, last_used_at FROM api_keys').all()
+  d.exec(`
+    ALTER TABLE api_keys RENAME TO api_keys_legacy;
+    CREATE TABLE api_keys (
+      id TEXT PRIMARY KEY,
+      key_hash TEXT NOT NULL UNIQUE,
+      key_prefix TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_used_at DATETIME
+    );
+  `)
+  const insert = d.prepare('INSERT INTO api_keys (id, key_hash, key_prefix, name, created_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?)')
+  const tx = d.transaction(() => {
+    for (const r of rows) {
+      insert.run(r.id, hashApiKey(r.key), r.key.slice(0, 10), r.name, r.created_at, r.last_used_at)
+    }
+  })
+  tx()
+  d.exec('DROP TABLE api_keys_legacy')
 }
 
 function createIndexes(d) {
@@ -199,7 +231,7 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_requests_cache ON requests_log(cache_hit);',
     'CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(query_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(endpoint, expires_at);',
-    'CREATE INDEX IF NOT EXISTS idx_keys_key ON api_keys(key);',
+    'CREATE INDEX IF NOT EXISTS idx_keys_hash ON api_keys(key_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',
     'CREATE INDEX IF NOT EXISTS idx_metrics_date ON metrics(metric_date);',
   ]

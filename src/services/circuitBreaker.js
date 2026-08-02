@@ -10,6 +10,13 @@ function getProviderState(providerId) {
 
 
 export function recordSuccess(providerId) {
+  const state = dbGet(
+    `SELECT COALESCE((SELECT failure_count FROM circuit_breaker_state WHERE provider_id = ?), 0) AS failure_count,
+            (SELECT status FROM providers WHERE id = ?) AS provider_status`,
+    [providerId, providerId]
+  )
+  if (state.failure_count === 0 && state.provider_status === 'active') return
+
   const db = getDb()
   const tx = db.transaction(() => {
     dbRun(

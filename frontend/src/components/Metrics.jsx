@@ -15,13 +15,15 @@ export default function Metrics() {
 
   useEffect(() => {
     setError(null)
-    fetch(`/admin/api/metrics?from=${from}&to=${to}`)
+    const controller = new AbortController()
+    fetch(`/admin/api/metrics?from=${from}&to=${to}`, { signal: controller.signal })
       .then(async r => {
         if (!r.ok) throw new Error(`Failed to load metrics (${r.status})`)
         return r.json()
       })
       .then(setMetrics)
-      .catch(err => setError(err.message))
+      .catch(err => { if (err.name !== 'AbortError') setError(err.message) })
+    return () => controller.abort()
   }, [from, to])
 
   return (

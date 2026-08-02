@@ -1,8 +1,9 @@
 import { Router } from 'express'
-import { v4 as uuidv4 } from 'uuid'
+import crypto from 'crypto'
 import { dbAll, dbGet, dbRun, getDb, encrypt } from '../db.js'
 import { getProvider, invalidateProviderCache } from '../services/failoverEngine.js'
 import { getAdapter } from '../adapters/index.js'
+import { assertPublicUrl } from '../utils/ssrf.js'
 import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
@@ -44,6 +45,12 @@ router.post('/test-connection', async (req, res) => {
     return res.status(400).json({ valid: false, error: `Missing required fields: ${missing.join(', ')}` })
   }
 
+  try {
+    await assertPublicUrl(api_url)
+  } catch (err) {
+    return res.status(400).json({ valid: false, error: err.message })
+  }
+
   const result = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
   if (!result.valid) {
     logger.warn('Provider connection test from dashboard failed', { api_url, provider_type, error: result.error })
@@ -70,6 +77,12 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
   }
 
+  try {
+    await assertPublicUrl(api_url)
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
+  }
+
   const validation = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
   if (!validation.valid) {
     logger.warn('Provider creation rejected — connection test failed', { name, api_url, error: validation.error })
@@ -82,7 +95,7 @@ router.post('/', async (req, res) => {
   )
   const nextPos = (maxPos?.max ?? -1) + 1
 
-  const id = uuidv4()
+  const id = crypto.randomUUID()
   const label = ORDER_LABELS[nextPos] || `Fallback ${nextPos}`
 
   dbRun(
@@ -106,18 +119,22 @@ router.post('/', async (req, res) => {
 
 router.patch('/reorder', (req, res) => {
   const db = getDb()
-  const { provider_ids } = req.body
+  const { provider_ids, capability } = req.body
 
   if (!Array.isArray(provider_ids)) {
     return res.status(400).json({ error: 'provider_ids array is required' })
+  }
+
+  if (!capability) {
+    return res.status(400).json({ error: 'capability is required' })
   }
 
   const tx = db.transaction(() => {
     provider_ids.forEach((id, index) => {
       const label = ORDER_LABELS[index] || `Fallback ${index}`
       dbRun(
-        'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
-        [index, label, id]
+        'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ? AND capability = ?',
+        [index, label, id, capability]
       )
     })
   })
@@ -162,6 +179,11 @@ router.patch('/:id', async (req, res) => {
     const testUrl = req.body.api_url || provider.api_url
     const testKey = keyChanged ? req.body.api_key : provider.api_key
     const testProviderType = req.body.provider_type || provider.provider_type
+    try {
+      await assertPublicUrl(testUrl)
+    } catch (err) {
+      return res.status(400).json({ error: err.message })
+    }
     const validation = await testProviderConnection(testUrl, testKey, testProviderType)
     if (!validation.valid) {
       logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })

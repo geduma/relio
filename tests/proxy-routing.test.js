@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 
-let setDbPath, initDb, closeDb, dbRun, dbGet, encrypt
+let setDbPath, initDb, closeDb, dbRun, encrypt
 let FAILOVER_MODEL, parseModelSelector, resolveProvider, stripModel
 let processRequest
 
@@ -12,7 +12,6 @@ beforeAll(async () => {
   initDb = dbMod.initDb
   closeDb = dbMod.closeDb
   dbRun = dbMod.dbRun
-  dbGet = dbMod.dbGet
   encrypt = dbMod.encrypt
 
   setDbPath(':memory:')

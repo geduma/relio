@@ -1,5 +1,4 @@
 import crypto from 'crypto'
-import { v4 as uuidv4 } from 'uuid'
 import { dbGet, dbRun } from '../db.js'
 import { config } from '../config.js'
 
@@ -88,7 +87,7 @@ export function getCache(queryHash) {
 }
 
 export function setCache(endpoint, requestBody, responseBody, providerId) {
-  const id = uuidv4()
+  const id = crypto.randomUUID()
   const queryHash = generateHash(requestBody)
   const expiresAt = new Date(Date.now() + config.cache.ttlSeconds * 1000).toISOString()
 
