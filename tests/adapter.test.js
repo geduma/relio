@@ -625,6 +625,8 @@ describe('Streaming content-type guard', () => {
     }
   })
 })
+
+describe('Error normalization', () => {
   it('normalizes rate limit errors', async () => {
     const { normalizeError } = await import('../src/utils/logger.js')
     const err = new Error('Rate limit exceeded')
