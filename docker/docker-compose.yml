@@ -8,7 +8,7 @@ services:
     ports:
       - "${PORT:-3000}:3000"
     environment:
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?set ENCRYPTION_KEY in .env (openssl rand -hex 32)}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs

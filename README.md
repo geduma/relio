@@ -139,10 +139,13 @@ Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register i
 cp config.example.json config.json
 # Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
 
-# docker/docker-compose.yml reads ENCRYPTION_KEY from the environment/.env:
-echo "ENCRYPTION_KEY=$(openssl rand -hex 32)" >> .env
-
 docker compose -f docker/docker-compose.yml up -d
+```
+
+Your `config.json` (which already contains your `security.encryptionKey`) is mounted read-only into the container, so nothing else is needed. You can optionally override the key via the environment:
+
+```bash
+ENCRYPTION_KEY=... docker compose -f docker/docker-compose.yml up -d
 ```
 
 The image runs as a non-root user (`node`) and includes a healthcheck on `/admin/api/metrics/health`. The compose file mounts `config.json`, `db/`, and `logs/` from the host so data persists across restarts.
