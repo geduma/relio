@@ -173,11 +173,25 @@ Una vez ejecutado, verifica con:
 
 ## Docker
 
-original content...
+### Build and run
 
 ```bash
-cp config.example.json config.json
-# Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
+docker compose up --build -d
+```
+
+### Mounting config.json
+
+The local `config.json` is mounted into the container:
+
+```
+- ../config.json:/app/config.json:rw
+```
+
+The `setup-config-perm.sh` script adjusts the file’s permissions to `-rw-rw-r--` before launching the server.
+
+### Volumes
+
+Data directories (`db/`, `logs/`) are also mounted from the host for persistence.
 
 docker compose -f docker/docker-compose.yml up -d
 ```
