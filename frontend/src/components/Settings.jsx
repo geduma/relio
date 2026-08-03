@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
+import { useTheme } from './ThemeContext.jsx'
 
 const SECTIONS = [
   {
@@ -12,8 +13,7 @@ const SECTIONS = [
         options: [['development', 'Development'], ['production', 'Production']],
       },
     ],
-  },
-  {
+  },  {
     title: 'Cache',
     fields: [
       {
@@ -122,6 +122,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState({})
   const toast = useToast()
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     fetch('/admin/api/settings')
@@ -251,6 +252,26 @@ export default function Settings() {
               </div>
             </section>
           ))}
+
+          <section className="settings-section">
+            <h3>Appearance</h3>
+            <div className="form-grid">
+              <div className="toggle-row field-full">
+                <div>
+                  <strong>Dark mode</strong>
+                  <p className="settings-desc">Toggle between the dark and light interface theme.</p>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={theme === 'dark'}
+                    onChange={e => setTheme(e.target.checked ? 'dark' : 'light')}
+                  />
+                  <span className="switch-slider" />
+                </label>
+              </div>
+            </div>
+          </section>
 
           <section className="settings-section">
             <h3>Read-only</h3>

@@ -1,5 +1,5 @@
 import { Routes, Route, Link } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import ProvidersList from './ProvidersList.jsx'
 import ProviderForm from './ProviderForm.jsx'
 import Metrics from './Metrics.jsx'
@@ -10,25 +10,6 @@ import Settings from './Settings.jsx'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isDark, setIsDark] = useState(true)
-
-  useEffect(() => {
-    const stored = localStorage.getItem('relio-theme')
-    if (stored === 'light') {
-      setIsDark(false)
-      document.body.classList.add('light-mode')
-    } else {
-      setIsDark(true)
-      document.body.classList.remove('light-mode')
-    }
-  }, [])
-
-  function toggleTheme() {
-    const next = !isDark
-    setIsDark(next)
-    document.body.classList.toggle('light-mode', !next)
-    localStorage.setItem('relio-theme', next ? 'dark' : 'light')
-  }
 
   return (
     <div className="dashboard-layout">
@@ -46,9 +27,6 @@ export default function Dashboard() {
           <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
-          <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
-            {isDark ? '\u263C' : '\u263E'}
-          </button>
           <a href="https://geduma.com" target="_blank" rel="noopener noreferrer">by geduma</a>
         </div>
       </aside>
