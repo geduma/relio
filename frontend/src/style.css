@@ -209,12 +209,26 @@ body {
   outline: none; border-color: var(--primary);
 }
 .form-grid textarea { min-height: 80px; resize: vertical; }
-.form-actions { display: flex; gap: 0.5rem; align-items: center; }
+.form-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 1.5rem; }
 .form-actions-right { justify-content: flex-end; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; }
 .settings-desc { color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 0; max-width: 560px; line-height: 1.4; }
+.settings-desc.readonly-desc { margin-bottom: 1.5rem; }
 .settings-section { max-width: 960px; margin: 1.5rem auto 0; }
 .settings-section h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.settings-section--readonly {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-surface); padding: 1rem 1.25rem 1.25rem;
+  margin-top: 2rem;
+}
+.settings-section--readonly h3 { margin-bottom: 0.25rem; }
+.settings-section--readonly .form-grid { opacity: 0.8; }
+.settings-section--readonly .form-grid label { cursor: not-allowed; }
+.settings-section--readonly .form-grid input {
+  background: var(--bg-elevated); border-style: dashed; color: var(--text-secondary);
+  cursor: not-allowed; margin-top: auto;
+}
 .env-badge {
   display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.4rem;
   border: 1px solid var(--input-border); border-radius: 4px;

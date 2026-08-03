@@ -41,9 +41,9 @@ const SECTIONS = [
         type: 'toggle',
         desc: 'Include the resolved _provider metadata in proxy responses.',
       },
-      { key: 'relay.requestTimeoutMs', label: 'Request timeout (ms)', type: 'number' },
-      { key: 'relay.streamTimeoutSeconds', label: 'Stream timeout (s)', type: 'number' },
-      { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number' },
+      { key: 'relay.requestTimeoutMs', label: 'Request timeout (ms)', type: 'number', half: true },
+      { key: 'relay.streamTimeoutSeconds', label: 'Stream timeout (s)', type: 'number', half: true },
+      { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number', half: true },
     ],
   },
 ]
@@ -53,11 +53,13 @@ const READ_ONLY_FIELDS = [
     key: 'server.port',
     label: 'Port',
     desc: 'HTTP port the server listens on. Edit in config.json and restart the server.',
+    half: true,
   },
   {
     key: 'server.host',
     label: 'Host',
     desc: 'Interface the server binds to. Edit in config.json and restart the server.',
+    half: true,
   },
   {
     key: 'server.trustedProxy',
@@ -68,11 +70,13 @@ const READ_ONLY_FIELDS = [
     key: 'rateLimit.proxyPerMinute',
     label: 'Proxy requests per minute',
     desc: 'Limit for /v1 requests. Edit in config.json and restart the server.',
+    half: true,
   },
   {
     key: 'rateLimit.dashboardPerMinute',
     label: 'Dashboard requests per minute',
     desc: 'Limit for dashboard API requests. Edit in config.json and restart the server.',
+    half: true,
   },
   {
     key: 'db.path',
@@ -197,6 +201,26 @@ export default function Settings() {
         <p className="settings-desc">Loading settings...</p>
       ) : (
         <>
+          <section className="settings-section">
+            <h3>Appearance</h3>
+            <div className="form-grid">
+              <div className="toggle-row field-full">
+                <div>
+                  <strong>Dark mode</strong>
+                  <p className="settings-desc">Toggle between the dark and light interface theme.</p>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={theme === 'dark'}
+                    onChange={e => setTheme(e.target.checked ? 'dark' : 'light')}
+                  />
+                  <span className="switch-slider" />
+                </label>
+              </div>
+            </div>
+          </section>
+
           {SECTIONS.map(section => (
             <section key={section.title} className="settings-section">
               <h3>{section.title}</h3>
@@ -228,7 +252,7 @@ export default function Settings() {
                     )
                   }
                   return (
-                    <label key={field.key} className="field-full">
+                    <label key={field.key} className={field.half ? '' : 'field-full'}>
                       {field.label}
                       {overriddenBy && <span className="env-badge">override: {overriddenBy}</span>}
                       {field.desc && <p className="settings-desc">{field.desc}</p>}
@@ -253,34 +277,14 @@ export default function Settings() {
             </section>
           ))}
 
-          <section className="settings-section">
-            <h3>Appearance</h3>
-            <div className="form-grid">
-              <div className="toggle-row field-full">
-                <div>
-                  <strong>Dark mode</strong>
-                  <p className="settings-desc">Toggle between the dark and light interface theme.</p>
-                </div>
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={theme === 'dark'}
-                    onChange={e => setTheme(e.target.checked ? 'dark' : 'light')}
-                  />
-                  <span className="switch-slider" />
-                </label>
-              </div>
-            </div>
-          </section>
-
-          <section className="settings-section">
+          <section className="settings-section settings-section--readonly">
             <h3>Read-only</h3>
-            <p className="settings-desc">
+            <p className="settings-desc readonly-desc">
               These options are read from config.json at startup and require a server restart to apply.
             </p>
             <div className="form-grid">
               {READ_ONLY_FIELDS.map(field => (
-                <label key={field.key} className="field-full">
+                <label key={field.key} className={field.half ? '' : 'field-full'}>
                   {field.label}
                   <p className="settings-desc">{field.desc}</p>
                   <input type="text" value={getByPath(cfg, field.key) ?? ''} disabled />
@@ -291,7 +295,7 @@ export default function Settings() {
 
           <div className="form-actions form-actions-right">
             <button className="btn btn-primary" onClick={handleSave} disabled={saving || dirtyCount === 0}>
-              {saving ? 'Saving...' : `Save changes${dirtyCount ? ` (${dirtyCount})` : ''}`}
+              {saving ? 'Saving...' : `Save${dirtyCount ? ` (${dirtyCount})` : ''}`}
             </button>
           </div>
         </>
