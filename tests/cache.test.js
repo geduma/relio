@@ -32,7 +32,7 @@ describe('CacheManager', () => {
 
     setCache('/v1/chat/completions', body, response)
     const hash = generateHash(body)
-    const cached = getCache(hash)
+    const cached = getCache('/v1/chat/completions', hash)
 
     expect(cached).not.toBeNull()
     const parsed = JSON.parse(cached.response_body)
@@ -43,12 +43,20 @@ describe('CacheManager', () => {
     const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'again' }] }
     setCache('/v1/chat/completions', body, { choices: [{ message: { content: 'Mem' } }] })
     const hash = generateHash(body)
-    const cached = getCache(hash)
+    const cached = getCache('/v1/chat/completions', hash)
     expect(JSON.parse(cached.response_body).choices[0].message.content).toBe('Mem')
   })
 
+  it('does not return a cache entry stored under a different endpoint', () => {
+    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'cross' }] }
+    setCache('/v1/chat/completions', body, { choices: [{ message: { content: 'Chat' } }] })
+    const hash = generateHash(body)
+    expect(getCache('/v1/embeddings', hash)).toBeNull()
+    expect(JSON.parse(getCache('/v1/chat/completions', hash).response_body).choices[0].message.content).toBe('Chat')
+  })
+
   it('returns null for non-existent hash', () => {
-    const result = getCache('nonexistent_hash')
+    const result = getCache('/v1/chat/completions', 'nonexistent_hash')
     expect(result).toBeNull()
   })
 
@@ -64,7 +72,7 @@ describe('CacheManager', () => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ['expired-entry', 'expired_hash', '/v1/chat/completions', '{}', '{}', null, new Date(Date.now() - 1000).toISOString()]
     )
-    const cached = getCache('expired_hash')
+    const cached = getCache('/v1/chat/completions', 'expired_hash')
     expect(cached).toBeNull()
   })
 
@@ -76,7 +84,7 @@ describe('CacheManager', () => {
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       ['future-entry', 'future_hash', '/v1/chat/completions', '{}', '{}', null, laterToday]
     )
-    const cached = getCache('future_hash')
+    const cached = getCache('/v1/chat/completions', 'future_hash')
     expect(cached).not.toBeNull()
   })
 
@@ -88,8 +96,8 @@ describe('CacheManager', () => {
     const hash = generateHash(body)
     const before = dbMod.dbGet('SELECT hit_count FROM cache WHERE query_hash = ?', [hash]).hit_count
 
-    getCache(hash)
-    getCache(hash)
+    getCache('/v1/chat/completions', hash)
+    getCache('/v1/chat/completions', hash)
     const mid = dbMod.dbGet('SELECT hit_count FROM cache WHERE query_hash = ?', [hash]).hit_count
     expect(mid).toBe(before)
 

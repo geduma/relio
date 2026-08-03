@@ -35,10 +35,6 @@ export default class ProviderAdapter {
     throw new Error(`${this.constructor.type} must implement embeddings()`)
   }
 
-  async models(_apiUrl, _apiKey) {
-    throw new Error(`${this.constructor.type} must implement models()`)
-  }
-
   async testConnection(_apiUrl, _apiKey) {
     throw new Error(`${this.constructor.type} must implement testConnection()`)
   }

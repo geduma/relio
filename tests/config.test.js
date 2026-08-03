@@ -1,8 +1,16 @@
-import { describe, it, expect } from 'vitest'
-import { writeFileSync } from 'fs'
+import { describe, it, expect, afterAll } from 'vitest'
+import { writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { config } from '../src/config.js'
+
+const tmpFiles = []
+
+afterAll(() => {
+  for (const file of tmpFiles) {
+    try { rmSync(file) } catch { /* already removed */ }
+  }
+})
 
 describe('config', () => {
   it('loads with required defaults', () => {
@@ -14,6 +22,7 @@ describe('config', () => {
 
   it('rejects the example placeholder encryption key', async () => {
     const tmpFile = join(tmpdir(), `relio-config-${Date.now()}.json`)
+    tmpFiles.push(tmpFile)
     writeFileSync(tmpFile, JSON.stringify({
       server: { port: 9999 },
       db: { path: ':memory:' },
@@ -25,6 +34,7 @@ describe('config', () => {
 
   it('rejects a too-short encryption key', async () => {
     const tmpFile = join(tmpdir(), `relio-config-short-${Date.now()}.json`)
+    tmpFiles.push(tmpFile)
     writeFileSync(tmpFile, JSON.stringify({
       security: { encryptionKey: 'short' },
     }))

@@ -57,7 +57,6 @@ describe('ProviderAdapter (base)', () => {
     await expect(adapter.chat()).rejects.toThrow('test must implement chat()')
     await expect(adapter.stream()).rejects.toThrow('test must implement stream()')
     await expect(adapter.embeddings()).rejects.toThrow('test must implement embeddings()')
-    await expect(adapter.models()).rejects.toThrow('test must implement models()')
     await expect(adapter.testConnection()).rejects.toThrow('test must implement testConnection()')
     expect(() => adapter.buildUrl()).toThrow('test must implement buildUrl()')
     expect(() => adapter.buildHeaders()).toThrow('test must implement buildHeaders()')
@@ -233,6 +232,11 @@ describe('GeminiNativeAdapter', () => {
     expect(url).toBe('https://api.example.com/v1/models/gemini-pro:generateContent')
   })
 
+  it('builds correct URL when base URL already has a version segment', () => {
+    expect(adapter.buildUrl('https://api.example.com/v1beta', 'gemini-pro'))
+      .toBe('https://api.example.com/v1beta/models/gemini-pro:generateContent')
+  })
+
   it('builds correct headers', () => {
     const headers = adapter.buildHeaders('AIza-test')
     expect(headers['X-Goog-Api-Key']).toBe('AIza-test')
@@ -357,8 +361,17 @@ describe('AzureOpenAIAdapter', () => {
 
   it('builds correct URL with api-version', () => {
     const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4')
-    expect(url).toContain('api-version=2024-02-15-preview')
-    expect(url).toContain('/chat/completions')
+    expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview')
+  })
+
+  it('builds correct models URL without losing api-version', () => {
+    const url = adapter.buildUrlForModels('https://api.example.com/azure/openai/deployments/gpt-4')
+    expect(url).toBe('https://api.example.com/azure/openai/models?api-version=2024-02-15-preview')
+  })
+
+  it('preserves an existing api-version query parameter', () => {
+    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4?api-version=2025-01-01')
+    expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2025-01-01')
   })
 
   it('builds correct headers', () => {

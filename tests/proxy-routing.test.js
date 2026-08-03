@@ -205,7 +205,7 @@ describe('cache bypass for tool requests', () => {
     expect(countCalls() - before).toBe(2)
 
     const hash = cacheMod.generateHash({ _provider: 'pA', ...body })
-    expect(cacheMod.getCache(hash)).toBeNull()
+    expect(cacheMod.getCache('/v1/chat/completions', hash)).toBeNull()
   })
 })
 

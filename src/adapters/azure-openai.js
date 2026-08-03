@@ -7,28 +7,26 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
   static get type() { return 'azure-openai' }
 
   buildUrl(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    const separator = url.includes('?') ? '&' : '?'
-    if (!url.includes('api-version=')) {
-      url += `${separator}api-version=${AZURE_API_VERSION}`
+    const url = new URL(baseUrl)
+    if (!url.pathname.endsWith('/chat/completions')) {
+      url.pathname = `${url.pathname.replace(/\/+$/, '')}/chat/completions`
     }
-    if (!url.endsWith('/chat/completions') && !url.includes('/chat/completions')) {
-      url += '/chat/completions'
+    if (!url.searchParams.has('api-version')) {
+      url.searchParams.set('api-version', AZURE_API_VERSION)
     }
-    return url
+    return url.toString()
   }
 
   buildUrlForModels(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    const separator = url.includes('?') ? '&' : '?'
-    if (!url.includes('api-version=')) {
-      url += `${separator}api-version=${AZURE_API_VERSION}`
-    }
-    const deploymentMatch = url.match(/\/deployments\/[^/?]+/)
+    const url = new URL(baseUrl)
+    const deploymentMatch = url.pathname.match(/^(.+?)\/deployments\/[^/]+$/)
     if (deploymentMatch) {
-      url = url.slice(0, deploymentMatch.index) + '/models'
+      url.pathname = `${deploymentMatch[1]}/models`
     }
-    return url
+    if (!url.searchParams.has('api-version')) {
+      url.searchParams.set('api-version', AZURE_API_VERSION)
+    }
+    return url.toString()
   }
 
   buildHeaders(apiKey) {
@@ -101,27 +99,12 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     return Readable.fromWeb(response.body)
   }
 
-  async models(apiUrl, apiKey) {
-    const url = this.buildUrlForModels(apiUrl)
-    const headers = this.buildHeaders(apiKey)
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.data || []
-    } catch {
-      return []
-    }
-  }
-
   async testConnection(apiUrl, apiKey) {
     const base = apiUrl.replace(/\/+$/, '')
-    const separator = base.includes('?') ? '&' : '?'
+    const probeUrl = new URL(base)
+    if (!probeUrl.searchParams.has('api-version')) {
+      probeUrl.searchParams.set('api-version', AZURE_API_VERSION)
+    }
 
     async function tryFetch(url, options, timeoutMs = 5000) {
       const controller = new AbortController()
@@ -134,8 +117,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     }
 
     try {
-      const modelsUrl = `${base}${separator}api-version=${AZURE_API_VERSION}`
-      const res = await tryFetch(modelsUrl, {
+      const res = await tryFetch(probeUrl, {
         headers: { 'api-key': apiKey },
       })
 

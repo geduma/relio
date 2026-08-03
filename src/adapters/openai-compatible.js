@@ -141,30 +141,6 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     return data
   }
 
-  async models(apiUrl, apiKey) {
-    const url = this.buildUrlForModels(apiUrl)
-    const headers = this.buildHeaders(apiKey)
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers,
-      signal: AbortSignal.timeout(5000),
-    })
-
-    if (!response.ok) {
-      return []
-    }
-
-    let data
-    try {
-      data = await response.json()
-    } catch {
-      return []
-    }
-
-    return data.data || data.models || []
-  }
-
   async testConnection(apiUrl, apiKey) {
     const base = apiUrl.replace(/\/+$/, '')
     const modelsUrl = this.buildUrlForModels(base)

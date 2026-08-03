@@ -52,8 +52,8 @@ export function recordProviderRequest(providerId) {
 }
 
 export function isRateLimitExceeded(provider) {
-  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
   const arr = trimBucket(provider.id)
+  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
   if (!arr) return false
   return arr.length >= provider.rate_limit_req_per_min
 }
@@ -164,15 +164,6 @@ export async function callProvider(provider, requestBody, signal, capability) {
 export async function streamProvider(provider, requestBody, signal) {
   const adapter = getAdapter(provider.provider_type)
   return adapter.stream(provider, requestBody, signal)
-}
-
-export async function listModels(provider) {
-  const adapter = getAdapter(provider.provider_type)
-  try {
-    return await adapter.models(provider.api_url, provider.api_key)
-  } catch (err) {
-    throw new Error(`Failed to list models for ${provider.name}: ${err.message}`)
-  }
 }
 
 export function getCapabilityFromBody(body) {

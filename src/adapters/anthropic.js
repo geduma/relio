@@ -14,12 +14,6 @@ export default class AnthropicAdapter extends ProviderAdapter {
     return url
   }
 
-  buildUrlForModels(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    if (!url.endsWith('/v1')) url += '/v1'
-    return `${url}/models`
-  }
-
   buildHeaders(apiKey) {
     return {
       'x-api-key': apiKey,
@@ -353,24 +347,6 @@ export default class AnthropicAdapter extends ProviderAdapter {
         }
       },
     })
-  }
-
-  async models(apiUrl, apiKey) {
-    const url = this.buildUrlForModels(apiUrl)
-    const headers = this.buildHeaders(apiKey)
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.data || data.models || []
-    } catch {
-      return []
-    }
   }
 
   async testConnection(apiUrl, apiKey) {
