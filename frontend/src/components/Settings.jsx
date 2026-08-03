@@ -5,19 +5,11 @@ const SECTIONS = [
   {
     title: 'Server',
     fields: [
-      { key: 'server.port', label: 'Port', type: 'number' },
-      { key: 'server.host', label: 'Host', type: 'text' },
       {
         key: 'server.nodeEnv',
         label: 'Environment',
         type: 'select',
         options: [['development', 'Development'], ['production', 'Production']],
-      },
-      {
-        key: 'server.trustedProxy',
-        label: 'Trusted proxy',
-        type: 'toggle',
-        desc: 'Set to true only behind a trusted reverse proxy so X-Forwarded-For is honored.',
       },
     ],
   },
@@ -54,12 +46,43 @@ const SECTIONS = [
       { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number' },
     ],
   },
+]
+
+const READ_ONLY_FIELDS = [
   {
-    title: 'Rate limits',
-    fields: [
-      { key: 'rateLimit.proxyPerMinute', label: 'Proxy requests per minute', type: 'number' },
-      { key: 'rateLimit.dashboardPerMinute', label: 'Dashboard requests per minute', type: 'number' },
-    ],
+    key: 'server.port',
+    label: 'Port',
+    desc: 'HTTP port the server listens on. Edit in config.json and restart the server.',
+  },
+  {
+    key: 'server.host',
+    label: 'Host',
+    desc: 'Interface the server binds to. Edit in config.json and restart the server.',
+  },
+  {
+    key: 'server.trustedProxy',
+    label: 'Trusted proxy',
+    desc: 'Honor X-Forwarded-For behind a trusted reverse proxy. Edit in config.json and restart the server.',
+  },
+  {
+    key: 'rateLimit.proxyPerMinute',
+    label: 'Proxy requests per minute',
+    desc: 'Limit for /v1 requests. Edit in config.json and restart the server.',
+  },
+  {
+    key: 'rateLimit.dashboardPerMinute',
+    label: 'Dashboard requests per minute',
+    desc: 'Limit for dashboard API requests. Edit in config.json and restart the server.',
+  },
+  {
+    key: 'db.path',
+    label: 'Database path',
+    desc: 'SQLite database file, opened at startup. Edit in config.json (or DB_PATH) and restart the server.',
+  },
+  {
+    key: 'security.encryptionKey',
+    label: 'Encryption key',
+    desc: 'AES-256-GCM key that encrypts provider API keys at rest. Rotate it by editing config.json or the ENCRYPTION_KEY env var, then re-enter provider keys.',
   },
 ]
 
@@ -84,11 +107,17 @@ function pickByKeys(cfg) {
   return out
 }
 
+function getByPath(cfg, dotted) {
+  const parts = dotted.split('.')
+  let value = cfg
+  for (const p of parts) value = value?.[p]
+  return value
+}
+
 export default function Settings() {
   const [form, setForm] = useState({})
-  const [readOnly, setReadOnly] = useState({ encryptionKey: '', dbPath: '' })
+  const [cfg, setCfg] = useState({})
   const [envOverrides, setEnvOverrides] = useState({})
-  const [restartRequired, setRestartRequired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState({})
@@ -101,11 +130,8 @@ export default function Settings() {
         return r.json()
       })
       .then(data => {
+        setCfg(data.config)
         setForm(pickByKeys(data.config))
-        setReadOnly({
-          encryptionKey: data.config?.security?.encryptionKey || '',
-          dbPath: data.config?.db?.path || '',
-        })
         setEnvOverrides(data.envOverrides || {})
       })
       .catch(err => toast(errorMessage(err), 'error'))
@@ -114,7 +140,15 @@ export default function Settings() {
 
   function handleField(key, value) {
     setForm(prev => ({ ...prev, [key]: value }))
-    setDirty(prev => ({ ...prev, [key]: value }))
+    setDirty(prev => {
+      const next = { ...prev }
+      if (value === getByPath(cfg, key)) {
+        delete next[key]
+      } else {
+        next[key] = value
+      }
+      return next
+    })
   }
 
   function buildPatch() {
@@ -139,14 +173,10 @@ export default function Settings() {
         toast(errorMessage(data.error || 'Failed to save settings'), 'error')
         return
       }
+      setCfg(data.config)
       setForm(pickByKeys(data.config))
-      setReadOnly({
-        encryptionKey: data.config?.security?.encryptionKey || '',
-        dbPath: data.config?.db?.path || '',
-      })
       setDirty({})
-      setRestartRequired(true)
-      toast('Settings saved — restart the server to apply changes', 'success')
+      toast('Settings applied', 'success')
     } catch (err) {
       toast(errorMessage(err), 'error')
     } finally {
@@ -161,12 +191,6 @@ export default function Settings() {
       <div className="header-row">
         <h2>Settings</h2>
       </div>
-
-      {restartRequired && (
-        <div className="restart-banner">
-          Changes were written to <code>config.json</code>. Restart the server for them to take effect.
-        </div>
-      )}
 
       {loading ? (
         <p className="settings-desc">Loading settings...</p>
@@ -230,27 +254,21 @@ export default function Settings() {
 
           <section className="settings-section">
             <h3>Read-only</h3>
+            <p className="settings-desc">
+              These options are read from config.json at startup and require a server restart to apply.
+            </p>
             <div className="form-grid">
-              <label className="field-full">
-                Encryption key
-                <p className="settings-desc">
-                  AES-256-GCM key that encrypts provider API keys at rest. Rotate it by editing config.json
-                  or the ENCRYPTION_KEY env var, then re-enter provider keys.
-                </p>
-                <input type="text" value={readOnly.encryptionKey} disabled />
-              </label>
-              <label className="field-full">
-                Database path
-                <p className="settings-desc">
-                  SQLite database file. Change it via config.json or DB_PATH and restart — the database is
-                  opened at startup.
-                </p>
-                <input type="text" value={readOnly.dbPath} disabled />
-              </label>
+              {READ_ONLY_FIELDS.map(field => (
+                <label key={field.key} className="field-full">
+                  {field.label}
+                  <p className="settings-desc">{field.desc}</p>
+                  <input type="text" value={getByPath(cfg, field.key) ?? ''} disabled />
+                </label>
+              ))}
             </div>
           </section>
 
-          <div className="form-actions">
+          <div className="form-actions form-actions-right">
             <button className="btn btn-primary" onClick={handleSave} disabled={saving || dirtyCount === 0}>
               {saving ? 'Saving...' : `Save changes${dirtyCount ? ` (${dirtyCount})` : ''}`}
             </button>
