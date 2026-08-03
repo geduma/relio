@@ -169,7 +169,7 @@ Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dar
 
 ### Proxy API
 
-The `model` field is a **provider selector**: use a provider name or ID to route directly to it, or `"auto"` to enable failover across providers. The model sent to each provider is always the one configured for that provider.
+The `model` field is a **provider selector**: use a provider name or ID to route directly to it, or `"auto"` to enable failover across providers. The model sent to each provider is always the one configured for that provider. The name `auto` is reserved for failover/proxy mode and cannot be used as a provider name.
 
 ```bash
 # Route to a specific provider (uses its configured model)
@@ -218,9 +218,23 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 
 | Method | Route | Auth | Description |
 |---|---|---|---|
-| GET | `/v1/models` | API Key | List available models |
+| GET | `/v1/models` | API Key | List available providers (OpenAI-compatible, `id` = provider name) |
 | POST | `/v1/chat/completions` | API Key | Chat/vision (multimodal) |
 | POST | `/v1/embeddings` | API Key | Embeddings |
+
+`GET /v1/models` lists the configured Relio providers that are currently available (active, both `chat` and `embeddings` capabilities), using an OpenAI-compatible shape:
+
+```json
+{
+  "object": "list",
+  "data": [
+    { "id": "auto", "object": "model", "created": 0, "owned_by": "relio" },
+    { "id": "AlphaChat", "object": "model", "created": 1735765445, "owned_by": "relio" }
+  ]
+}
+```
+
+`auto` is always present and enables failover/proxy mode; the other `id`s are provider names, which are also the model selectors to send in `POST /v1/chat/completions` / `POST /v1/embeddings`. Paused and in-cooldown providers are excluded. The response is cached for 60 seconds.
 
 ## Tests
 

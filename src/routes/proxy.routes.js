@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, listModels, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -27,23 +27,36 @@ const MODELS_CACHE_TTL_MS = 60_000
 let modelsCache = null
 let modelsCacheAt = 0
 
-router.get('/models', async (_req, res) => {
+function createdUnix(value) {
+  if (!value) return 0
+  const ts = Date.parse(String(value).replace(' ', 'T') + 'Z')
+  return Number.isNaN(ts) ? 0 : Math.floor(ts / 1000)
+}
+
+router.get('/models', (_req, res) => {
   try {
     if (modelsCache && Date.now() - modelsCacheAt < MODELS_CACHE_TTL_MS) {
       return res.json(modelsCache)
     }
 
-    const providers = selectProviders('chat')
-    const results = await Promise.all(providers.map(async (p) => {
-      try {
-        return await listModels(p)
-      } catch (err) {
-        console.warn(`[proxy] Models endpoint failed for ${p.name}: ${err.message}`)
-        return []
-      }
-    }))
+    const providers = [
+      ...selectProviders('chat'),
+      ...selectProviders('embeddings'),
+    ].filter(p => p.name !== FAILOVER_MODEL)
+      .filter((p, i, all) => all.findIndex(x => x.name === p.name) === i)
 
-    modelsCache = { object: 'list', data: results.flat() }
+    modelsCache = {
+      object: 'list',
+      data: [
+        { id: FAILOVER_MODEL, object: 'model', created: 0, owned_by: 'relio' },
+        ...providers.map(p => ({
+          id: p.name,
+          object: 'model',
+          created: createdUnix(p.created_at),
+          owned_by: 'relio',
+        })),
+      ],
+    }
     modelsCacheAt = Date.now()
     res.json(modelsCache)
   } catch (err) {

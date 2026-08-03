@@ -4,7 +4,7 @@
 >
 > **v1.1 updates (see [Validation Guide](./validation-guide.md) for full compliance checklist):**
 > - Embeddings now routed through dedicated adapter method (not chat endpoint)
-> - `GET /v1/models` endpoint added
+> - `GET /v1/models` endpoint added (now lists configured available providers, OpenAI-compatible; `id` = provider name; reserved `auto` entry returned first for failover/proxy mode; provider name `auto` is blocked)
 > - Errors normalized to OpenAI `{error: {message, type, code}}` format
 > - `_provider` field made configurable via `config.relay.exposeProvider`
 > - Gemini: `role: 'tool'` → `functionResponse`, streaming tool calls fixed

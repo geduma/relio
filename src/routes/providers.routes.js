@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import crypto from 'crypto'
 import { dbAll, dbGet, dbRun, getDb, encrypt } from '../db.js'
-import { getProvider, invalidateProviderCache } from '../services/failoverEngine.js'
+import { getProvider, invalidateProviderCache, FAILOVER_MODEL } from '../services/failoverEngine.js'
 import { getAdapter } from '../adapters/index.js'
 import { assertPublicUrl } from '../utils/ssrf.js'
 import { logger } from '../utils/logger.js'
@@ -77,6 +77,10 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` })
   }
 
+  if (String(name).trim().toLowerCase() === FAILOVER_MODEL) {
+    return res.status(400).json({ error: `Provider name "${FAILOVER_MODEL}" is reserved for proxy/failover mode. Choose a different name.` })
+  }
+
   try {
     await assertPublicUrl(api_url)
   } catch (err) {
@@ -149,6 +153,10 @@ router.patch('/:id', async (req, res) => {
 
   const provider = getProvider(id)
   if (!provider) return res.status(404).json({ error: 'Provider not found' })
+
+  if ('name' in req.body && String(req.body.name).trim().toLowerCase() === FAILOVER_MODEL) {
+    return res.status(400).json({ error: `Provider name "${FAILOVER_MODEL}" is reserved for proxy/failover mode. Choose a different name.` })
+  }
 
   const allowed = [
     'name', 'api_url', 'api_key', 'model', 'capability', 'provider_type',
