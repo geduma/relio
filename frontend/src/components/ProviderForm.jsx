@@ -87,6 +87,12 @@ export default function ProviderForm() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (form.name.trim().toLowerCase() === 'auto') {
+      const msg = 'The name "auto" is reserved for proxy/failover mode. Choose a different name.'
+      setFormError(msg)
+      toast(msg, 'error')
+      return
+    }
     setSaving(true)
     try {
       const url = isEdit ? `/admin/api/providers/${id}` : '/admin/api/providers'

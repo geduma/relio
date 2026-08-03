@@ -118,6 +118,14 @@ src/
 6. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
 7. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors; no action once headers were sent
 
+### Models Endpoint
+
+`GET /v1/models` (in `proxy.routes.js`) does **not** call upstream providers. It reads the `providers` table via `selectProviders('chat')` + `selectProviders('embeddings')`, excludes providers named `auto` (`FAILOVER_MODEL`), dedupes by name, and maps each available provider to an OpenAI-compatible entry `{ id: name, object: 'model', created, owned_by: 'relio' }` where `id` is the provider name (the model selector clients send back to `/v1/*`). The reserved `auto` entry (`{ id: 'auto', object: 'model', created: 0, owned_by: 'relio' }`) is always returned first and enables failover/proxy mode. Paused and in-cooldown providers are excluded; response is cached for 60s.
+
+### Reserved provider name
+
+`auto` (`FAILOVER_MODEL`) is the failover/proxy selector. `providers.routes.js` rejects creating or renaming a provider to `auto` (case-insensitive, trimmed) with a 400, and `ProviderForm.jsx` blocks it client-side.
+
 ## Configuration
 
 All settings live in `config.json` at the project root. `src/config.js` reads this file at startup and exposes the parsed object as `config`.
