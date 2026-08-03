@@ -230,9 +230,13 @@ body {
   cursor: not-allowed; margin-top: auto;
 }
 .env-badge {
-  display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.4rem;
-  border: 1px solid var(--input-border); border-radius: 4px;
+  display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.5rem;
+  border-radius: 99px;
+  background: var(--bg-elevated);
   color: var(--text-muted); font-size: 0.7rem; vertical-align: middle;
+}
+.settings-actions {
+  max-width: 960px; margin-left: auto; margin-right: auto;
 }
 .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
