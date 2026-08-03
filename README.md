@@ -145,7 +145,35 @@ Relio normalizes all LLM providers to an OpenAI-compatible format using a plugga
 
 Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register it in `src/adapters/index.js`. See `docs/AGENTS.md` for the full guide.
 
+## Configuración de permisos de `config.json`
+
+Para garantizar que el proceso que corre dentro del contenedor siempre pueda escribir en `config.json` sin errores de *EBUSY*, el Dockerfile incluye el script `setup-config-perm.sh` que se ejecuta en el *ENTRYPOINT*. Al apilar la imagen y crear el contenedor, se realiza:
+
+1. Se monta el archivo `../config.json` del host en `/app/config.json` con permisos `rw`.
+2. El script modifica los permisos de dicha ruta a `rw-rw-r--` antes de iniciar la aplicación.
+
+Con esto el usuario `node` del contenedor puede actualizar la configuración desde el dashboard sin necesidad de comandos adicionales.
+
+### Pasos de despliegue
+
+```bash
+# Reinicia el stack
+# Docker Compose desmontará el contenedor existente así como las imágenes antiguas.
+docker compose down
+
+# Reconstruye la imagen con la lógica de permisos incluida
+# Y levanta nuevamente el servicio.
+docker compose up --build -d
+```
+
+Una vez ejecutado, verifica con:
+
+- En el host: `ls -l ../config.json` – debe mostrar permisos `-rw-rw-r--`.
+- Dentro del contenedor: `docker compose exec relio ls -l /app/config.json` – el mismo resultado.
+
 ## Docker
+
+original content...
 
 ```bash
 cp config.example.json config.json
