@@ -18,7 +18,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
   const cacheKeyBody = providerId ? { _provider: providerId, ...requestBody } : requestBody
   const queryHash = cacheable ? generateHash(cacheKeyBody) : null
-  const cached = cacheable ? getCache(queryHash) : null
+  const cached = cacheable ? getCache(endpoint, queryHash) : null
   if (cached) {
     const responseBody = JSON.parse(cached.response_body)
     enqueueLog({
@@ -112,7 +112,6 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     } catch (err) {
       lastError = err
       lastProvider = provider
-      retryCount++
 
       enqueueLog({
         providerId: provider.id, endpoint, requestBody, originIp, originHeader,
@@ -120,6 +119,8 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         responseTimeMs: Date.now() - startTime,
         authenticatedVia, cacheHit: false, wasRetry: retryCount > 0, retryCount,
       })
+
+      retryCount++
 
       enqueueMetric(provider.id, {
         error: true, responseTimeMs: Date.now() - startTime,

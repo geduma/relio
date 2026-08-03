@@ -4,6 +4,7 @@ import { dbAll, dbGet, dbRun, getDb, encrypt } from '../db.js'
 import { getProvider, invalidateProviderCache, FAILOVER_MODEL } from '../services/failoverEngine.js'
 import { getAdapter } from '../adapters/index.js'
 import { assertPublicUrl } from '../utils/ssrf.js'
+import { invalidateModelsCache } from './proxy.routes.js'
 import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
@@ -14,6 +15,12 @@ async function testProviderConnection(apiUrl, apiKey, providerType) {
 }
 
 const router = Router()
+
+function wrap(fn) {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next)
+  }
+}
 
 router.get('/', (req, res) => {
   const { capability } = req.query
@@ -30,7 +37,7 @@ router.get('/', (req, res) => {
   res.json(rows.map(r => ({ ...r, api_key: r.api_key ? '***' : null })))
 })
 
-router.post('/test-connection', async (req, res) => {
+router.post('/test-connection', wrap(async (req, res) => {
   let { api_url, api_key, provider_type, provider_id } = req.body
 
   if (api_key === '***' && provider_id) {
@@ -56,9 +63,9 @@ router.post('/test-connection', async (req, res) => {
     logger.warn('Provider connection test from dashboard failed', { api_url, provider_type, error: result.error })
   }
   res.json(result)
-})
+}))
 
-router.post('/', async (req, res) => {
+router.post('/', wrap(async (req, res) => {
   const {
     name, api_url, api_key, model, capability, provider_type,
     rate_limit_req_per_min, tokens_per_day,
@@ -118,8 +125,9 @@ router.post('/', async (req, res) => {
   )
 
   invalidateProviderCache(id)
+  invalidateModelsCache()
   res.json({ success: true, provider_id: id })
-})
+}))
 
 router.patch('/reorder', (req, res) => {
   const db = getDb()
@@ -144,10 +152,11 @@ router.patch('/reorder', (req, res) => {
   })
   tx()
 
+  invalidateModelsCache()
   res.json({ success: true })
 })
 
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', wrap(async (req, res) => {
   const db = getDb()
   const { id } = req.params
 
@@ -239,8 +248,9 @@ router.patch('/:id', async (req, res) => {
   }
 
   invalidateProviderCache(id)
+  invalidateModelsCache()
   res.json({ success: true })
-})
+}))
 
 router.delete('/:id', (req, res) => {
   const db = getDb()
@@ -277,6 +287,7 @@ router.delete('/:id', (req, res) => {
   tx()
 
   invalidateProviderCache(id)
+  invalidateModelsCache()
   res.json({ success: true })
 })
 

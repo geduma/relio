@@ -83,7 +83,7 @@ export function initDb() {
       api_url TEXT NOT NULL,
       api_key TEXT NOT NULL,
       model TEXT NOT NULL,
-      capability TEXT NOT NULL DEFAULT 'chat' CHECK(capability IN ('chat', 'embeddings', 'vision')),
+      capability TEXT NOT NULL DEFAULT 'chat' CHECK(capability IN ('chat', 'embeddings')),
       provider_type TEXT NOT NULL DEFAULT 'openai-compatible' CHECK(provider_type IN ('openai-compatible', 'anthropic', 'gemini-native', 'azure-openai')),
       order_position INT NOT NULL DEFAULT 0,
       order_label TEXT,
@@ -92,11 +92,8 @@ export function initDb() {
       cost_per_output_token REAL DEFAULT 0,
       rate_limit_req_per_min INT DEFAULT 60,
       tokens_per_day INT DEFAULT 0,
-      cost_per_day REAL DEFAULT 0,
       cooldown_after_failures INT DEFAULT 5,
       cooldown_duration_seconds INT DEFAULT 300,
-      current_failure_count INT DEFAULT 0,
-      last_failure_at DATETIME,
       cooldown_until DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -167,12 +164,6 @@ export function initDb() {
       avg_response_time_ms REAL DEFAULT 0,
       UNIQUE(provider_id, metric_date)
     );
-
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
   `)
 
   runMigrations(d)
@@ -195,6 +186,13 @@ function runMigrations(d) {
   const cacheColumns = d.prepare("PRAGMA table_info('cache')").all().map(c => c.name)
   if (!cacheColumns.includes('provider_id')) {
     d.exec("ALTER TABLE cache ADD COLUMN provider_id TEXT REFERENCES providers(id)")
+  }
+
+  const legacyProviderColumns = ['cost_per_day', 'current_failure_count', 'last_failure_at']
+  for (const column of legacyProviderColumns) {
+    if (columns.includes(column)) {
+      d.exec(`ALTER TABLE providers DROP COLUMN ${column}`)
+    }
   }
 
   migrateApiKeys(d)

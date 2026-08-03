@@ -13,5 +13,5 @@ services:
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-      - ../config.json:/app/config.json:ro
+      - ../config.json:/app/config.json
     restart: unless-stopped

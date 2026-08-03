@@ -27,6 +27,11 @@ const MODELS_CACHE_TTL_MS = 60_000
 let modelsCache = null
 let modelsCacheAt = 0
 
+export function invalidateModelsCache() {
+  modelsCache = null
+  modelsCacheAt = 0
+}
+
 function createdUnix(value) {
   if (!value) return 0
   const ts = Date.parse(String(value).replace(' ', 'T') + 'Z')
@@ -130,6 +135,10 @@ async function handleStreamingRequest(req, res) {
   if (selection.mode === 'provider') {
     if (!isProviderAvailable(selection.provider)) {
       res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
+      return
+    }
+    if (isRateLimitExceeded(selection.provider) || isDailyLimitExceeded(selection.provider)) {
+      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" has reached its rate or daily limit`), { status: 503 })))
       return
     }
     provider = selection.provider

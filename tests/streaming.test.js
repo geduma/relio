@@ -323,6 +323,24 @@ describe('POST /v1/chat/completions streaming', () => {
     expect(typeof body.error.type).toBe('string')
     expect(typeof body.error.code).toBe('string')
   })
+
+  it('rejects a direct-provider stream request when the provider is rate limited', async () => {
+    const fe = await import('../src/services/failoverEngine.js')
+    dbRun("UPDATE providers SET rate_limit_req_per_min = 1 WHERE id = 'pA'")
+    fe.recordProviderRequest('pA')
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error.message).toMatch(/rate or daily limit/i)
+
+    dbRun("UPDATE providers SET rate_limit_req_per_min = 60 WHERE id = 'pA'")
+  })
 })
 
 describe('auth error format', () => {

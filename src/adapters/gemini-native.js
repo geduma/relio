@@ -8,7 +8,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     let url = baseUrl.replace(/\/+$/, '')
     const modelPath = model || 'gemini-pro'
     if (!url.includes('/models/')) {
-      url += url.endsWith('/v1') ? '' : '/v1'
+      if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
       url += `/models/${modelPath}:generateContent`
     }
     return url
@@ -18,16 +18,10 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     let url = baseUrl.replace(/\/+$/, '')
     const modelPath = model || 'gemini-pro'
     if (!url.includes('/models/')) {
-      url += url.endsWith('/v1') ? '' : '/v1'
+      if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
       url += `/models/${modelPath}:streamGenerateContent`
     }
     return url
-  }
-
-  buildUrlForModels(baseUrl) {
-    let url = baseUrl.replace(/\/+$/, '')
-    if (!url.endsWith('/v1')) url += '/v1'
-    return `${url}/models`
   }
 
   buildHeaders(apiKey) {
@@ -414,24 +408,6 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     })
   }
 
-  async models(apiUrl, apiKey) {
-    const url = this.buildUrlForModels(apiUrl)
-    const headers = this.buildHeaders(apiKey)
-
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!response.ok) return []
-      const data = await response.json()
-      return data.models || []
-    } catch {
-      return []
-    }
-  }
-
   async testConnection(apiUrl, apiKey) {
     const base = apiUrl.replace(/\/+$/, '')
 
@@ -446,7 +422,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
     }
 
     try {
-      const modelsUrl = `${base}${base.endsWith('/v1') ? '' : '/v1'}/models`
+      const modelsUrl = `${base}${/\/v\d[\w.]*(\/|$)/.test(base) ? '' : '/v1'}/models`
       const res = await tryFetch(modelsUrl, {
         headers: { 'X-Goog-Api-Key': apiKey },
       })

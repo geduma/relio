@@ -212,6 +212,19 @@ body {
 .form-actions { display: flex; gap: 0.5rem; align-items: center; }
 .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; }
 .settings-desc { color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 0; max-width: 560px; line-height: 1.4; }
+.settings-section { max-width: 960px; margin: 1.5rem auto 0; }
+.settings-section h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.restart-banner {
+  max-width: 960px; margin: 0 auto 1rem; padding: 0.6rem 0.9rem;
+  border: 1px solid var(--warning-border); border-radius: 6px;
+  background: var(--warning-bg); color: var(--warning-text); font-size: 0.875rem;
+}
+.restart-banner code { background: var(--input-bg); padding: 0 0.3rem; border-radius: 3px; }
+.env-badge {
+  display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.4rem;
+  border: 1px solid var(--input-border); border-radius: 4px;
+  color: var(--text-muted); font-size: 0.7rem; vertical-align: middle;
+}
 .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .switch-slider {

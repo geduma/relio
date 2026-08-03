@@ -2,7 +2,6 @@ import crypto from 'crypto'
 import { dbGet, dbRun } from '../db.js'
 import { config } from '../config.js'
 
-const MEM_TTL_MS = 300_000
 const MEM_MAX = 1000
 const memCache = new Map()
 const memOrder = []
@@ -32,7 +31,7 @@ function memSet(key, data) {
     const oldest = memOrder.shift()
     memCache.delete(oldest)
   }
-  memCache.set(key, { data, expiresAt: Date.now() + MEM_TTL_MS })
+  memCache.set(key, { data, expiresAt: Date.now() + Math.max(0, config.cache.ttlSeconds * 1000) })
   memOrder.push(key)
 }
 
@@ -64,8 +63,9 @@ export function generateHash(body) {
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex')
 }
 
-export function getCache(queryHash) {
-  const fromMem = memGet(queryHash)
+export function getCache(endpoint, queryHash) {
+  const memKey = `${endpoint}:${queryHash}`
+  const fromMem = memGet(memKey)
   if (fromMem) {
     enqueueHit(fromMem.id)
     return fromMem
@@ -73,12 +73,12 @@ export function getCache(queryHash) {
 
   const entry = dbGet(
     `SELECT * FROM cache
-     WHERE query_hash = ? AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))`,
-    [queryHash]
+     WHERE endpoint = ? AND query_hash = ? AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))`,
+    [endpoint, queryHash]
   )
 
   if (entry) {
-    memSet(queryHash, entry)
+    memSet(memKey, entry)
     enqueueHit(entry.id)
     return entry
   }
@@ -92,7 +92,7 @@ export function setCache(endpoint, requestBody, responseBody, providerId) {
   const expiresAt = new Date(Date.now() + config.cache.ttlSeconds * 1000).toISOString()
 
   const entry = { id, query_hash: queryHash, endpoint, request_body: JSON.stringify(requestBody), response_body: JSON.stringify(responseBody), provider_id: providerId, expires_at: expiresAt }
-  memSet(queryHash, entry)
+  memSet(`${endpoint}:${queryHash}`, entry)
 
   dbRun(
     `INSERT OR REPLACE INTO cache (id, query_hash, endpoint, request_body, response_body, provider_id, expires_at)

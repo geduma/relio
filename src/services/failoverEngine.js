@@ -1,7 +1,7 @@
 import { dbAll, dbGet, decrypt } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
 import { config } from '../config.js'
-import { getSetting } from './settingsService.js'
+import { ROUTING_STRATEGIES } from './configValidation.js'
 
 const KEY_CACHE_TTL_MS = 60_000
 const keyCache = new Map()
@@ -52,20 +52,15 @@ export function recordProviderRequest(providerId) {
 }
 
 export function isRateLimitExceeded(provider) {
-  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
   const arr = trimBucket(provider.id)
+  if (!provider.rate_limit_req_per_min || provider.rate_limit_req_per_min <= 0) return false
   if (!arr) return false
   return arr.length >= provider.rate_limit_req_per_min
 }
 
 export const FAILOVER_MODEL = 'auto'
 
-export const ROUTING_STRATEGIES = ['order', 'least-used']
-export const ROUTING_SETTING_KEY = 'routing_strategy'
-
 export function getRoutingStrategy() {
-  const override = getSetting(ROUTING_SETTING_KEY)
-  if (override && ROUTING_STRATEGIES.includes(override)) return override
   const fromConfig = config.relay.routingStrategy
   return ROUTING_STRATEGIES.includes(fromConfig) ? fromConfig : 'order'
 }
@@ -169,15 +164,6 @@ export async function callProvider(provider, requestBody, signal, capability) {
 export async function streamProvider(provider, requestBody, signal) {
   const adapter = getAdapter(provider.provider_type)
   return adapter.stream(provider, requestBody, signal)
-}
-
-export async function listModels(provider) {
-  const adapter = getAdapter(provider.provider_type)
-  try {
-    return await adapter.models(provider.api_url, provider.api_key)
-  } catch (err) {
-    throw new Error(`Failed to list models for ${provider.name}: ${err.message}`)
-  }
 }
 
 export function getCapabilityFromBody(body) {
