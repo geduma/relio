@@ -8,7 +8,6 @@ logs
 config.json
 tests
 docs
-scripts
 coverage
 *.md
 .DS_Store
