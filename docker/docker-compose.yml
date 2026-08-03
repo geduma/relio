@@ -13,5 +13,9 @@ services:
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-      - ../config.json:/app/config.json
+      - relio_config:/app/config.json:rw
     restart: unless-stopped
+
+volumes:
+  relio_config:
+
