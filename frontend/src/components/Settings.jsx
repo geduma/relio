@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
 import { useTheme } from './ThemeContext.jsx'
 
+const NODE_ENV_FIELD = {
+  key: 'server.nodeEnv',
+  label: 'Environment',
+  desc: 'Runtime environment. Controlled by the NODE_ENV environment variable and cannot be edited at runtime.',
+  override: 'NODE_ENV',
+}
+
 const SECTIONS = [
   {
     title: 'Server',
@@ -13,7 +20,8 @@ const SECTIONS = [
         options: [['development', 'Development'], ['production', 'Production']],
       },
     ],
-  },  {
+  },
+  {
     title: 'Cache',
     fields: [
       {
@@ -190,6 +198,8 @@ export default function Settings() {
   }
 
   const dirtyCount = Object.keys(dirty).length
+  const nodeEnvOverridden = Boolean(envOverrides['server.nodeEnv'])
+  const readonlyFields = nodeEnvOverridden ? [NODE_ENV_FIELD, ...READ_ONLY_FIELDS] : READ_ONLY_FIELDS
 
   return (
     <div>
@@ -221,7 +231,7 @@ export default function Settings() {
             </div>
           </section>
 
-          {SECTIONS.map(section => (
+          {SECTIONS.filter(section => section.fields.some(field => !envOverrides[field.key])).map(section => (
             <section key={section.title} className="settings-section">
               <h3>{section.title}</h3>
               <div className="form-grid">
@@ -283,9 +293,10 @@ export default function Settings() {
               These options are read from config.json at startup and require a server restart to apply.
             </p>
             <div className="form-grid">
-              {READ_ONLY_FIELDS.map(field => (
+              {readonlyFields.map(field => (
                 <label key={field.key} className={field.half ? '' : 'field-full'}>
                   {field.label}
+                  {field.override && <span className="env-badge">override: {field.override}</span>}
                   <p className="settings-desc">{field.desc}</p>
                   <input type="text" value={getByPath(cfg, field.key) ?? ''} disabled />
                 </label>
@@ -293,7 +304,7 @@ export default function Settings() {
             </div>
           </section>
 
-          <div className="form-actions form-actions-right">
+          <div className="form-actions form-actions-right settings-actions">
             <button className="btn btn-primary" onClick={handleSave} disabled={saving || dirtyCount === 0}>
               {saving ? 'Saving...' : `Save${dirtyCount ? ` (${dirtyCount})` : ''}`}
             </button>
