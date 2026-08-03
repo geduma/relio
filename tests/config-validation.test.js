@@ -4,40 +4,39 @@ import { validateConfigChanges, getEditableConfigKeys, READ_ONLY_KEYS, ROUTING_S
 describe('configValidation', () => {
   it('accepts valid values for every editable key', () => {
     const valid = {
-      'server.port': 3000,
-      'server.host': '0.0.0.0',
       'server.nodeEnv': 'production',
-      'server.trustedProxy': true,
       'cache.ttlSeconds': 60,
       'relay.exposeProvider': false,
       'relay.streamTimeoutSeconds': 300,
       'relay.streamIdleTimeoutMs': 30000,
       'relay.requestTimeoutMs': 30000,
       'relay.routingStrategy': 'least-used',
-      'rateLimit.proxyPerMinute': 120,
-      'rateLimit.dashboardPerMinute': 120,
     }
     expect(validateConfigChanges(valid)).toEqual([])
   })
 
   it('rejects invalid values', () => {
     const errors = validateConfigChanges({
-      'server.port': 70000,
       'server.nodeEnv': 'staging',
       'cache.ttlSeconds': -1,
       'relay.routingStrategy': 'round-robin',
-      'rateLimit.proxyPerMinute': 0,
     })
-    expect(errors.some(e => e.includes('server.port'))).toBe(true)
     expect(errors.some(e => e.includes('server.nodeEnv'))).toBe(true)
     expect(errors.some(e => e.includes('cache.ttlSeconds'))).toBe(true)
     expect(errors.some(e => e.includes('relay.routingStrategy'))).toBe(true)
-    expect(errors.some(e => e.includes('rateLimit.proxyPerMinute'))).toBe(true)
   })
 
   it('rejects read-only keys', () => {
-    const errors = validateConfigChanges({ 'security.encryptionKey': 'x', 'db.path': '/tmp/db' })
-    expect(errors.length).toBe(2)
+    const errors = validateConfigChanges({
+      'security.encryptionKey': 'x',
+      'db.path': '/tmp/db',
+      'server.port': 4000,
+      'server.host': '127.0.0.1',
+      'server.trustedProxy': true,
+      'rateLimit.proxyPerMinute': 120,
+      'rateLimit.dashboardPerMinute': 120,
+    })
+    expect(errors.length).toBe(7)
     expect(errors.every(e => e.includes('read-only'))).toBe(true)
   })
 
@@ -48,9 +47,20 @@ describe('configValidation', () => {
   })
 
   it('exposes the editable key set and constants', () => {
-    expect(getEditableConfigKeys()).toContain('server.port')
-    expect(getEditableConfigKeys()).toContain('relay.routingStrategy')
-    expect(READ_ONLY_KEYS).toEqual(['security.encryptionKey', 'db.path'])
+    const editable = getEditableConfigKeys()
+    expect(editable).toContain('relay.routingStrategy')
+    expect(editable).toContain('server.nodeEnv')
+    expect(editable).not.toContain('server.port')
+    expect(editable).not.toContain('rateLimit.proxyPerMinute')
+    expect(READ_ONLY_KEYS).toEqual([
+      'security.encryptionKey',
+      'db.path',
+      'server.port',
+      'server.host',
+      'server.trustedProxy',
+      'rateLimit.proxyPerMinute',
+      'rateLimit.dashboardPerMinute',
+    ])
     expect(ROUTING_STRATEGIES).toEqual(['order', 'least-used'])
   })
 })

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { normalizeConfig, getConfigPath, getEnvOverrides } from '../config.js'
+import { normalizeConfig, getConfigPath, getEnvOverrides, applyConfigChanges } from '../config.js'
 import { validateConfigChanges, READ_ONLY_KEYS } from '../services/configValidation.js'
 import { readConfigFile, saveConfigChanges } from '../services/configStore.js'
 
@@ -60,6 +60,7 @@ router.put('/', (req, res) => {
   let saved
   try {
     saved = saveConfigChanges(changes)
+    applyConfigChanges(changes)
   } catch (err) {
     return res.status(500).json({
       error: { message: err.message, type: 'server_error', code: 'config_write_failed' },

@@ -94,3 +94,22 @@ export function loadConfig() {
 }
 
 export const config = loadConfig()
+
+function setByPath(obj, dottedKey, value) {
+  const parts = dottedKey.split('.')
+  let node = obj
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    if (typeof node[parts[i]] !== 'object' || node[parts[i]] === null) {
+      node[parts[i]] = {}
+    }
+    node = node[parts[i]]
+  }
+  node[parts[parts.length - 1]] = value
+}
+
+export function applyConfigChanges(changes) {
+  for (const [key, value] of Object.entries(changes)) {
+    setByPath(config, key, value)
+  }
+  return config
+}

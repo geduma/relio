@@ -100,7 +100,7 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 
 ### Editing settings from the dashboard
 
-Most options (server, cache, relay, rate limits) can be edited at **Settings** in the dashboard. Changes are written back to the physical `config.json` file (atomically), **not** to the database, and take effect on the next server restart — the UI shows a reminder after saving. Fields overridden by an environment variable are shown with an `override:` badge and disabled. `security.encryptionKey` and `db.path` are read-only in the UI: rotate the encryption key via `config.json`/`ENCRYPTION_KEY` and re-enter provider keys, and change the database path via `config.json`/`DB_PATH`.
+The hot-applicable options (server nodeEnv, cache, relay) can be edited at **Settings** in the dashboard. Changes are written back to the physical `config.json` file (atomically) **and** applied to the running process immediately — **no restart needed**. Options that are only read at startup (`server.port`, `server.host`, `server.trustedProxy`, rate limits, `security.encryptionKey`, `db.path`) are shown as read-only in the UI with a note to edit `config.json` and restart the server. Fields overridden by an environment variable are shown with an `override:` badge and disabled. Rotate the encryption key via `config.json`/`ENCRYPTION_KEY` and re-enter provider keys, and change the database path via `config.json`/`DB_PATH`.
 
 ## Development
 
