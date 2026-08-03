@@ -6,6 +6,7 @@ import Metrics from './Metrics.jsx'
 import ApiKeys from './ApiKeys.jsx'
 import Logs from './Logs.jsx'
 import Chat from './Chat.jsx'
+import Settings from './Settings.jsx'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -42,6 +43,7 @@ export default function Dashboard() {
           <Link to="/admin/keys">API Keys</Link>
           <Link to="/admin/chat">Chat</Link>
           <Link to="/admin/logs">Logs</Link>
+          <Link to="/admin/settings">Settings</Link>
         </nav>
         <div className="sidebar-footer">
           <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>
@@ -64,6 +66,7 @@ export default function Dashboard() {
           <Route path="keys" element={<ApiKeys />} />
           <Route path="logs" element={<Logs />} />
           <Route path="chat" element={<Chat />} />
+          <Route path="settings" element={<Settings />} />
         </Routes>
       </main>
     </div>

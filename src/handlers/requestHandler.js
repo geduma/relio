@@ -1,4 +1,4 @@
-import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, isRetryableError, recordProviderRequest } from '../services/failoverEngine.js'
+import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, isRetryableError, recordProviderRequest, orderProvidersForRouting } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -57,7 +57,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     }
     providers = [p]
   } else {
-    providers = selectProviders(capability)
+    providers = orderProvidersForRouting(selectProviders(capability))
   }
 
   for (const provider of providers) {

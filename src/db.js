@@ -167,6 +167,12 @@ export function initDb() {
       avg_response_time_ms REAL DEFAULT 0,
       UNIQUE(provider_id, metric_date)
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 
   runMigrations(d)
