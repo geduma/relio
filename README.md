@@ -25,6 +25,7 @@
 - **Full audit trail** — every request logged to SQLite
 - **Local API Keys** — for AI agents, with revocation
 - **Dashboard** — visual provider management, metrics, logs, API keys
+- **Settings** — edit all `config.json` options (server, cache, relay, rate limits) from the dashboard, persisted back to the file
 - **Daily metrics** — requests, tokens, costs, errors, cache hits
 - **Chat dashboard** — test LLM providers directly from the UI with response time display
 - **Dark mode** — toggleable theme (dark by default) with localStorage persistence
@@ -93,9 +94,13 @@ All settings are in `config.json` at the project root. Copy `config.example.json
 | `relay.streamTimeoutSeconds` | Max duration for streaming requests (default `300`) |
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
 | `relay.requestTimeoutMs` | Max duration for non-streaming requests (default `30000`) |
-| `relay.routingStrategy` | How the proxy picks the starting provider in failover (`auto`) mode. `order` (default, by provider order) or `least-used` (provider with the fewest tokens used today, balancing free-tier usage). Overridable at runtime via Settings → Load balancer |
+| `relay.routingStrategy` | How the proxy picks the starting provider in failover (`auto`) mode. `order` (default, by provider order) or `least-used` (provider with the fewest tokens used today, balancing free-tier usage). Editable from the dashboard (Settings → Load balancer) |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `120`) |
+
+### Editing settings from the dashboard
+
+Most options (server, cache, relay, rate limits) can be edited at **Settings** in the dashboard. Changes are written back to the physical `config.json` file (atomically), **not** to the database, and take effect on the next server restart — the UI shows a reminder after saving. Fields overridden by an environment variable are shown with an `override:` badge and disabled. `security.encryptionKey` and `db.path` are read-only in the UI: rotate the encryption key via `config.json`/`ENCRYPTION_KEY` and re-enter provider keys, and change the database path via `config.json`/`DB_PATH`.
 
 ## Development
 
@@ -149,7 +154,7 @@ cp config.example.json config.json
 docker compose -f docker/docker-compose.yml up -d
 ```
 
-Your `config.json` (which already contains your `security.encryptionKey`) is mounted read-only into the container, so nothing else is needed. You can optionally override the key via the environment:
+Your `config.json` (which already contains your `security.encryptionKey`) is mounted into the container, so nothing else is needed. The mount is read-write so the Settings dashboard can persist changes back to the file; the container runs as a non-root user (`node`), so make sure the host `config.json` is writable by that user (e.g. `chmod 664 config.json` or match ownership). You can optionally override the key via the environment:
 
 ```bash
 ENCRYPTION_KEY=... docker compose -f docker/docker-compose.yml up -d

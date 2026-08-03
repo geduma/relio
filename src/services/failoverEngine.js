@@ -1,7 +1,7 @@
 import { dbAll, dbGet, decrypt } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
 import { config } from '../config.js'
-import { getSetting } from './settingsService.js'
+import { ROUTING_STRATEGIES } from './configValidation.js'
 
 const KEY_CACHE_TTL_MS = 60_000
 const keyCache = new Map()
@@ -60,12 +60,7 @@ export function isRateLimitExceeded(provider) {
 
 export const FAILOVER_MODEL = 'auto'
 
-export const ROUTING_STRATEGIES = ['order', 'least-used']
-export const ROUTING_SETTING_KEY = 'routing_strategy'
-
 export function getRoutingStrategy() {
-  const override = getSetting(ROUTING_SETTING_KEY)
-  if (override && ROUTING_STRATEGIES.includes(override)) return override
   const fromConfig = config.relay.routingStrategy
   return ROUTING_STRATEGIES.includes(fromConfig) ? fromConfig : 'order'
 }

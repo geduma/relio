@@ -42,8 +42,8 @@ export default function Dashboard() {
           <Link to="/admin">Metrics</Link>
           <Link to="/admin/keys">API Keys</Link>
           <Link to="/admin/chat">Chat</Link>
-          <Link to="/admin/logs">Logs</Link>
           <Link to="/admin/settings">Settings</Link>
+          <Link to="/admin/logs">Logs</Link>
         </nav>
         <div className="sidebar-footer">
           <button className="btn btn-outline btn-icon" onClick={toggleTheme} title={isDark ? 'Switch to light' : 'Switch to dark'}>

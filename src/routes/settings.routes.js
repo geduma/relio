@@ -1,22 +1,72 @@
 import { Router } from 'express'
-import { setSetting } from '../services/settingsService.js'
-import { getRoutingStrategy, ROUTING_STRATEGIES, ROUTING_SETTING_KEY } from '../services/failoverEngine.js'
+import { normalizeConfig, getConfigPath, getEnvOverrides } from '../config.js'
+import { validateConfigChanges, READ_ONLY_KEYS } from '../services/configValidation.js'
+import { readConfigFile, saveConfigChanges } from '../services/configStore.js'
 
 const router = Router()
 
+function flatten(obj, prefix = '') {
+  const out = {}
+  for (const [key, value] of Object.entries(obj || {})) {
+    const dotted = prefix ? `${prefix}.${key}` : key
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      Object.assign(out, flatten(value, dotted))
+    } else {
+      out[dotted] = value
+    }
+  }
+  return out
+}
+
+function maskKey(key) {
+  if (!key) return ''
+  if (key.length <= 10) return '*'.repeat(key.length)
+  return `${key.slice(0, 6)}...${key.slice(-4)}`
+}
+
+function buildResponse() {
+  const cfg = normalizeConfig(readConfigFile())
+  if (cfg.security && cfg.security.encryptionKey) {
+    cfg.security.encryptionKeySet = true
+    cfg.security.encryptionKey = maskKey(cfg.security.encryptionKey)
+  }
+  return {
+    config: cfg,
+    envOverrides: getEnvOverrides(),
+    readOnlyKeys: READ_ONLY_KEYS,
+    configPath: getConfigPath(),
+  }
+}
+
 router.get('/', (_req, res) => {
-  res.json({ routingStrategy: getRoutingStrategy() })
+  res.json(buildResponse())
 })
 
-router.put('/routing', (req, res) => {
-  const { strategy } = req.body || {}
-  if (!ROUTING_STRATEGIES.includes(strategy)) {
+router.put('/', (req, res) => {
+  const body = req.body || {}
+  const patch = body.config || body
+  const changes = flatten(patch)
+  const errors = validateConfigChanges(changes)
+  if (errors.length > 0) {
     return res.status(400).json({
-      error: { message: `Invalid routing strategy "${strategy}". Allowed: ${ROUTING_STRATEGIES.join(', ')}`, type: 'invalid_request_error', code: 'invalid_routing_strategy' },
+      error: {
+        message: errors.join('; '),
+        type: 'invalid_request_error',
+        code: 'invalid_config',
+      },
     })
   }
-  setSetting(ROUTING_SETTING_KEY, strategy)
-  res.json({ routingStrategy: strategy })
+
+  let saved
+  try {
+    saved = saveConfigChanges(changes)
+  } catch (err) {
+    return res.status(500).json({
+      error: { message: err.message, type: 'server_error', code: 'config_write_failed' },
+    })
+  }
+
+  res.json({ ...buildResponse(), saved })
 })
 
 export default router
