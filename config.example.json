@@ -16,6 +16,7 @@
   },
   "relay": {
     "exposeProvider": false,
-    "requestTimeoutMs": 30000
+    "requestTimeoutMs": 30000,
+    "routingStrategy": "order"
   }
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL, orderProvidersForRouting } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -134,7 +134,7 @@ async function handleStreamingRequest(req, res) {
     }
     provider = selection.provider
   } else {
-    const providers = selectProviders('chat')
+    const providers = orderProvidersForRouting(selectProviders('chat'))
     for (const p of providers) {
       if (!isProviderAvailable(p)) continue
       if (isRateLimitExceeded(p)) continue

@@ -1,5 +1,7 @@
 import { dbAll, dbGet, decrypt } from '../db.js'
 import { getAdapter } from '../adapters/index.js'
+import { config } from '../config.js'
+import { getSetting } from './settingsService.js'
 
 const KEY_CACHE_TTL_MS = 60_000
 const keyCache = new Map()
@@ -58,6 +60,44 @@ export function isRateLimitExceeded(provider) {
 
 export const FAILOVER_MODEL = 'auto'
 
+export const ROUTING_STRATEGIES = ['order', 'least-used']
+export const ROUTING_SETTING_KEY = 'routing_strategy'
+
+export function getRoutingStrategy() {
+  const override = getSetting(ROUTING_SETTING_KEY)
+  if (override && ROUTING_STRATEGIES.includes(override)) return override
+  const fromConfig = config.relay.routingStrategy
+  return ROUTING_STRATEGIES.includes(fromConfig) ? fromConfig : 'order'
+}
+
+export function getUsedTokensToday(provider) {
+  const today = new Date().toISOString().slice(0, 10)
+  const cacheKey = `${provider.id}:${today}`
+  const cached = dailyLimitCache.get(cacheKey)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.used
+  }
+
+  const used = dbGet(
+    `SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) AS used
+     FROM metrics
+     WHERE provider_id = ? AND metric_date = ?`,
+    [provider.id, today]
+  ).used
+  dailyLimitCache.set(cacheKey, { used, expiresAt: Date.now() + DAILY_LIMIT_CACHE_TTL_MS })
+  if (dailyLimitCache.size > 500) dailyLimitCache.clear()
+  return used
+}
+
+export function orderProvidersForRouting(providers) {
+  if (getRoutingStrategy() !== 'least-used') return providers
+  return [...providers].sort((a, b) => {
+    const diff = getUsedTokensToday(a) - getUsedTokensToday(b)
+    if (diff !== 0) return diff
+    return a.order_position - b.order_position
+  })
+}
+
 export function getProvider(id) {
   const p = dbGet('SELECT * FROM providers WHERE id = ?', [id])
   return p ? decryptProvider(p) : null
@@ -115,25 +155,7 @@ export function isRetryableError(err) {
 
 export function isDailyLimitExceeded(provider) {
   if (provider.tokens_per_day <= 0) return false
-
-  const today = new Date().toISOString().slice(0, 10)
-  const cacheKey = `${provider.id}:${today}`
-  const cached = dailyLimitCache.get(cacheKey)
-  let used
-  if (cached && cached.expiresAt > Date.now()) {
-    used = cached.used
-  } else {
-    used = dbGet(
-      `SELECT COALESCE(SUM(total_input_tokens + total_output_tokens), 0) AS used
-       FROM metrics
-       WHERE provider_id = ? AND metric_date = ?`,
-      [provider.id, today]
-    ).used
-    dailyLimitCache.set(cacheKey, { used, expiresAt: Date.now() + DAILY_LIMIT_CACHE_TTL_MS })
-    if (dailyLimitCache.size > 500) dailyLimitCache.clear()
-  }
-
-  return used >= provider.tokens_per_day
+  return getUsedTokensToday(provider) >= provider.tokens_per_day
 }
 
 export async function callProvider(provider, requestBody, signal, capability) {

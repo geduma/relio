@@ -1,8 +1,10 @@
 # Routing Strategies
 
-> **Roadmap (planned, not yet implemented).** Las Routing Strategies definirán cómo el proxy selecciona el proveedor LLM para cada solicitud. En lugar de usar un proveedor fijo, el proxy evaluará métricas (costo, presupuesto, latencia, salud y calidad) y aplicará una política de enrutamiento.
+> **Estado actual:** Relio usa *failover por orden* (Main → Fallback 1 → N) más circuit breaker, rate limiting por proveedor y límites diarios de tokens.
 >
-> **Estado actual:** Relio usa *failover por orden* (Main → Fallback 1 → N) más circuit breaker, rate limiting por proveedor y límites diarios de tokens. Las estrategias descritas a continuación son extensiones previstas y no están disponibles en la versión 1.3.
+> **Implementado:** la estrategia **Balanced (least-used)** está disponible en el proxy. En modo `auto`, cada solicitud parte del proveedor con menos tokens consumidos en el día (según la tabla `metrics`), distribuyendo el gasto de forma homogénea entre capas gratuitas. El failover por orden, el circuit breaker, el rate limit y los límites diarios se mantienen intactos: si el proveedor seleccionado no responde, se intenta el siguiente y, tras `cooldown_after_failures` fallos, pasa a estado `cooldown` y se ignora hasta que expira.
+>
+> **Configuración:** `relay.routingStrategy` (`order` | `least-used`, default `order`) en `config.json`, o desde Dashboard → Settings → Load balancer (override persistido en la tabla `settings`, que prevalece sobre `config.json`). Aplica a requests normales y streaming.
 
 ## Estrategias
 
@@ -14,6 +16,8 @@ Prioriza el modelo de mayor calidad, ignorando el costo hasta alcanzar los lími
 
 ### Balanced
 Distribuye las solicitudes entre varios proveedores para equilibrar consumo, costo y disponibilidad.
+
+> **Implementado como `least-used`:** en modo `auto`, cada solicitud parte del proveedor con menos tokens consumidos hoy, de modo que el gasto se reparte homogéneamente entre las capas gratuitas. Activable con `relay.routingStrategy = "least-used"` o desde Dashboard → Settings.
 
 ### Budget
 Controla el consumo en función del presupuesto diario, semanal o mensual. Si un proveedor supera el consumo esperado, cambia automáticamente al siguiente para evitar agotar la cuota.

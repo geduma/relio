@@ -19,6 +19,7 @@ import metricsRoutes from './routes/metrics.routes.js'
 import keysRoutes from './routes/keys.routes.js'
 import proxyRoutes from './routes/proxy.routes.js'
 import chatRoutes from './routes/chat.routes.js'
+import settingsRoutes from './routes/settings.routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -84,6 +85,7 @@ app.use('/admin/api/providers', dashboardLimiter, providersRoutes)
 app.use('/admin/api/metrics', dashboardLimiter, metricsRoutes)
 app.use('/admin/api/keys', dashboardLimiter, keysRoutes)
 app.use('/admin/api/chat', dashboardLimiter, chatRoutes)
+app.use('/admin/api/settings', dashboardLimiter, settingsRoutes)
 
 app.get('/admin/api/summary', dashboardLimiter, (req, res) => {
   const summary = getSummary()
