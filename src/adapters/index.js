@@ -6,7 +6,7 @@ import AzureOpenAIAdapter from './azure-openai.js'
 const registry = new Map()
 const instances = new Map()
 
-export function registerAdapter(type, AdapterClass) {
+function registerAdapter(type, AdapterClass) {
   registry.set(type, AdapterClass)
 }
 

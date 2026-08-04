@@ -15,7 +15,7 @@ export function errorMessage(err) {
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const addToast = useCallback((message, type = 'info', duration = 4000) => {
+  const addToast = useCallback((message, type, duration = 4000) => {
     const id = Date.now() + Math.random()
     setToasts(prev => [...prev, { id, message, type }])
     if (duration > 0) {

@@ -65,7 +65,7 @@ export function getRoutingStrategy() {
   return ROUTING_STRATEGIES.includes(fromConfig) ? fromConfig : 'order'
 }
 
-export function getUsedTokensToday(provider) {
+function getUsedTokensToday(provider) {
   const today = new Date().toISOString().slice(0, 10)
   const cacheKey = `${provider.id}:${today}`
   const cached = dailyLimitCache.get(cacheKey)

@@ -19,13 +19,17 @@ export default function ApiKeys() {
   const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(keys)
 
   useEffect(() => {
-    fetch('/admin/api/keys')
+    const controller = new AbortController()
+    fetch('/admin/api/keys', { signal: controller.signal })
       .then(async r => {
         if (!r.ok) throw new Error(`Failed to load keys (${r.status})`)
         return r.json()
       })
       .then(setKeys)
-      .catch(err => toast(errorMessage(err), 'error'))
+      .catch(err => {
+        if (err.name !== 'AbortError') toast(errorMessage(err), 'error')
+      })
+    return () => controller.abort()
   }, [])
 
   async function handleCreate(e) {
@@ -43,9 +47,7 @@ export default function ApiKeys() {
       }
       setNewKey(data.apiKey)
       setName('')
-      const updated = await fetch('/admin/api/keys')
-      if (!updated.ok) throw new Error(`Failed to reload keys (${updated.status})`)
-      setKeys(await updated.json())
+      if (data.key) setKeys(prev => [data.key, ...prev])
       toast('API key created', 'success')
     } catch (err) {
       toast(errorMessage(err), 'error')

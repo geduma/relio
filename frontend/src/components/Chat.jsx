@@ -15,10 +15,12 @@ export default function Chat() {
   const [sending, setSending] = useState(false)
   const [useProxy, setUseProxy] = useState(false)
   const messagesEndRef = useRef(null)
+  const idRef = useRef(0)
   const toast = useToast()
 
   useEffect(() => {
-    fetch('/admin/api/chat/providers')
+    const controller = new AbortController()
+    fetch('/admin/api/chat/providers', { signal: controller.signal })
       .then(async r => {
         if (!r.ok) throw new Error(`Failed to load providers (${r.status})`)
         return r.json()
@@ -27,7 +29,10 @@ export default function Chat() {
         setProviders(list)
         if (list.length > 0) setSelectedId(list[0].id)
       })
-      .catch(err => toast(errorMessage(err), 'error'))
+      .catch(err => {
+        if (err.name !== 'AbortError') toast(errorMessage(err), 'error')
+      })
+    return () => controller.abort()
   }, [])
 
   useEffect(() => {
@@ -39,7 +44,7 @@ export default function Chat() {
     if (!text || sending) return
     if (!useProxy && !selectedId) return
 
-    const userMsg = { role: 'user', content: text }
+    const userMsg = { id: ++idRef.current, role: 'user', content: text }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setSending(true)
@@ -65,9 +70,9 @@ export default function Chat() {
       )
       const prov = data._provider
       const providerName = prov ? `${prov.name} (${prov.model})` : null
-      setMessages(prev => [...prev, { role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])
+      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Request failed' }])
+      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request failed' }])
     }
     setSending(false)
   }
@@ -127,8 +132,8 @@ export default function Chat() {
             <p>Send a message to test a provider</p>
           </div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
+        {messages.map(msg => (
+          <div key={msg.id} className={`chat-msg chat-msg--${msg.role}`}>
             <div className="chat-msg-role">
               {msgLabel(msg)}
               {msg.responseTimeMs != null && <span className="chat-msg-time">{msg.responseTimeMs}ms</span>}

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { createApiKey, listApiKeys, revokeApiKey } from '../services/authService.js'
+import { dbGet, hashApiKey } from '../db.js'
 
 const router = Router()
 
@@ -10,8 +11,15 @@ router.post('/', (req, res) => {
   }
 
   const apiKey = createApiKey(name)
+  const row = dbGet(
+    'SELECT id, key_prefix, name, created_at, last_used_at FROM api_keys WHERE key_hash = ?',
+    [hashApiKey(apiKey)]
+  )
   res.json({
     apiKey,
+    key: row
+      ? { id: row.id, key_preview: `${row.key_prefix}...`, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at }
+      : null,
     message: 'Save this key now. You won\'t be able to see it again.',
   })
 })

@@ -86,7 +86,6 @@ router.post('/chat/completions', async (req, res) => {
       originIp: req.ip,
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
-      apiKey: req.apiKey,
       providerId: selectionProviderId(selection),
     })
     res.status(result.statusCode).json(result.body)
@@ -108,7 +107,6 @@ router.post('/embeddings', async (req, res) => {
       originIp: req.ip,
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
-      apiKey: req.apiKey,
       providerId: selectionProviderId(selection),
     })
     res.status(result.statusCode).json(result.body)

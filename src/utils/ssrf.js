@@ -1,7 +1,7 @@
 import net from 'net'
 import dns from 'dns/promises'
 
-export async function resolveHost(hostname) {
+async function resolveHost(hostname) {
   const v4 = await dns.lookup(hostname, { family: 4, all: true }).catch(() => null)
   const v6 = await dns.lookup(hostname, { family: 6, all: true }).catch(() => null)
   return [...(v4 || []), ...(v6 || [])].map(a => a.address)

@@ -77,7 +77,18 @@ describe('circuitBreaker', () => {
   })
 
   it('recordSuccess on an already-healthy provider is a no-op', () => {
-    expect(() => recordSuccess('cb1')).not.toThrow()
+    const beforeState = dbGet("SELECT * FROM circuit_breaker_state WHERE provider_id = 'cb1'")
+    const beforeProvider = dbGet("SELECT status, cooldown_until FROM providers WHERE id = 'cb1'")
+
+    recordSuccess('cb1')
+
+    const afterState = dbGet("SELECT * FROM circuit_breaker_state WHERE provider_id = 'cb1'")
+    const afterProvider = dbGet("SELECT status, cooldown_until FROM providers WHERE id = 'cb1'")
+    expect(afterState.state).toBe('healthy')
+    expect(afterState.failure_count).toBe(0)
+    expect(afterState.updated_at).toBe(beforeState.updated_at)
+    expect(afterProvider.status).toBe(beforeProvider.status)
+    expect(afterProvider.cooldown_until).toBe(beforeProvider.cooldown_until)
   })
 })
 

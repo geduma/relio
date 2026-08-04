@@ -26,25 +26,19 @@ describe('CacheManager', () => {
     expect(hash1).toBe(hash2)
   })
 
-  it('stores and retrieves cache', () => {
+  it('stores and retrieves cache (including memCache hits)', () => {
     const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'hello' }] }
     const response = { choices: [{ message: { content: 'Hi!' } }] }
 
     setCache('/v1/chat/completions', body, response)
     const hash = generateHash(body)
-    const cached = getCache('/v1/chat/completions', hash)
+    const first = getCache('/v1/chat/completions', hash)
+    const second = getCache('/v1/chat/completions', hash)
 
-    expect(cached).not.toBeNull()
-    const parsed = JSON.parse(cached.response_body)
-    expect(parsed.choices[0].message.content).toBe('Hi!')
-  })
-
-  it('returns cached value on second call (memCache hit)', () => {
-    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'again' }] }
-    setCache('/v1/chat/completions', body, { choices: [{ message: { content: 'Mem' } }] })
-    const hash = generateHash(body)
-    const cached = getCache('/v1/chat/completions', hash)
-    expect(JSON.parse(cached.response_body).choices[0].message.content).toBe('Mem')
+    expect(first).not.toBeNull()
+    expect(second).not.toBeNull()
+    expect(JSON.parse(first.response_body).choices[0].message.content).toBe('Hi!')
+    expect(JSON.parse(second.response_body).choices[0].message.content).toBe('Hi!')
   })
 
   it('does not return a cache entry stored under a different endpoint', () => {
@@ -60,9 +54,24 @@ describe('CacheManager', () => {
     expect(result).toBeNull()
   })
 
-  it('cleans expired cache returns number', () => {
+  it('cleans expired cache entries from the database', async () => {
+    const dbMod = await import('../src/db.js')
+    dbMod.dbRun(
+      `INSERT OR REPLACE INTO cache (id, query_hash, endpoint, request_body, response_body, provider_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['to-clean', 'clean_hash', '/v1/chat/completions', '{}', '{}', null, new Date(Date.now() - 1000).toISOString()]
+    )
+    dbMod.dbRun(
+      `INSERT OR REPLACE INTO cache (id, query_hash, endpoint, request_body, response_body, provider_id, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ['to-keep', 'keep_hash', '/v1/chat/completions', '{}', '{}', null, new Date(Date.now() + 3600_000).toISOString()]
+    )
+
     const count = cleanExpiredCache()
+
     expect(typeof count).toBe('number')
+    expect(dbMod.dbGet('SELECT id FROM cache WHERE id = ?', ['to-clean'])).toBeUndefined()
+    expect(dbMod.dbGet('SELECT id FROM cache WHERE id = ?', ['to-keep'])).toBeDefined()
   })
 
   it('returns null for expired cache entry stored with ISO T format', async () => {

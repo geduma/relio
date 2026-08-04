@@ -22,25 +22,22 @@ export default function ProviderForm() {
   const isEdit = Boolean(id)
   const navigate = useNavigate()
   const [form, setForm] = useState(emptyForm)
-  const [connStatus, setConnStatus] = useState(null)
+  const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
     setForm(emptyForm)
-    setConnStatus(null)
+    setTesting(false)
     setFormError(null)
     if (isEdit) {
-      fetch('/admin/api/providers')
+      fetch(`/admin/api/providers/${id}`)
         .then(async r => {
           if (!r.ok) throw new Error(`Failed to load provider (${r.status})`)
           return r.json()
         })
-        .then(list => {
-          const p = list.find(x => x.id === id)
-          if (p) setForm(p)
-        })
+        .then(p => setForm(p))
         .catch(err => toast(errorMessage(err), 'error'))
     }
   }, [id, isEdit])
@@ -49,7 +46,7 @@ export default function ProviderForm() {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: value }))
     if (name === 'api_url' || name === 'api_key' || name === 'provider_type') {
-      setConnStatus(null)
+      setTesting(false)
       setFormError(null)
     }
   }
@@ -59,7 +56,7 @@ export default function ProviderForm() {
       toast('Enter API URL and Key first', 'error')
       return
     }
-    setConnStatus('testing')
+    setTesting(true)
     try {
       const body = { api_url: form.api_url, api_key: form.api_key, provider_type: form.provider_type }
       if (isEdit && form.api_key === '***') body.provider_id = id
@@ -70,18 +67,17 @@ export default function ProviderForm() {
       })
       const data = await res.json()
       if (data.valid) {
-        setConnStatus('success')
         setFormError(null)
         toast('Connection successful', 'success')
       } else {
-        setConnStatus('fail')
         setFormError(errorMessage(data.error || 'Connection failed'))
         toast(errorMessage(data.error || 'Connection failed'), 'error')
       }
     } catch {
-      setConnStatus('fail')
       setFormError('Connection test request failed')
       toast('Connection test request failed', 'error')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -166,8 +162,8 @@ export default function ProviderForm() {
           </label>
         </div>
         <div className="field-full form-actions">
-          <button type="button" className="btn" onClick={testConnection} disabled={connStatus === 'testing'}>
-            {connStatus === 'testing' ? 'Testing...' : 'Test'}
+          <button type="button" className="btn" onClick={testConnection} disabled={testing}>
+            {testing ? 'Testing...' : 'Test'}
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</button>
           <button type="button" className="btn" onClick={() => navigate('/admin/providers')}>Cancel</button>
