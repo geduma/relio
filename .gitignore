@@ -4,7 +4,6 @@ db/backups/
 logs/
 frontend/dist/
 frontend/node_modules/
-config.json
-docker/config/config.json
+config/config.json
 *.log
 .DS_Store

@@ -46,8 +46,9 @@
 git clone <repo> relio
 cd relio
 
-cp config.example.json config.json
-# Edit config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
+mkdir -p config
+cp config/config.example.json config/config.json
+# Edit config/config.json — set security.encryptionKey (openssl rand -hex 32) and your provider settings
 
 npm run install:all  # installs backend (root) + frontend dependencies
 
@@ -65,7 +66,7 @@ Open `http://localhost:3000/admin` — the dashboard requires no login.
 
 ## Configuration
 
-All settings are in `config.json` at the project root. Copy `config.example.json` and edit:
+All settings are in `config/config.json` (a single folder shared by npm, pm2 and Docker). Copy the template and edit:
 
 ```json
 {
@@ -147,13 +148,22 @@ Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register i
 
 ## Configuración de permisos de `config.json`
 
-El contenedor guarda su configuración en un **directorio montado** (`docker/config/`), no en un archivo único. Esto es necesario porque la app escribe `config.json` de forma atómica (`rename` sobre un archivo temporal) y Docker **no permite `rename` sobre un bind‑mount de un solo archivo** (error `EBUSY`).
+La configuración vive en una **carpeta única `config/`** en la raíz del repo, compartida por todos los runtimes (npm, pm2 y Docker):
 
-1. En `docker/docker-compose.yml` el directorio `docker/config/` se monta en `/app/config` con permisos `rw` y se apunta la ruta del archivo con `CONFIG_PATH=/app/config/config.json`.
-2. El script `setup-config-perm.sh` (entrypoint) se ejecuta como `root`, garantiza que `config.json` exista (copiándolo de `config.example.json` si falta), ajusta los permisos a `rw-rw-r--` y propietario `node:node`, y luego lanza la app como usuario `node`.
-3. Gracias al **montaje de directorio**, el `rename()` atómico ocurre dentro de la misma carpeta y el error `EBUSY` desaparece.
+```
+config/
+├── config.example.json    # plantilla (versionada)
+└── config.json            # config real (gitignored)
+```
 
-Con esto el dashboard puede persistir los cambios y tú puedes editar `docker/config/config.json` desde el host sin pasos manuales.
+- **npm / pm2**: leen `config/config.json` (ruta por defecto de `src/config.js`).
+- **Docker**: monta `../config` → `/app/config` y apunta `CONFIG_PATH=/app/config/config.json` — el mismo archivo.
+
+El montaje de **directorio** (no de archivo único) es imprescindible porque la app escribe `config.json` de forma atómica (`rename` sobre un archivo temporal) y Docker **no permite `rename` sobre un bind‑mount de un solo archivo** (error `EBUSY`).
+
+El entrypoint `setup-config-perm.sh` se ejecuta como `root`, garantiza que `/app/config/config.json` exista (copiándolo de `config.example.json` si falta), ajusta los permisos a `rw-rw-r--` y propietario `node:node`, y luego lanza la app como usuario `node`. Gracias al montaje de directorio, el `rename()` atómico ocurre dentro de la misma carpeta y el error `EBUSY` desaparece.
+
+Con esto el dashboard puede persistir los cambios y tú puedes editar `config/config.json` desde el host sin pasos manuales.
 
 ### Pasos de despliegue
 
@@ -167,7 +177,7 @@ docker compose -f docker/docker-compose.yml up --build -d
 
 Una vez ejecutado, verifica:
 
-- En el host: `ls -l docker/config/config.json` – debe mostrar permisos `-rw-rw-r--`.
+- En el host: `ls -l config/config.json` – debe mostrar permisos `-rw-rw-r--`.
 - Dentro del contenedor: `docker compose -f docker/docker-compose.yml exec relio ls -l /app/config/config.json` – el mismo resultado.
 
 ## Docker
@@ -175,14 +185,15 @@ Una vez ejecutado, verifica:
 ### Build and run
 
 ```bash
-cp config.example.json config.json
-# Edita config.json — pon security.encryptionKey (openssl rand -hex 32) y tus providers
-
-mkdir -p docker/config
-cp config.json docker/config/config.json   # config usada por Docker
+# Prepara la config (una sola vez)
+mkdir -p config
+cp config/config.example.json config/config.json
+# Edita config/config.json — pon security.encryptionKey (openssl rand -hex 32) y tus providers
 
 docker compose -f docker/docker-compose.yml up --build -d
 ```
+
+En una instalación limpia estos pasos son opcionales: el entrypoint crea `config.json` desde la plantilla en el primer arranque. Solo necesitas poner tu `encryptionKey` (en `config/config.json` o vía `ENCRYPTION_KEY`) para que la app arranque.
 
 ### Volúmenes
 
@@ -191,10 +202,10 @@ El compose monta directorios persistentes del host (relativos a `docker/`):
 ```
 - ./db:/app/db
 - ./logs:/app/logs
-- ./config:/app/config:rw
+- ../config:/app/config:rw
 ```
 
-El archivo de configuración que usa Docker es `docker/config/config.json` (se edita desde el host o desde el dashboard; ambos comparten el mismo archivo). `CONFIG_PATH` apunta a `/app/config/config.json`. Puedes sobrescribir la clave por entorno:
+El archivo de configuración que usa Docker es `config/config.json` de la raíz (se edita desde el host o desde el dashboard; ambos comparten el mismo archivo). `CONFIG_PATH` apunta a `/app/config/config.json`. Puedes sobrescribir la clave por entorno:
 
 ```bash
 ENCRYPTION_KEY=... docker compose -f docker/docker-compose.yml up -d
@@ -320,12 +331,11 @@ relio/
 │   └── vite.config.js
 ├── docker/                 # Docker multi-stage
 │   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── config/             # Config dir montado en /app/config (gitkeep trackeado)
-│       ├── .gitkeep
-│       └── config.json     # Config de Docker (gitignored)
-├── config.json             # Config para npm/pm2 (gitignored)
-├── config.example.json     # Configuration template
+│   └── docker-compose.yml
+├── config/                 # Config compartida por npm/pm2/docker
+│   ├── .gitkeep            # Mantiene el dir en clones limpios (trackeado)
+│   ├── config.example.json # Plantilla (trackeada)
+│   └── config.json         # Config real (gitignored)
 ├── db/                     # Database (gitignored)
 ├── tests/                  # Vitest tests
 └── docs/                   # Documentation
