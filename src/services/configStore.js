@@ -43,7 +43,8 @@ export function saveConfigChanges(changes) {
     }
     throw new Error(
       `Failed to write configuration to ${path}: ${err.message}. ` +
-        'Check file permissions (in Docker the config.json mount must be writable).'
+        'Check file permissions. In Docker, config.json must live inside a writable mounted directory ' +
+        '(see CONFIG_PATH) because atomic rename() fails over single-file bind mounts (EBUSY).'
     )
   }
   return next

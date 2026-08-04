@@ -10,9 +10,10 @@ services:
       - "${PORT:-3000}:3000"
     environment:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - CONFIG_PATH=/app/config/config.json
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-      - ../config.json:/app/config.json:rw
+      - ./config:/app/config:rw
     restart: unless-stopped
 

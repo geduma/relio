@@ -221,17 +221,20 @@ beforeAll(async () => {
 ## Docker
 
 ```bash
-# Build and run (config.json must exist in project root)
+# Build and run (docker/config/config.json must exist; entrypoint bootstraps from config.example.json)
+mkdir -p docker/config
+cp config.example.json docker/config/config.json  # edit as needed
 docker compose -f docker/docker-compose.yml up --build
 
 # Structure
 docker/
-├── Dockerfile            # Multi-stage build, copies config.example.json as default
-├── docker-compose.yml    # Port 3000, volumes for db/logs/config.json
+├── Dockerfile            # Multi-stage build, copies config.example.json for bootstrap
+├── docker-compose.yml    # Port 3000, volumes for db/logs/config (CONFIG_PATH=/app/config/config.json)
+├── config/               # Host dir mounted at /app/config:rw (gitkeep tracked, config.json git-ignored)
 └── .dockerignore
 ```
 
-Before Docker deployment, ensure you have `config.json` with your settings (mounts override the default `config.example.json`).
+The config file is mounted as a **directory** (`docker/config` → `/app/config`) rather than a single file, because the app writes `config.json` atomically (`rename` over a temp file) and Docker returns `EBUSY` on single-file bind mounts. The entrypoint `setup-config-perm.sh` runs as root, ensures `config.json` exists (copies from `config.example.json` if missing), chowns it to `node:node` with `664`, then drops to the `node` user to start the app. Before Docker deployment, ensure `docker/config/config.json` has your settings (or let the entrypoint bootstrap the example).
 
 ## Common Tasks
 

@@ -147,62 +147,60 @@ Create `src/adapters/yourprovider.js` extending `ProviderAdapter` and register i
 
 ## Configuración de permisos de `config.json`
 
-Para garantizar que el proceso que corre dentro del contenedor siempre pueda escribir en `config.json` sin errores de *EBUSY*, el Dockerfile incluye el script `setup-config-perm.sh` que se ejecuta en el *ENTRYPOINT*. Al apilar la imagen y crear el contenedor, se realiza:
+El contenedor guarda su configuración en un **directorio montado** (`docker/config/`), no en un archivo único. Esto es necesario porque la app escribe `config.json` de forma atómica (`rename` sobre un archivo temporal) y Docker **no permite `rename` sobre un bind‑mount de un solo archivo** (error `EBUSY`).
 
-1. Se monta el archivo `../config.json` del host en `/app/config.json` con permisos `rw`.
-2. El script modifica los permisos de dicha ruta a `rw-rw-r--` antes de iniciar la aplicación.
+1. En `docker/docker-compose.yml` el directorio `docker/config/` se monta en `/app/config` con permisos `rw` y se apunta la ruta del archivo con `CONFIG_PATH=/app/config/config.json`.
+2. El script `setup-config-perm.sh` (entrypoint) se ejecuta como `root`, garantiza que `config.json` exista (copiándolo de `config.example.json` si falta), ajusta los permisos a `rw-rw-r--` y propietario `node:node`, y luego lanza la app como usuario `node`.
+3. Gracias al **montaje de directorio**, el `rename()` atómico ocurre dentro de la misma carpeta y el error `EBUSY` desaparece.
 
-Con esto el usuario `node` del contenedor puede actualizar la configuración desde el dashboard sin necesidad de comandos adicionales.
+Con esto el dashboard puede persistir los cambios y tú puedes editar `docker/config/config.json` desde el host sin pasos manuales.
 
 ### Pasos de despliegue
 
 ```bash
-# Reinicia el stack
-# Docker Compose desmontará el contenedor existente así como las imágenes antiguas.
-docker compose down
+# Reinicia el stack (desmonta el contenedor existente)
+docker compose -f docker/docker-compose.yml down
 
-# Reconstruye la imagen con la lógica de permisos incluida
-# Y levanta nuevamente el servicio.
-docker compose up --build -d
+# Reconstruye la imagen y levanta el servicio
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
-Una vez ejecutado, verifica con:
+Una vez ejecutado, verifica:
 
-- En el host: `ls -l ../config.json` – debe mostrar permisos `-rw-rw-r--`.
-- Dentro del contenedor: `docker compose exec relio ls -l /app/config.json` – el mismo resultado.
+- En el host: `ls -l docker/config/config.json` – debe mostrar permisos `-rw-rw-r--`.
+- Dentro del contenedor: `docker compose -f docker/docker-compose.yml exec relio ls -l /app/config/config.json` – el mismo resultado.
 
 ## Docker
 
 ### Build and run
 
 ```bash
-docker compose up --build -d
+cp config.example.json config.json
+# Edita config.json — pon security.encryptionKey (openssl rand -hex 32) y tus providers
+
+mkdir -p docker/config
+cp config.json docker/config/config.json   # config usada por Docker
+
+docker compose -f docker/docker-compose.yml up --build -d
 ```
 
-### Mounting config.json
+### Volúmenes
 
-The local `config.json` is mounted into the container:
+El compose monta directorios persistentes del host (relativos a `docker/`):
 
 ```
-- ../config.json:/app/config.json:rw
+- ./db:/app/db
+- ./logs:/app/logs
+- ./config:/app/config:rw
 ```
 
-The `setup-config-perm.sh` script adjusts the file’s permissions to `-rw-rw-r--` before launching the server.
-
-### Volumes
-
-Data directories (`db/`, `logs/`) are also mounted from the host for persistence.
-
-docker compose -f docker/docker-compose.yml up -d
-```
-
-Your `config.json` (which already contains your `security.encryptionKey`) is mounted into the container, so nothing else is needed. The mount is read-write so the Settings dashboard can persist changes back to the file; the container runs as a non-root user (`node`), so make sure the host `config.json` is writable by that user (e.g. `chmod 664 config.json` or match ownership). You can optionally override the key via the environment:
+El archivo de configuración que usa Docker es `docker/config/config.json` (se edita desde el host o desde el dashboard; ambos comparten el mismo archivo). `CONFIG_PATH` apunta a `/app/config/config.json`. Puedes sobrescribir la clave por entorno:
 
 ```bash
 ENCRYPTION_KEY=... docker compose -f docker/docker-compose.yml up -d
 ```
 
-The image runs as a non-root user (`node`) and includes a healthcheck on `/admin/api/metrics/health`. The compose file mounts `config.json`, `db/`, and `logs/` from the host so data persists across restarts.
+La imagen corre la app como usuario no root (`node`), incluye un healthcheck en `/admin/api/metrics/health`, y el entrypoint prepara automáticamente los permisos de `config.json` en cada arranque.
 
 ## Usage
 
@@ -322,8 +320,11 @@ relio/
 │   └── vite.config.js
 ├── docker/                 # Docker multi-stage
 │   ├── Dockerfile
-│   └── docker-compose.yml
-├── config.json             # Configuration (gitignored)
+│   ├── docker-compose.yml
+│   └── config/             # Config dir montado en /app/config (gitkeep trackeado)
+│       ├── .gitkeep
+│       └── config.json     # Config de Docker (gitignored)
+├── config.json             # Config para npm/pm2 (gitignored)
 ├── config.example.json     # Configuration template
 ├── db/                     # Database (gitignored)
 ├── tests/                  # Vitest tests
