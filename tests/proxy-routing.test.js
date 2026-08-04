@@ -205,6 +205,27 @@ describe('cache bypass for tool requests', () => {
 })
 
 describe('cached response labeling', () => {
+  it('records the provider on cache hits (failover mode)', async () => {
+    const dbMod = await import('../src/db.js')
+    const { flushAll } = await import('../src/services/logQueue.js')
+    const body = { messages: [{ role: 'user', content: 'cache-hit-provider-log-1' }] }
+    const cacheHitsBefore = dbMod.dbGet('SELECT COUNT(*) AS c FROM requests_log WHERE cache_hit = 1').c
+
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'llm_pk_xx' } })
+    flushAll()
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'llm_pk_xx' } })
+    flushAll()
+
+    const log = dbMod.dbGet(
+      'SELECT provider_id, provider_name, requester_name, requester_key, cache_hit FROM requests_log WHERE cache_hit = 1 ORDER BY request_at DESC LIMIT 1'
+    )
+    expect(dbMod.dbGet('SELECT COUNT(*) AS c FROM requests_log WHERE cache_hit = 1').c).toBe(cacheHitsBefore + 1)
+    expect(log.provider_id).toBeTruthy()
+    expect(log.provider_name).toBeTruthy()
+    expect(log.requester_name).toBe('Agent A')
+    expect(log.requester_key).toBe('llm_pk_xx')
+  })
+
   it('marks cached responses with _cache_hit when provider metadata is exposed', async () => {
     const body = { messages: [{ role: 'user', content: 'cache-label-1' }] }
     await processRequest({
