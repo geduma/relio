@@ -97,9 +97,9 @@ describe('logQueue', () => {
     dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['lk1', hashApiKey('llm_pk_log_key'), 'llm_pk_lo', 'log test'])
 
     enqueueLog({
-      providerId: 'cb1', endpoint: '/v1/chat/completions', requestBody: { messages: [] },
+      providerId: 'cb1', providerName: 'Circuit', endpoint: '/v1/chat/completions', requestBody: { messages: [] },
       originIp: '127.0.0.1', statusCode: 200, inputTokens: 10, outputTokens: 5,
-      responseTimeMs: 42, authenticatedVia: 'api_key', cacheHit: false,
+      responseTimeMs: 42, authenticatedVia: 'api_key', requesterName: 'log test', requesterKey: 'llm_pk_lo', cacheHit: false,
     })
     enqueueMetric('cb1', { inputTokens: 10, outputTokens: 5, cost: 0.01, responseTimeMs: 42, cacheHit: false })
     enqueueApiKeyTouch('lk1')
@@ -109,6 +109,9 @@ describe('logQueue', () => {
     expect(log).toBeTruthy()
     expect(log.total_tokens).toBe(15)
     expect(log.status_code).toBe(200)
+    expect(log.provider_name).toBe('Circuit')
+    expect(log.requester_name).toBe('log test')
+    expect(log.requester_key).toBe('llm_pk_lo')
 
     const metric = dbGet("SELECT * FROM metrics WHERE provider_id = 'cb1'")
     expect(metric).toBeTruthy()
@@ -126,6 +129,13 @@ describe('metricsLogger', () => {
     const page1 = getLogs(2, 0)
     expect(page1.logs.length).toBe(Math.min(2, inserted))
     expect(page1.total).toBe(inserted)
+
+    const first = page1.logs.find(l => l.provider_id === 'cb1')
+    if (first) {
+      expect(first.provider_name).toBe('Circuit')
+      expect(first.requester_name).toBe('log test')
+      expect(first.origin_ip).toBe('127.0.0.1')
+    }
 
     const page2 = getLogs(2, 2)
     expect(page2.logs.length).toBe(Math.max(0, Math.min(2, inserted - 2)))

@@ -33,6 +33,7 @@ router.post('/send', async (req, res) => {
         authenticatedVia: 'dashboard_chat',
         providerId: null,
         forceExposeProvider: true,
+        requester: { name: 'Dashboard Chat', keyPrefix: null },
       })
       return res.status(result.statusCode).json(addTime({
         ...result.body,
@@ -60,11 +61,11 @@ router.post('/send', async (req, res) => {
     const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
     enqueueLog({
-      providerId: provider.id, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: data,
       inputTokens, outputTokens, estimatedCost,
-      responseTimeMs, authenticatedVia: 'dashboard_chat', cacheHit: false, retryCount: 0,
+      responseTimeMs, authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
     })
 
     enqueueMetric(provider.id, { inputTokens, outputTokens, cost: estimatedCost, responseTimeMs, cacheHit: false })
@@ -75,10 +76,10 @@ router.post('/send', async (req, res) => {
     logger.warn('Chat test failed', { provider_id, error: err.message })
 
     enqueueLog({
-      providerId: provider.id, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: err.status || 503, errorMessage: err.message,
-      responseTimeMs, authenticatedVia: 'dashboard_chat', cacheHit: false, wasRetry: false, retryCount: 0,
+      responseTimeMs, authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, wasRetry: false, retryCount: 0,
     })
 
     enqueueMetric(provider.id, { error: true, responseTimeMs })

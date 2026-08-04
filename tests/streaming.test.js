@@ -343,6 +343,35 @@ describe('POST /v1/chat/completions streaming', () => {
   })
 })
 
+describe('streaming request logging', () => {
+  it('logs the provider and the authenticated api key as requester', async () => {
+    const dbMod = await import('../src/db.js')
+    const { flushAll } = await import('../src/services/logQueue.js')
+
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+    const reader = res.body.getReader()
+    while (!(await reader.read()).done) { /* drain */ }
+
+    flushAll()
+    const log = dbMod.dbGet("SELECT provider_id, provider_name, requester_name, requester_key FROM requests_log WHERE endpoint = '/v1/chat/completions' ORDER BY request_at DESC LIMIT 1")
+    expect(log).toBeTruthy()
+    expect(log.provider_id).toBe('pA')
+    expect(log.provider_name).toBe('AlphaChat')
+    expect(log.requester_name).toBe('test')
+    expect(log.requester_key).toBe('llm_pk_te')
+  })
+})
+
 describe('auth error format', () => {
   it('returns OpenAI-formatted 401 for missing auth', async () => {
     const res = await realFetch(`${baseUrl}/v1/chat/completions`, {

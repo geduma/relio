@@ -41,10 +41,13 @@ export function getMetrics(from, to) {
 
 export function getLogs(limit = 50, offset = 0) {
   const logs = dbAll(
-    `SELECT id, provider_id, endpoint, status_code, input_tokens, output_tokens,
-            response_time_ms, cache_hit, authenticated_via, request_at, error_message
-     FROM requests_log
-     ORDER BY request_at DESC
+    `SELECT l.id, l.provider_id, COALESCE(l.provider_name, p.name) AS provider_name,
+            l.endpoint, l.status_code, l.input_tokens, l.output_tokens,
+            l.response_time_ms, l.cache_hit, l.authenticated_via,
+            l.requester_name, l.requester_key, l.origin_ip, l.request_at, l.error_message
+     FROM requests_log l
+     LEFT JOIN providers p ON p.id = l.provider_id
+     ORDER BY l.request_at DESC
      LIMIT ? OFFSET ?`,
     [limit, offset]
   )

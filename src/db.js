@@ -102,6 +102,7 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS requests_log (
       id TEXT PRIMARY KEY,
       provider_id TEXT REFERENCES providers(id),
+      provider_name TEXT,
       endpoint TEXT NOT NULL,
       request_body TEXT NOT NULL,
       origin_ip TEXT,
@@ -116,6 +117,8 @@ export function initDb() {
       request_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       response_time_ms INT,
       authenticated_via TEXT,
+      requester_name TEXT,
+      requester_key TEXT,
       cache_hit BOOLEAN DEFAULT FALSE,
       was_retry BOOLEAN DEFAULT FALSE,
       retry_count INT DEFAULT 0
@@ -193,6 +196,20 @@ function runMigrations(d) {
     if (columns.includes(column)) {
       d.exec(`ALTER TABLE providers DROP COLUMN ${column}`)
     }
+  }
+
+  const logColumns = d.prepare("PRAGMA table_info('requests_log')").all().map(c => c.name)
+  if (!logColumns.includes('provider_name')) {
+    d.exec('ALTER TABLE requests_log ADD COLUMN provider_name TEXT')
+    d.exec(`UPDATE requests_log
+            SET provider_name = (SELECT p.name FROM providers p WHERE p.id = requests_log.provider_id)
+            WHERE provider_name IS NULL AND provider_id IS NOT NULL`)
+  }
+  if (!logColumns.includes('requester_name')) {
+    d.exec('ALTER TABLE requests_log ADD COLUMN requester_name TEXT')
+  }
+  if (!logColumns.includes('requester_key')) {
+    d.exec('ALTER TABLE requests_log ADD COLUMN requester_key TEXT')
   }
 
   migrateApiKeys(d)

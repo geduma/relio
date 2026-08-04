@@ -87,6 +87,7 @@ router.post('/chat/completions', async (req, res) => {
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       providerId: selectionProviderId(selection),
+      requester: { name: req.apiKey.name, keyPrefix: req.apiKey.key_prefix },
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
@@ -108,6 +109,7 @@ router.post('/embeddings', async (req, res) => {
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       providerId: selectionProviderId(selection),
+      requester: { name: req.apiKey.name, keyPrefix: req.apiKey.key_prefix },
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
@@ -193,11 +195,13 @@ async function handleStreamingRequest(req, res) {
 
     recordSuccess(provider.id)
     enqueueLog({
-      providerId: provider.id, endpoint: '/v1/chat/completions', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
       responseTimeMs: Date.now() - startTime,
-      authenticatedVia: 'api_key', cacheHit: false, retryCount: 0,
+      authenticatedVia: 'api_key',
+      requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
+      cacheHit: false, retryCount: 0,
     })
     enqueueMetric(provider.id, {
       responseTimeMs: Date.now() - startTime, cacheHit: false,
@@ -208,11 +212,13 @@ async function handleStreamingRequest(req, res) {
     if (res.headersSent) return
 
     enqueueLog({
-      providerId: provider.id, endpoint: '/v1/chat/completions', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: err.status || 503, errorMessage: err.message,
       responseTimeMs: Date.now() - startTime,
-      authenticatedVia: 'api_key', cacheHit: false, retryCount: 0,
+      authenticatedVia: 'api_key',
+      requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
+      cacheHit: false, retryCount: 0,
     })
     enqueueMetric(provider.id, {
       error: true, responseTimeMs: Date.now() - startTime,
