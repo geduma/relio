@@ -128,9 +128,17 @@ src/
 
 ## Configuration
 
-All settings live in `config.json` at the project root. `src/config.js` reads this file at startup and exposes the parsed object as `config`.
+All settings live in a single `config/` folder at the repo root, shared by npm, pm2 and Docker:
 
-To add a new key, add it to `config.json`, `config.example.json`, and update the README table.
+```
+config/
+├── config.example.json    # template (versioned)
+└── config.json            # real config (gitignored)
+```
+
+`src/config.js` reads `config/config.json` at startup (override with `CONFIG_PATH`) and exposes the parsed object as `config`. In Docker, `../config` is mounted at `/app/config` and `CONFIG_PATH=/app/config/config.json` points at the same file.
+
+To add a new key, add it to `config/config.json`, `config/config.example.json`, and update the README table.
 
 `process.env` overrides are supported: `PORT`, `HOST`, `NODE_ENV`, `DB_PATH`, `CONFIG_PATH`, and `ENCRYPTION_KEY`.
 
@@ -138,7 +146,7 @@ To add a new key, add it to `config.json`, `config.example.json`, and update the
 
 | Env | Type | Default | Effect |
 |---|---|---|---|
-| `CONFIG_PATH` | string | `./config.json` | Path to the JSON config file |
+| `CONFIG_PATH` | string | `./config/config.json` | Path to the JSON config file |
 | `PORT` | number | from `config.json` | HTTP listen port |
 | `HOST` | string | from `config.json` | Listen address (`0.0.0.0` in prod) |
 | `NODE_ENV` | string | from `config.json` | `development` / `production` |
@@ -221,20 +229,19 @@ beforeAll(async () => {
 ## Docker
 
 ```bash
-# Build and run (docker/config/config.json must exist; entrypoint bootstraps from config.example.json)
-mkdir -p docker/config
-cp config.example.json docker/config/config.json  # edit as needed
+# Build and run (config/config.json is bootstrapped by the entrypoint if missing)
+mkdir -p config
+cp config/config.example.json config/config.json  # edit as needed
 docker compose -f docker/docker-compose.yml up --build
 
 # Structure
 docker/
-├── Dockerfile            # Multi-stage build, copies config.example.json for bootstrap
-├── docker-compose.yml    # Port 3000, volumes for db/logs/config (CONFIG_PATH=/app/config/config.json)
-├── config/               # Host dir mounted at /app/config:rw (gitkeep tracked, config.json git-ignored)
+├── Dockerfile            # Multi-stage build, copies config/config.example.json for bootstrap
+├── docker-compose.yml    # Port 3000, volumes for db/logs + ../config (CONFIG_PATH=/app/config/config.json)
 └── .dockerignore
 ```
 
-The config file is mounted as a **directory** (`docker/config` → `/app/config`) rather than a single file, because the app writes `config.json` atomically (`rename` over a temp file) and Docker returns `EBUSY` on single-file bind mounts. The entrypoint `setup-config-perm.sh` runs as root, ensures `config.json` exists (copies from `config.example.json` if missing), chowns it to `node:node` with `664`, then drops to the `node` user to start the app. Before Docker deployment, ensure `docker/config/config.json` has your settings (or let the entrypoint bootstrap the example).
+The config file is mounted as a **directory** (`../config` → `/app/config`) rather than a single file, because the app writes `config.json` atomically (`rename` over a temp file) and Docker returns `EBUSY` on single-file bind mounts. The entrypoint `setup-config-perm.sh` runs as root, ensures `/app/config/config.json` exists (copies from the baked `config.example.json` if missing), chowns it to `node:node` with `664`, then drops to the `node` user to start the app. This is the same `config/config.json` that npm and pm2 use — all three runtimes share one file.
 
 ## Common Tasks
 
@@ -322,6 +329,6 @@ npm run build        # Build frontend only
 ## Notes
 
 - `npm start` runs `prestart` (`scripts/prestart.js`) which builds `frontend/dist` if `index.html` is missing.
-- `config.js` falls back to `config.example.json` if `config.json` is absent (so CI works with `ENCRYPTION_KEY` set).
+- `config.js` falls back to `config/config.example.json` if `config/config.json` is absent (so CI works with `ENCRYPTION_KEY` set).
 - `isDailyLimitExceeded()` caches the used-token sum for 10s per provider/day (`clearDailyLimitCache()` exported for tests).
 - `recordSuccess()` is a no-op when the provider is already healthy (one read instead of a write transaction).

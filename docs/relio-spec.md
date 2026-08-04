@@ -616,7 +616,7 @@ OpenAI-compatible embeddings.
 
 ## 8. CONFIGURATION
 
-All configuration lives in `config.json` at the project root. Copy `config.example.json` and edit.
+All configuration lives in `config/config.json`. Copy `config/config.example.json` and edit (the folder is shared by npm, pm2 and Docker).
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -633,7 +633,7 @@ All configuration lives in `config.json` at the project root. Copy `config.examp
 | `rateLimit.dashboardPerMinute` | number | `120` | Dashboard API requests per minute |
 | `rateLimit.proxyPerMinute` | number | `120` | `/v1` requests per minute, keyed by API key + IP |
 
-Env var overrides (for testing): `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, `CONFIG_PATH`.
+Env var overrides (for testing): `DB_PATH`, `PORT`, `HOST`, `NODE_ENV`, `CONFIG_PATH`, `ENCRYPTION_KEY`.
 
 ---
 
@@ -691,8 +691,9 @@ relio/
 ├── logs/
 │   ├── app.log                     # Application logs
 │   └── archive/                    # Compressed old logs
-├── config.json                     # Configuration (git-ignored)
-├── config.example.json             # Configuration template
+├── config/
+│   ├── config.json                   # Configuration (git-ignored)
+│   └── config.example.json           # Configuration template
 ├── .gitignore
 ├── package.json                    # Backend dependencies
 └── README.md

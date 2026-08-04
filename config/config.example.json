@@ -1,0 +1,22 @@
+{
+  "security": {
+    "encryptionKey": "replace-with-a-random-64-char-hex-string"
+  },
+  "db": {
+    "path": "./db/db.sqlite"
+  },
+  "cache": {
+    "ttlSeconds": 2592000
+  },
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0",
+    "nodeEnv": "development",
+    "trustedProxy": false
+  },
+  "relay": {
+    "exposeProvider": false,
+    "requestTimeoutMs": 30000,
+    "routingStrategy": "order"
+  }
+}

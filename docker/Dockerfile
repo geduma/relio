@@ -42,7 +42,7 @@ COPY package*.json ./
 COPY src/ ./src/
 
 # Configuración por defecto (usada por el entrypoint para bootstrap)
-COPY config.example.json ./config.example.json
+COPY config/config.example.json ./config.example.json
 
 # Frontend compilado
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

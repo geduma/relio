@@ -13,7 +13,7 @@ const ENV_OVERRIDES = {
 }
 
 export function getConfigPath() {
-  return process.env.CONFIG_PATH || join(__dirname, '..', 'config.json')
+  return process.env.CONFIG_PATH || join(__dirname, '..', 'config', 'config.json')
 }
 
 export function getEnvOverrides() {
@@ -83,10 +83,10 @@ export function loadConfig() {
     raw = readFileSync(configPath, 'utf-8')
   } catch {
     try {
-      raw = readFileSync(join(__dirname, '..', 'config.example.json'), 'utf-8')
+      raw = readFileSync(join(__dirname, '..', 'config', 'config.example.json'), 'utf-8')
     } catch {
       throw new Error(
-        `config.json not found at ${configPath}. Copy config.example.json to config.json and fill in values.`
+        `config.json not found at ${configPath}. Copy config/config.example.json to config/config.json and fill in values.`
       )
     }
   }

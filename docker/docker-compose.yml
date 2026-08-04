@@ -14,6 +14,5 @@ services:
     volumes:
       - ./db:/app/db
       - ./logs:/app/logs
-      - ./config:/app/config:rw
+      - ../config:/app/config:rw
     restart: unless-stopped
-
