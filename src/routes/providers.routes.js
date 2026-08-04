@@ -129,6 +129,14 @@ router.post('/', wrap(async (req, res) => {
   res.json({ success: true, provider_id: id })
 }))
 
+router.get('/:id', (req, res) => {
+  const provider = dbGet('SELECT * FROM providers WHERE id = ?', [req.params.id])
+  if (!provider) {
+    return res.status(404).json({ error: 'Provider not found' })
+  }
+  res.json({ ...provider, api_key: provider.api_key ? '***' : null })
+})
+
 router.patch('/reorder', (req, res) => {
   const db = getDb()
   const { provider_ids, capability } = req.body

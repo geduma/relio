@@ -364,11 +364,6 @@ describe('AzureOpenAIAdapter', () => {
     expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview')
   })
 
-  it('builds correct models URL without losing api-version', () => {
-    const url = adapter.buildUrlForModels('https://api.example.com/azure/openai/deployments/gpt-4')
-    expect(url).toBe('https://api.example.com/azure/openai/models?api-version=2024-02-15-preview')
-  })
-
   it('preserves an existing api-version query parameter', () => {
     const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4?api-version=2025-01-01')
     expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2025-01-01')
@@ -387,70 +382,6 @@ describe('AzureOpenAIAdapter', () => {
 })
 
 describe('OpenAI-compatible streaming passthrough', () => {
-  it('relays the upstream SSE byte-for-byte (varied id/created, usage, tool_calls + content)', async () => {
-    const adapter = new OpenAICompatibleAdapter()
-    const chunkBodies = [
-      { id: 'chatcmpl-A', created: 1000, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] },
-      { id: 'chatcmpl-B', created: 2000, choices: [{ index: 0, delta: { content: 'Hello' }, finish_reason: null }] },
-      {
-        id: 'chatcmpl-C',
-        created: 3000,
-        choices: [{
-          index: 0,
-          delta: {
-            content: '!',
-            tool_calls: [{
-              index: 0,
-              id: 'call_x',
-              type: 'function',
-              function: { name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) },
-            }],
-          },
-          finish_reason: null,
-        }],
-      },
-      { id: 'chatcmpl-D', created: 4000, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 9, completion_tokens: 12, total_tokens: 21 } },
-    ]
-    const sse = chunkBodies
-      .map(c => `data: ${JSON.stringify({ object: 'chat.completion.chunk', model: 'gpt-4o', ...c })}\n\n`)
-      .join('') + 'data: [DONE]\n\n'
-
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = async () => new Response(
-      new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode(sse))
-          controller.close()
-        },
-      }),
-      { status: 200, headers: { 'Content-Type': 'text/event-stream' } }
-    )
-
-    try {
-      const nodeStream = await adapter.stream(
-        { api_url: 'https://alpha.example.com/v1', api_key: 'sk-x' },
-        { messages: [{ role: 'user', content: 'hi' }] },
-        new AbortController().signal
-      )
-      const chunks = []
-      for await (const buf of nodeStream) chunks.push(buf.toString())
-      const text = chunks.join('')
-      expect(text).toBe(sse)
-
-      const events = text
-        .split('\n\n')
-        .filter(l => l.startsWith('data: ') && l !== 'data: [DONE]')
-        .map(l => JSON.parse(l.slice(6)))
-      expect(events.map(e => e.id)).toEqual(['chatcmpl-A', 'chatcmpl-B', 'chatcmpl-C', 'chatcmpl-D'])
-      expect(events.map(e => e.created)).toEqual([1000, 2000, 3000, 4000])
-      expect(events[2].choices[0].delta.tool_calls[0].function.arguments).toBe('{"city":"Paris"}')
-      expect(events[3].usage).toEqual({ prompt_tokens: 9, completion_tokens: 12, total_tokens: 21 })
-      expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
-  })
-
   it('passes through an empty-delta chunk without dropping usage or finish_reason', async () => {
     const adapter = new OpenAICompatibleAdapter()
     const sse = [

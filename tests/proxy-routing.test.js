@@ -119,7 +119,6 @@ describe('provider-routed requests', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'route-openai-1' }], temperature: 0.5 },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
       providerId: 'pA',
     })
     const last = calls[calls.length - 1]
@@ -135,7 +134,6 @@ describe('provider-routed requests', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'route-anthropic-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
       providerId: 'pB',
     })
     const last = calls[calls.length - 1]
@@ -148,7 +146,6 @@ describe('provider-routed requests', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'route-gemini-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
       providerId: 'pC',
     })
     const last = calls[calls.length - 1]
@@ -158,9 +155,9 @@ describe('provider-routed requests', () => {
 
   it('isolates cache between routed providers with identical bodies', async () => {
     const body = { messages: [{ role: 'user', content: 'shared-cache-key-1' }] }
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', providerId: 'pA' })
     const callsForB = calls.filter(c => c.url.includes('beta.example.com')).length
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pB' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', providerId: 'pB' })
     expect(calls.filter(c => c.url.includes('beta.example.com')).length).toBe(callsForB + 1)
   })
 })
@@ -172,7 +169,6 @@ describe('explicit provider errors', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'paused-provider-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
       providerId: 'pA',
     })).rejects.toThrow(/paused or in cooldown/)
     dbRun("UPDATE providers SET status = 'active' WHERE id = 'pA'")
@@ -183,7 +179,6 @@ describe('explicit provider errors', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'missing-provider-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
       providerId: 'does-not-exist',
     })).rejects.toThrow('Provider not found')
   })
@@ -200,12 +195,52 @@ describe('cache bypass for tool requests', () => {
     const countCalls = () => calls.filter(c => c.body?.messages?.[0]?.content === 'tool-cache-bypass-1').length
 
     const before = countCalls()
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', apiKey: 'k', providerId: 'pA' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', providerId: 'pA' })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', providerId: 'pA' })
     expect(countCalls() - before).toBe(2)
 
     const hash = cacheMod.generateHash({ _provider: 'pA', ...body })
     expect(cacheMod.getCache('/v1/chat/completions', hash)).toBeNull()
+  })
+})
+
+describe('cached response labeling', () => {
+  it('marks cached responses with _cache_hit when provider metadata is exposed', async () => {
+    const body = { messages: [{ role: 'user', content: 'cache-label-1' }] }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+      forceExposeProvider: true,
+    })
+    const cached = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+      forceExposeProvider: true,
+    })
+    expect(cached.statusCode).toBe(200)
+    expect(cached.body._cache_hit).toBe(true)
+  })
+
+  it('does not leak _cache_hit when provider metadata is hidden', async () => {
+    const body = { messages: [{ role: 'user', content: 'cache-label-2' }] }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+    })
+    const cached = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+    })
+    expect(cached.statusCode).toBe(200)
+    expect(cached.body._cache_hit).toBeUndefined()
   })
 })
 
@@ -229,7 +264,6 @@ describe('failover mode', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'failover-chain-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
     })
     const callsMade = calls.slice(before)
     expect(result.statusCode).toBe(200)

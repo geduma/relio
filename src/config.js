@@ -76,7 +76,7 @@ export function normalizeConfig(raw) {
   return cfg
 }
 
-export function loadConfig() {
+function loadConfig() {
   const configPath = getConfigPath()
   let raw
   try {

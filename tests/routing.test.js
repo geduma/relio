@@ -120,7 +120,6 @@ describe('processRequest with least-used routing', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'least-used-route-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
     })
     const made = calls.slice(before)
     expect(result.statusCode).toBe(200)
@@ -139,7 +138,6 @@ describe('processRequest with least-used routing', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'cooldown-skip-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
     })
     const made = calls.slice(before)
     expect(result.statusCode).toBe(200)
@@ -158,7 +156,6 @@ describe('processRequest with least-used routing', () => {
       endpoint: '/v1/chat/completions',
       requestBody: { messages: [{ role: 'user', content: 'daily-limit-skip-1' }] },
       authenticatedVia: 'api_key',
-      apiKey: 'k',
     })
     const made = calls.slice(before)
     expect(result.statusCode).toBe(200)

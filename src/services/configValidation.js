@@ -1,5 +1,5 @@
 export const ROUTING_STRATEGIES = ['order', 'least-used']
-export const NODE_ENVS = ['development', 'production']
+const NODE_ENVS = ['development', 'production']
 export const READ_ONLY_KEYS = [
   'security.encryptionKey',
   'db.path',

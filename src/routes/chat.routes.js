@@ -31,7 +31,6 @@ router.post('/send', async (req, res) => {
         originIp: req.ip,
         originHeader: req.headers['user-agent'],
         authenticatedVia: 'dashboard_chat',
-        apiKey: null,
         providerId: null,
         forceExposeProvider: true,
       })

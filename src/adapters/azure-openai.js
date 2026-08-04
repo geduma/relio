@@ -17,18 +17,6 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     return url.toString()
   }
 
-  buildUrlForModels(baseUrl) {
-    const url = new URL(baseUrl)
-    const deploymentMatch = url.pathname.match(/^(.+?)\/deployments\/[^/]+$/)
-    if (deploymentMatch) {
-      url.pathname = `${deploymentMatch[1]}/models`
-    }
-    if (!url.searchParams.has('api-version')) {
-      url.searchParams.set('api-version', AZURE_API_VERSION)
-    }
-    return url.toString()
-  }
-
   buildHeaders(apiKey) {
     return {
       'api-key': apiKey,
