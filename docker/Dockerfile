@@ -41,21 +41,20 @@ COPY --from=backend-build /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src/ ./src/
 
-# Configuración por defecto
-COPY config.example.json ./config.json
+# Configuración por defecto (usada por el entrypoint para bootstrap)
+COPY config.example.json ./config.example.json
 
 # Frontend compilado
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 # Script de inicialización
+RUN apk add --no-cache su-exec
 COPY scripts/setup-config-perm.sh /usr/local/bin/setup-config-perm.sh
 RUN chmod +x /usr/local/bin/setup-config-perm.sh
 
 # Directorios persistentes
 RUN mkdir -p logs db \
     && chown -R node:node /app
-
-USER node
 
 EXPOSE 3000
 
