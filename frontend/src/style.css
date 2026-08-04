@@ -322,6 +322,14 @@ body {
 .chat-input-btn:hover { transform: scale(1.05); }
 .chat-input-btn:active { transform: scale(0.95); }
 .chat-input-btn svg { width: 16px; height: 16px; fill: currentColor; }
+.send-loader { position: relative; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
+.send-loader .send-spinner { width: 20px; height: 20px; fill: none; }
+.send-stop {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 9px; height: 9px; border-radius: 2.5px;
+  background: currentColor;
+}
 
 @media (max-width: 768px) {
   .mobile-topbar {

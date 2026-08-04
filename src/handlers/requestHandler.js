@@ -33,11 +33,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       })
     }
     const provider = cached.provider_id ? getProvider(cached.provider_id) : null
-      const exposeProvider = forceExposeProvider || config.relay.exposeProvider
+    const exposeProvider = forceExposeProvider || config.relay.exposeProvider
     return {
       statusCode: 200,
-      body: provider && exposeProvider
-        ? { ...responseBody, _provider: { id: provider.id, name: provider.name, model: provider.model } }
+      body: exposeProvider
+        ? { ...responseBody, _cache_hit: true, ...(provider && { _provider: { id: provider.id, name: provider.name, model: provider.model } }) }
         : responseBody,
     }
   }

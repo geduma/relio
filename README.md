@@ -105,17 +105,25 @@ The hot-applicable options (server nodeEnv, cache, relay) can be edited at **Set
 
 ## Development
 
-The frontend is self-served by Express (production) or via Vite dev server with hot reload:
+`npm run dev` compiles the frontend (`npm run build`) and starts the backend with file-watching. The backend serves the built frontend on `http://localhost:3000` — one command is enough:
 
 ```bash
-# Terminal 1: Backend (with auto-build + watch)
+npm run dev
+```
+
+Open `http://localhost:3000/admin`.
+
+When you are iterating on frontend code, you can instead run the Vite dev server with hot reload; it proxies API requests to the backend:
+
+```bash
+# Terminal 1: Backend
 npm run dev
 
 # Terminal 2: Frontend (hot reload)
 cd frontend && npm run dev
 ```
 
-In dev mode, the frontend runs on `http://localhost:5173` and proxies API requests to the backend.
+In that case the frontend runs on `http://localhost:5173` and proxies API requests to the backend.
 
 ## Authentication
 

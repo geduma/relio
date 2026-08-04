@@ -3,8 +3,8 @@ import { useToast, errorMessage } from './Toast.jsx'
 
 function msgLabel(msg) {
   if (msg.role === 'user') return 'You'
-  if (msg._providerName) return msg._providerName
-  return 'Assistant'
+  const base = msg._providerName || 'Assistant'
+  return msg._cacheHit ? `${base} · cached` : base
 }
 
 export default function Chat() {
@@ -16,6 +16,7 @@ export default function Chat() {
   const [useProxy, setUseProxy] = useState(false)
   const messagesEndRef = useRef(null)
   const idRef = useRef(0)
+  const controllerRef = useRef(null)
   const toast = useToast()
 
   useEffect(() => {
@@ -49,10 +50,14 @@ export default function Chat() {
     setInput('')
     setSending(true)
 
+    const controller = new AbortController()
+    controllerRef.current = controller
+
     try {
       const res = await fetch('/admin/api/chat/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           provider_id: useProxy ? null : selectedId,
           messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMsg],
@@ -70,11 +75,21 @@ export default function Chat() {
       )
       const prov = data._provider
       const providerName = prov ? `${prov.name} (${prov.model})` : null
-      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName }])
-    } catch {
-      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request failed' }])
+      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName, _cacheHit: data._cache_hit }])
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request cancelled' }])
+      } else {
+        setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request failed' }])
+      }
+    } finally {
+      controllerRef.current = null
+      setSending(false)
     }
-    setSending(false)
+  }
+
+  function cancelRequest() {
+    controllerRef.current?.abort()
   }
 
   function handleKeyDown(e) {
@@ -163,11 +178,15 @@ export default function Chat() {
           />
           <button
             className="btn btn-primary chat-input-btn"
-            onClick={sendMessage}
-            disabled={sending || !input.trim() || (!useProxy && !selectedId)}
+            onClick={sending ? cancelRequest : sendMessage}
+            disabled={!sending && (!input.trim() || (!useProxy && !selectedId))}
+            title={sending ? 'Cancel request' : 'Send'}
           >
             {sending ? (
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg>
+              <span className="send-loader">
+                <svg className="send-spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="30 10" strokeLinecap="round"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></circle></svg>
+                <span className="send-stop" />
+              </span>
             ) : (
               <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             )}

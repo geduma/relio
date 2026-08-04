@@ -204,6 +204,46 @@ describe('cache bypass for tool requests', () => {
   })
 })
 
+describe('cached response labeling', () => {
+  it('marks cached responses with _cache_hit when provider metadata is exposed', async () => {
+    const body = { messages: [{ role: 'user', content: 'cache-label-1' }] }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+      forceExposeProvider: true,
+    })
+    const cached = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+      forceExposeProvider: true,
+    })
+    expect(cached.statusCode).toBe(200)
+    expect(cached.body._cache_hit).toBe(true)
+  })
+
+  it('does not leak _cache_hit when provider metadata is hidden', async () => {
+    const body = { messages: [{ role: 'user', content: 'cache-label-2' }] }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+    })
+    const cached = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: body,
+      authenticatedVia: 'api_key',
+      providerId: 'pA',
+    })
+    expect(cached.statusCode).toBe(200)
+    expect(cached.body._cache_hit).toBeUndefined()
+  })
+})
+
 describe('failover mode', () => {
   it('uses each provider configured model and falls back when the first fails', async () => {
     const originalFetch = globalThis.fetch
