@@ -133,7 +133,7 @@ The dashboard requires no login and is intended for **trusted networks only**. O
 
 - **API keys at rest** — provider API keys are encrypted with AES-256-GCM using `security.encryptionKey`. Rotate the key by updating the config and re-entering provider keys.
 - **Client API keys hashed** — your `llm_pk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation.
-- **SSRF guard** — provider URLs are validated on create/update/test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols.
+- **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols.
 - **Dashboard exposure** — the dashboard has no login; put it behind a trusted reverse proxy with authentication if exposed beyond your local network.
 - **Encryption key** — `security.encryptionKey` is required (min 32 chars); the server refuses the example placeholder. Set it via `ENCRYPTION_KEY` in production.
 

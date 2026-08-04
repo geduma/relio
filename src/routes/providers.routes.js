@@ -198,7 +198,7 @@ router.patch('/:id', wrap(async (req, res) => {
   }
 
   const keyChanged = 'api_key' in req.body && req.body.api_key !== '***'
-  const urlChanged = 'api_url' in req.body || keyChanged
+  const urlChanged = ('api_url' in req.body && req.body.api_url !== provider.api_url) || keyChanged
 
   if (urlChanged) {
     const testUrl = req.body.api_url || provider.api_url
@@ -216,7 +216,8 @@ router.patch('/:id', wrap(async (req, res) => {
     }
   }
 
-  const isPausing = req.body.status === 'paused' && provider.status !== 'paused'
+  const finalStatus = req.body.status ?? provider.status
+  const finalCapability = req.body.capability ?? provider.capability
 
   const doUpdate = () => {
     updates.push("updated_at = datetime('now')")
@@ -224,36 +225,31 @@ router.patch('/:id', wrap(async (req, res) => {
     dbRun(`UPDATE providers SET ${updates.join(', ')} WHERE id = ?`, values)
   }
 
-  const isReactivating = req.body.status === 'active' && provider.status === 'paused'
+  const tx = db.transaction(() => {
+    doUpdate()
 
-  if (isPausing || isReactivating) {
-    const tx = db.transaction(() => {
-      doUpdate()
+    const activeOnes = dbAll(
+      `SELECT id FROM providers WHERE capability = ? AND status = 'active' ORDER BY order_position ASC`,
+      [finalCapability]
+    )
 
-      const activeOnes = dbAll(
-        `SELECT id FROM providers WHERE capability = ? AND status = 'active' AND id != ? ORDER BY order_position ASC`,
-        [provider.capability, id]
-      )
-
-      activeOnes.forEach((p, index) => {
-        const label = ORDER_LABELS[index] || `Fallback ${index}`
-        dbRun(
-          'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
-          [index, label, p.id]
-        )
-      })
-
-      const lastPos = activeOnes.length
-      const label = isPausing ? 'Paused' : ORDER_LABELS[lastPos] || `Fallback ${lastPos}`
+    activeOnes.forEach((p, index) => {
+      const label = ORDER_LABELS[index] || `Fallback ${index}`
       dbRun(
         'UPDATE providers SET order_position = ?, order_label = ? WHERE id = ?',
-        [lastPos, label, id]
+        [index, label, p.id]
       )
     })
-    tx()
-  } else {
-    doUpdate()
-  }
+
+    if (finalStatus === 'paused') {
+      const lastPos = activeOnes.length
+      dbRun(
+        "UPDATE providers SET order_position = ?, order_label = 'Paused' WHERE id = ?",
+        [lastPos, id]
+      )
+    }
+  })
+  tx()
 
   invalidateProviderCache(id)
   invalidateModelsCache()
@@ -267,10 +263,6 @@ router.delete('/:id', (req, res) => {
   const provider = dbGet('SELECT * FROM providers WHERE id = ?', [id])
   if (!provider) {
     return res.status(404).json({ error: 'Provider not found' })
-  }
-
-  if (provider.order_label === 'Main' && provider.status !== 'paused') {
-    return res.status(400).json({ error: 'Cannot delete a Main provider. Move it to a fallback position first.' })
   }
 
   const tx = db.transaction(() => {
