@@ -32,8 +32,8 @@
 - **Auto-maintenance** — daily backups, data retention cleanup
 - **Provider Type Abstraction** — pluggable adapters for OpenAI-compatible, Anthropic, Gemini, and Azure OpenAI with canonical response normalization
 - **Normalized errors** — all errors follow `{error: {message, type, code}}` OpenAI format
-- **Structured output** — Gemini JSON mode via `response_format`
-- **Tool choice** — Anthropic and Gemini respect `tool_choice` parameter
+- **Structured output** — JSON mode via `response_format`
+- **Tool choice** — native adapters respect `tool_choice` parameter
 
 ## Requirements
 
@@ -146,9 +146,9 @@ Relio normalizes all LLM providers to an OpenAI-compatible format using a plugga
 
 | Provider Type | Auth | Endpoint | Notes |
 |---|---|---|---|
-| `openai-compatible` | Bearer token | `/v1/chat/completions` | Passthrough — works with any provider implementing the OpenAI Chat Completions API (OpenAI, Cerebras, Groq, OpenRouter, Ollama Cloud, HuggingFace Inference, NVIDIA NIM, Together AI, Cohere Compatibility API, etc.). Only `baseUrl` + `apiKey` + `model` are needed; connection validation tolerates providers that don't expose `GET /models` or reject probe models |
+| `openai-compatible` | Bearer token | `/v1/chat/completions` | Passthrough — works with any provider implementing the OpenAI Chat Completions API. Only `baseUrl` + `apiKey` + `model` are needed; connection validation tolerates providers that don't expose `GET /models` or reject probe models |
 | `anthropic` | x-api-key | `/v1/messages` | Transforms request/response, includes tool calls and streaming |
-| `gemini-native` | Bearer token | `/v1/models/{model}:generateContent` | Uses native Gemini API (not Vertex), supports streaming |
+| `gemini-native` | Bearer token | `/v1/models/{model}:generateContent` | Uses the native API (not the hosted platform), supports streaming |
 | `azure-openai` | api-key header | `/chat/completions` | Appends `api-version` parameter automatically |
 
 ### Adding a custom adapter

@@ -6,6 +6,7 @@ import OpenAICompatibleAdapter from '../src/adapters/openai-compatible.js'
 import AnthropicAdapter from '../src/adapters/anthropic.js'
 import GeminiNativeAdapter from '../src/adapters/gemini-native.js'
 import AzureOpenAIAdapter from '../src/adapters/azure-openai.js'
+import { toOpenAIMessage, sanitizeChatBody } from '../src/adapters/messageSerializer.js'
 
 describe('Adapter Factory', () => {
   it('returns OpenAICompatibleAdapter for openai-compatible', () => {
@@ -74,14 +75,14 @@ describe('OpenAICompatibleAdapter', () => {
   })
 
   it('builds correct URL for OpenAI-compatible provider bases', () => {
-    expect(adapter.buildUrl('https://api.cerebras.ai/v1')).toBe('https://api.cerebras.ai/v1/chat/completions')
-    expect(adapter.buildUrl('https://api.cohere.com/compatibility/v1')).toBe('https://api.cohere.com/compatibility/v1/chat/completions')
-    expect(adapter.buildUrl('https://api.groq.com/openai/v1')).toBe('https://api.groq.com/openai/v1/chat/completions')
-    expect(adapter.buildUrl('https://openrouter.ai/api/v1')).toBe('https://openrouter.ai/api/v1/chat/completions')
-    expect(adapter.buildUrl('https://ollama.com/v1')).toBe('https://ollama.com/v1/chat/completions')
-    expect(adapter.buildUrl('https://router.huggingface.co/v1')).toBe('https://router.huggingface.co/v1/chat/completions')
-    expect(adapter.buildUrl('https://integrate.api.nvidia.com/v1')).toBe('https://integrate.api.nvidia.com/v1/chat/completions')
-    expect(adapter.buildUrl('https://api.together.xyz/v1')).toBe('https://api.together.xyz/v1/chat/completions')
+    expect(adapter.buildUrl('https://one.example.com/v1')).toBe('https://one.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://two.example.com/compatibility/v1')).toBe('https://two.example.com/compatibility/v1/chat/completions')
+    expect(adapter.buildUrl('https://three.example.com/openai/v1')).toBe('https://three.example.com/openai/v1/chat/completions')
+    expect(adapter.buildUrl('https://four.example.com/api/v1')).toBe('https://four.example.com/api/v1/chat/completions')
+    expect(adapter.buildUrl('https://five.example.com/v1')).toBe('https://five.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://six.example.com/v1')).toBe('https://six.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://seven.example.com/v1')).toBe('https://seven.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://eight.example.com/v1')).toBe('https://eight.example.com/v1/chat/completions')
   })
 
   it('never produces double slashes and strips query strings', () => {
@@ -133,13 +134,13 @@ describe('OpenAICompatibleAdapter testConnection', () => {
     return { calls, restore: () => { globalThis.fetch = originalFetch } }
   }
 
-  it('validates via GET /models and skips the chat probe on 200 (Cerebras case)', async () => {
-    const { calls, restore } = mockFetch(() => jsonResponse({ data: [{ id: 'gpt-oss-120b' }] }))
+  it('validates via GET /models and skips the chat probe on 200 (models endpoint case)', async () => {
+    const { calls, restore } = mockFetch(() => jsonResponse({ data: [{ id: 'model-oss-120b' }] }))
     try {
-      const result = await adapter.testConnection('https://api.cerebras.ai/v1', 'sk-valid')
+      const result = await adapter.testConnection('https://one.example.com/v1', 'sk-valid')
       expect(result.valid).toBe(true)
       expect(calls).toHaveLength(1)
-      expect(calls[0].url).toBe('https://api.cerebras.ai/v1/models')
+      expect(calls[0].url).toBe('https://one.example.com/v1/models')
       expect((calls[0].opts.method || 'GET').toUpperCase()).toBe('GET')
       expect(calls[0].opts.headers.Authorization).toBe('Bearer sk-valid')
     } finally {
@@ -158,16 +159,16 @@ describe('OpenAICompatibleAdapter testConnection', () => {
     }
   })
 
-  it('falls back to a chat probe when GET /models is unsupported and accepts a 400 model error (Cohere case)', async () => {
+  it('falls back to a chat probe when GET /models is unsupported and accepts a 400 model error (compatibility path case)', async () => {
     const { calls, restore } = mockFetch((url) => {
       if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
       return jsonResponse({ error: { message: 'Invalid model relio-test-connection' } }, 400)
     })
     try {
-      const result = await adapter.testConnection('https://api.cohere.com/compatibility/v1', 'sk-valid')
+      const result = await adapter.testConnection('https://two.example.com/compatibility/v1', 'sk-valid')
       expect(result.valid).toBe(true)
       expect(calls).toHaveLength(2)
-      expect(calls[1].url).toBe('https://api.cohere.com/compatibility/v1/chat/completions')
+      expect(calls[1].url).toBe('https://two.example.com/compatibility/v1/chat/completions')
       expect(calls[1].opts.method).toBe('POST')
     } finally {
       restore()
@@ -180,10 +181,10 @@ describe('OpenAICompatibleAdapter testConnection', () => {
       return jsonResponse({ error: { message: 'model unknown' } }, 404)
     })
     try {
-      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid', { model: 'command-r-plus' })
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid', { model: 'model-r-plus' })
       expect(result.valid).toBe(true)
       const probeBody = JSON.parse(calls[1].opts.body)
-      expect(probeBody.model).toBe('command-r-plus')
+      expect(probeBody.model).toBe('model-r-plus')
     } finally {
       restore()
     }
@@ -288,14 +289,14 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { messages: [{ role: 'user', content: 'hi' }], temperature: 0.5 },
         new AbortController().signal
       )
       expect(sentBody).toEqual({
         messages: [{ role: 'user', content: 'hi' }],
         temperature: 0.5,
-        model: 'gpt-4o',
+        model: 'model-chat',
       })
     } finally {
       globalThis.fetch = originalFetch
@@ -311,7 +312,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { model: 'custom-model', messages: [{ role: 'user', content: 'hi' }] },
         new AbortController().signal
       )
@@ -330,7 +331,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
         new AbortController().signal
       )
@@ -351,7 +352,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { user: 'top-user', messages: [{ role: 'user', content: 'hi', user: { id: 'nested-user' } }] },
         new AbortController().signal
       )
@@ -371,7 +372,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { messages: [{ role: 'user', content: 'hi', user: { name: 'anon' } }] },
         new AbortController().signal
       )
@@ -382,7 +383,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
   })
 
-  it('leaves a per-message string user untouched', async () => {
+  it('strips a non-standard per-message string user', async () => {
     let sentBody = null
     const originalFetch = globalThis.fetch
     globalThis.fetch = async (url, opts) => {
@@ -391,11 +392,12 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { messages: [{ role: 'user', content: 'hi', user: 'direct-user' }] },
         new AbortController().signal
       )
-      expect(sentBody.messages[0].user).toBe('direct-user')
+      expect(sentBody.messages[0].user).toBeUndefined()
+      expect(sentBody.messages[0].content).toBe('hi')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -418,7 +420,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     }
     try {
       const stream = await adapter.stream(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
         new AbortController().signal
       )
@@ -437,7 +439,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     const requestBody = { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] }
     try {
       await adapter.chat(
-        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
         requestBody,
         new AbortController().signal
       )
@@ -445,6 +447,55 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
     } finally {
       globalThis.fetch = originalFetch
     }
+  })
+})
+
+describe('messageSerializer', () => {
+  it('keeps standard fields for user messages', () => {
+    const msg = { role: 'user', content: 'hi', name: 'bob', user: { id: 'x' } }
+    expect(toOpenAIMessage(msg)).toEqual({ role: 'user', content: 'hi', name: 'bob' })
+  })
+
+  it('keeps tool_calls, reasoning and refusal on assistant messages', () => {
+    const msg = {
+      role: 'assistant',
+      content: 'thinking',
+      reasoning: 'chain of thought',
+      refusal: null,
+      tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'fn', arguments: '{}' }, extra: true }],
+      extra: 'drop-me',
+    }
+    expect(toOpenAIMessage(msg)).toEqual({
+      role: 'assistant',
+      content: 'thinking',
+      reasoning: 'chain of thought',
+      refusal: null,
+      tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'fn', arguments: '{}' } }],
+    })
+  })
+
+  it('keeps tool_call_id and name on tool messages', () => {
+    const msg = { role: 'tool', tool_call_id: 'call-1', name: 'fn', content: 'result', extra: true }
+    expect(toOpenAIMessage(msg)).toEqual({ role: 'tool', tool_call_id: 'call-1', name: 'fn', content: 'result' })
+  })
+
+  it('drops all non-standard fields from unknown roles', () => {
+    const msg = { role: 'odd', content: 'x', user: 'u', metadata: { a: 1 } }
+    expect(toOpenAIMessage(msg)).toEqual({ role: 'odd', content: 'x' })
+  })
+
+  it('hoists user.id to the top level when no top-level user exists', () => {
+    const body = { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] }
+    const result = sanitizeChatBody(body)
+    expect(result.user).toBe('user-123')
+    expect(result.messages[0]).toEqual({ role: 'user', content: 'hi' })
+  })
+
+  it('does not mutate the original body', () => {
+    const body = { user: { id: 'top' }, messages: [{ role: 'user', content: 'hi', user: { id: 'nested' } }] }
+    sanitizeChatBody(body)
+    expect(body.user).toEqual({ id: 'top' })
+    expect(body.messages[0].user).toEqual({ id: 'nested' })
   })
 })
 
@@ -467,7 +518,7 @@ describe('AnthropicAdapter', () => {
 
   it('transforms OpenAI request to Anthropic format', () => {
     const result = adapter.transformRequest({
-      model: 'claude-3-opus',
+      model: 'model-claude',
       messages: [
         { role: 'system', content: 'Be helpful' },
         { role: 'user', content: 'Hello' },
@@ -476,7 +527,7 @@ describe('AnthropicAdapter', () => {
       max_tokens: 1000,
     })
 
-    expect(result.model).toBe('claude-3-opus')
+    expect(result.model).toBe('model-claude')
     expect(Array.isArray(result.system)).toBe(true)
     expect(result.system[0].type).toBe('text')
     expect(result.system[0].text).toBe('Be helpful')
@@ -490,7 +541,7 @@ describe('AnthropicAdapter', () => {
   it('transforms Anthropic response to OpenAI format', () => {
     const result = adapter.transformResponse({
       id: 'msg_123',
-      model: 'claude-3-opus',
+      model: 'model-claude',
       content: [{ type: 'text', text: 'Hello!' }],
       stop_reason: 'end_turn',
       usage: { input_tokens: 10, output_tokens: 5 },
@@ -508,7 +559,7 @@ describe('AnthropicAdapter', () => {
   it('transforms tool_use response correctly', () => {
     const result = adapter.transformResponse({
       id: 'msg_456',
-      model: 'claude-3-opus',
+      model: 'model-claude',
       content: [
         { type: 'text', text: 'Let me check...' },
         {
@@ -559,7 +610,7 @@ describe('AnthropicAdapter', () => {
   it('maps max_tokens stop_reason to length', () => {
     const result = adapter.transformResponse({
       id: 'msg_1',
-      model: 'claude-3-opus',
+      model: 'model-claude',
       content: [{ type: 'text', text: 'cut off' }],
       stop_reason: 'max_tokens',
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -570,7 +621,7 @@ describe('AnthropicAdapter', () => {
   it('maps stop_sequence stop_reason to stop', () => {
     const result = adapter.transformResponse({
       id: 'msg_1',
-      model: 'claude-3-opus',
+      model: 'model-claude',
       content: [{ type: 'text', text: 'done' }],
       stop_reason: 'stop_sequence',
       usage: { input_tokens: 1, output_tokens: 1 },
@@ -587,13 +638,13 @@ describe('GeminiNativeAdapter', () => {
   const adapter = new GeminiNativeAdapter()
 
   it('builds correct URL', () => {
-    const url = adapter.buildUrl('https://api.example.com', 'gemini-pro')
-    expect(url).toBe('https://api.example.com/v1/models/gemini-pro:generateContent')
+    const url = adapter.buildUrl('https://api.example.com', 'model-native')
+    expect(url).toBe('https://api.example.com/v1/models/model-native:generateContent')
   })
 
   it('builds correct URL when base URL already has a version segment', () => {
-    expect(adapter.buildUrl('https://api.example.com/v1beta', 'gemini-pro'))
-      .toBe('https://api.example.com/v1beta/models/gemini-pro:generateContent')
+    expect(adapter.buildUrl('https://api.example.com/v1beta', 'model-native'))
+      .toBe('https://api.example.com/v1beta/models/model-native:generateContent')
   })
 
   it('builds correct headers', () => {
@@ -635,7 +686,7 @@ describe('GeminiNativeAdapter', () => {
         promptTokenCount: 10,
         candidatesTokenCount: 5,
       },
-      model: 'gemini-pro',
+      model: 'model-native',
     })
 
     expect(result.choices[0].message.content).toBe('Hello there!')
@@ -646,7 +697,7 @@ describe('GeminiNativeAdapter', () => {
   })
 
   it('handles empty candidates', () => {
-    const result = adapter.transformResponse({ candidates: [], model: 'gemini-pro' })
+    const result = adapter.transformResponse({ candidates: [], model: 'model-native' })
     expect(result.choices[0].message.content).toBe('')
     expect(result.choices[0].finish_reason).toBe('stop')
   })
@@ -702,7 +753,7 @@ describe('GeminiNativeAdapter', () => {
         finishReason: 'TOOL_CALL',
       }],
       usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
-      model: 'gemini-pro',
+      model: 'model-native',
     })
     expect(result.choices[0].message.content).toBeNull()
     expect(result.choices[0].finish_reason).toBe('tool_calls')
@@ -719,13 +770,13 @@ describe('AzureOpenAIAdapter', () => {
   const adapter = new AzureOpenAIAdapter()
 
   it('builds correct URL with api-version', () => {
-    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4')
-    expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview')
+    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/model-chat')
+    expect(url).toBe('https://api.example.com/azure/openai/deployments/model-chat/chat/completions?api-version=2024-02-15-preview')
   })
 
   it('preserves an existing api-version query parameter', () => {
-    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/gpt-4?api-version=2025-01-01')
-    expect(url).toBe('https://api.example.com/azure/openai/deployments/gpt-4/chat/completions?api-version=2025-01-01')
+    const url = adapter.buildUrl('https://api.example.com/azure/openai/deployments/model-chat?api-version=2025-01-01')
+    expect(url).toBe('https://api.example.com/azure/openai/deployments/model-chat/chat/completions?api-version=2025-01-01')
   })
 
   it('builds correct headers', () => {
@@ -738,13 +789,66 @@ describe('AzureOpenAIAdapter', () => {
   it('has correct type', () => {
     expect(AzureOpenAIAdapter.type).toBe('azure-openai')
   })
+
+  it('sanitizes the body in chat', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return new Response(JSON.stringify({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/azure/openai/deployments/model-chat', api_key: 'k', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0]).toEqual({ role: 'user', content: 'hi' })
+      expect(sentBody.user).toBe('user-123')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('sanitizes the body in stream and enables streaming', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'))
+          controller.close()
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const stream = await adapter.stream(
+        { api_url: 'https://api.example.com/azure/openai/deployments/model-chat', api_key: 'k', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0].user).toBeUndefined()
+      expect(sentBody.user).toBe('user-123')
+      expect(sentBody.stream).toBe(true)
+      stream.destroy()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 describe('OpenAI-compatible streaming passthrough', () => {
   it('passes through an empty-delta chunk without dropping usage or finish_reason', async () => {
     const adapter = new OpenAICompatibleAdapter()
     const sse = [
-      'data: {"id":"chatcmpl-Z","object":"chat.completion.chunk","created":5000,"model":"deepseek-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}\n\n',
+      'data: {"id":"chatcmpl-Z","object":"chat.completion.chunk","created":5000,"model":"model-r1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}\n\n',
       'data: [DONE]\n\n',
     ].join('')
 
@@ -826,7 +930,7 @@ describe('Streaming content-type guard', () => {
     globalThis.fetch = async () => jsonResponse({ error: { message: 'azure exploded' } })
     try {
       await expect(adapter.stream(
-        { api_url: 'https://azure.example.com/openai/deployments/gpt-4o', api_key: 'sk-x' },
+        { api_url: 'https://azure.example.com/openai/deployments/model-chat', api_key: 'sk-x' },
         { messages: [{ role: 'user', content: 'hi' }] },
         new AbortController().signal
       )).rejects.toThrow('azure exploded')
@@ -841,7 +945,7 @@ describe('Streaming content-type guard', () => {
     globalThis.fetch = async () => jsonResponse({ type: 'error', error: { message: 'anthropic exploded' } })
     try {
       await expect(adapter.stream(
-        { api_url: 'https://api.anthropic.com/v1', api_key: 'sk-x' },
+        { api_url: 'https://nine.example.com/v1', api_key: 'sk-x' },
         { messages: [{ role: 'user', content: 'hi' }] },
         new AbortController().signal
       )).rejects.toThrow('anthropic exploded')
@@ -868,7 +972,7 @@ describe('Streaming content-type guard', () => {
     )
     try {
       const nodeStream = await adapter.stream(
-        { api_url: 'https://gamma.example.com', api_key: 'sk-x', model: 'gemini-pro' },
+        { api_url: 'https://gamma.example.com', api_key: 'sk-x', model: 'model-native' },
         { messages: [{ role: 'user', content: 'hi' }] },
         new AbortController().signal
       )

@@ -24,7 +24,7 @@ beforeAll(async () => {
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label,
      rate_limit_req_per_min, tokens_per_day, cooldown_after_failures, cooldown_duration_seconds)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['cb1', 'Circuit', 'https://cb.example.com/v1', encrypt('sk-cb'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main', 60, 0, 3, 300]
+    ['cb1', 'Circuit', 'https://cb.example.com/v1', encrypt('sk-cb'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main', 60, 0, 3, 300]
   )
 
   const cb = await import('../src/services/circuitBreaker.js')
@@ -172,6 +172,6 @@ describe('ssrf guard', () => {
   })
 
   it('allows public https URLs', async () => {
-    await expect(assertPublicUrl('https://api.openai.com/v1')).resolves.toBeUndefined()
+    await expect(assertPublicUrl('https://api.example.com/v1')).resolves.toBeUndefined()
   })
 })

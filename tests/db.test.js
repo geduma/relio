@@ -41,7 +41,7 @@ describe('Database', () => {
     dbRun(
       `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['test-1', 'Test Provider', 'https://api.test.com', 'sk-test', 'gpt-4', 'chat', 'openai-compatible', 0, 'Main']
+      ['test-1', 'Test Provider', 'https://api.test.com', 'sk-test', 'model-chat', 'chat', 'openai-compatible', 0, 'Main']
     )
     const row = dbGet('SELECT * FROM providers WHERE id = ?', ['test-1'])
     expect(row.name).toBe('Test Provider')

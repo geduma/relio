@@ -106,7 +106,7 @@ describe('GET /admin/api/chat/providers', () => {
     dbRun(
       `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['chatp1', 'ChatP', 'https://secret.example.com/v1', encrypt('sk-secret'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main']
+      ['chatp1', 'ChatP', 'https://secret.example.com/v1', encrypt('sk-secret'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main']
     )
     const res = await fetch(`${baseUrl}/admin/api/chat/providers`)
     expect(res.status).toBe(200)
@@ -116,7 +116,7 @@ describe('GET /admin/api/chat/providers', () => {
     expect('api_url' in row).toBe(false)
     expect('api_key' in row).toBe(false)
     expect(row.name).toBe('ChatP')
-    expect(row.model).toBe('gpt-4o')
+    expect(row.model).toBe('model-chat')
   })
 })
 

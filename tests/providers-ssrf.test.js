@@ -45,7 +45,7 @@ function seed(id, name, apiUrl, position, label, status = 'active') {
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, name, apiUrl, encrypt('sk-test'), 'gpt-4o', 'chat', 'openai-compatible', position, label, status]
+    [id, name, apiUrl, encrypt('sk-test'), 'model-chat', 'chat', 'openai-compatible', position, label, status]
   )
 }
 

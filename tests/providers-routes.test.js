@@ -52,7 +52,7 @@ describe('POST /admin/api/providers (reserved name)', () => {
   const base = {
     api_url: 'https://alpha.example.com/v1',
     api_key: 'sk-test',
-    model: 'gpt-4o',
+    model: 'model-chat',
     capability: 'chat',
   }
 
@@ -84,7 +84,7 @@ describe('POST /admin/api/providers (reserved name)', () => {
     dbRun(
       `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['ren1', 'RenameMe', 'https://alpha.example.com/v1', encrypt('sk-test'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main', 'active']
+      ['ren1', 'RenameMe', 'https://alpha.example.com/v1', encrypt('sk-test'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main', 'active']
     )
     const res = await fetch(`${baseUrl}/admin/api/providers/ren1`, {
       method: 'PATCH',
@@ -133,12 +133,12 @@ describe('PATCH /admin/api/providers/:id (status-only updates)', () => {
     dbRun(
       `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['pst1', 'StatusProvider', 'https://alpha.example.com/v1', encrypt('sk-test'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main', 'active']
+      ['pst1', 'StatusProvider', 'https://alpha.example.com/v1', encrypt('sk-test'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main', 'active']
     )
     dbRun(
       `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ['pst2', 'StatusFallback', 'https://beta.example.com/v1', encrypt('sk-test'), 'gpt-4o', 'chat', 'openai-compatible', 1, 'Fallback 1', 'active']
+      ['pst2', 'StatusFallback', 'https://beta.example.com/v1', encrypt('sk-test'), 'model-chat', 'chat', 'openai-compatible', 1, 'Fallback 1', 'active']
     )
   }
 
