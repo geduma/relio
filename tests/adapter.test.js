@@ -320,6 +320,132 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('strips a non-standard per-message user object and hoists its id to the top level', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0]).toEqual({ role: 'user', content: 'hi' })
+      expect(sentBody.messages[0].user).toBeUndefined()
+      expect(sentBody.user).toBe('user-123')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('keeps an existing top-level string user when a message carries a user object', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { user: 'top-user', messages: [{ role: 'user', content: 'hi', user: { id: 'nested-user' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.user).toBe('top-user')
+      expect(sentBody.messages[0].user).toBeUndefined()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('drops a per-message user object without a string id and sets no top-level user', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { messages: [{ role: 'user', content: 'hi', user: { name: 'anon' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0]).toEqual({ role: 'user', content: 'hi' })
+      expect(sentBody.user).toBeUndefined()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('leaves a per-message string user untouched', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { messages: [{ role: 'user', content: 'hi', user: 'direct-user' }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0].user).toBe('direct-user')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('sanitizes the same way on the streaming path', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'))
+          controller.close()
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const stream = await adapter.stream(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] },
+        new AbortController().signal
+      )
+      expect(sentBody.messages[0].user).toBeUndefined()
+      expect(sentBody.user).toBe('user-123')
+      expect(sentBody.stream).toBe(true)
+      stream.destroy()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not mutate the original request body', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, _opts) => jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    const requestBody = { messages: [{ role: 'user', content: 'hi', user: { id: 'user-123' } }] }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        requestBody,
+        new AbortController().signal
+      )
+      expect(requestBody.messages[0].user).toEqual({ id: 'user-123' })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 describe('AnthropicAdapter', () => {
