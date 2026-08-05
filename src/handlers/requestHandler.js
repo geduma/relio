@@ -4,11 +4,18 @@ import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { config } from '../config.js'
 
-export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, providerId, forceExposeProvider = false, requester = null }) {
+export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, providerId, forceExposeProvider = false, requester = null, allowedProviderIds = null }) {
   const startTime = Date.now()
 
   const requesterName = requester?.name || null
   const requesterKey = requester?.keyPrefix || null
+
+  if (providerId && allowedProviderIds && !allowedProviderIds.includes(providerId)) {
+    const err = new Error('API key does not have access to this provider')
+    err.status = 403
+    err.code = 'provider_access_denied'
+    throw err
+  }
 
   const capability = getCapabilityFromBody(requestBody)
 
@@ -61,7 +68,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     }
     providers = [p]
   } else {
-    providers = orderProvidersForRouting(selectProviders(capability))
+    providers = orderProvidersForRouting(selectProviders(capability, allowedProviderIds))
   }
 
   for (const provider of providers) {

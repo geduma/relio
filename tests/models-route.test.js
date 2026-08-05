@@ -48,13 +48,13 @@ describe('GET /v1/models', () => {
   }
 
   beforeAll(async () => {
-    apiKey = authService.createApiKey('models test')
     seed('mp1', 'ChatMain', 'chat', 'active', 0)
     seed('mp2', 'EmbMain', 'embeddings', 'active', 1, '2026-05-06 07:08:09')
     seed('mp3', 'ChatPaused', 'chat', 'paused', 2)
     seed('mp4', 'ChatCooldown', 'chat', 'cooldown', 3, '2026-01-02 03:04:05', {
       cooldown_until: '2099-01-01 00:00:00',
     })
+    apiKey = authService.createApiKey({ name: 'models test', providerIds: ['mp1', 'mp2'] })
 
     const app = express()
     app.use(express.json())
@@ -73,7 +73,7 @@ describe('GET /v1/models', () => {
     expect(noKey.status).toBe(401)
 
     const badKey = await fetch(`${baseUrl}/v1/models`, {
-      headers: { Authorization: 'Bearer llm_pk_invalid' },
+      headers: { Authorization: 'Bearer relio_sk_invalid' },
     })
     expect(badKey.status).toBe(403)
   })
@@ -142,5 +142,19 @@ describe('GET /v1/models', () => {
     })).json()
     expect(after.data.map(m => m.id)).toEqual(before.data.map(m => m.id))
     expect(after.data.map(m => m.id)).toContain('ChatMain')
+    dbRun("UPDATE providers SET status = 'active' WHERE id = 'mp1'")
+  })
+
+  it('only lists providers allowed for a scoped key', async () => {
+    const scoped = authService.createApiKey({ name: 'scoped', providerIds: ['mp2'] })
+    const res = await fetch(`${baseUrl}/v1/models`, {
+      headers: { Authorization: `Bearer ${scoped}` },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    const ids = body.data.map(m => m.id)
+    expect(ids).toContain('auto')
+    expect(ids).not.toContain('ChatMain')
+    expect(ids).toContain('EmbMain')
   })
 })

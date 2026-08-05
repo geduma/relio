@@ -12,6 +12,8 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 
 **Problem it solves:** AI applications using multiple LLM providers need to handle failover, rate limits, costs, auditing, and caching themselves. Relio centralizes all of this into a single service with a visual management dashboard, designed for personal/self-hosted use.
 
+**Philosophy:** Relio does not attempt to evaluate the quality, cost, or capabilities of models. It treats every provider as a black box. Model selection, and the order or weighting of providers, are decisions left entirely to the user.
+
 ---
 
 ## 2. User Personas
@@ -69,9 +71,10 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 ### 3.5 Authentication & API Keys
 | ID | Requirement | Priority |
 |---|---|---|
-| F-19 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
+| F-19 | Local API Keys for AI agents (`relio_sk_xxx` format) | P0 |
 | F-20 | API Key shown only once at creation | P0 |
 | F-21 | API Key revocation | P0 |
+| F-21b | Per-key provider scoping (each key defines which providers it can access, enforced by the `/v1/*` proxy in `auto` and specific-provider modes) | P0 |
 
 ### 3.6 Dashboard
 | ID | Requirement | Priority |
@@ -151,11 +154,12 @@ circuitBreaker + metricsLogger + SQLite
 
 ### 5.3 Database Schema
 
-7 tables:
+8 tables:
 - `providers` — LLM provider configuration
 - `requests_log` — every proxy request
 - `cache` — cached responses by hash
 - `api_keys` — local API keys for AI agents
+- `api_key_providers` — N:N scoping of which providers each key can access
 - `circuit_breaker_state` — circuit breaker status
 - `metrics` — daily aggregated metrics
 
@@ -167,12 +171,12 @@ circuitBreaker + metricsLogger + SQLite
 
 ```
 POST /v1/chat/completions
-  Authorization: Bearer llm_pk_xxx
+  Authorization: Bearer relio_sk_xxx
 
 1. Validate API Key
 2. Hash request body → check cache
 3. Cache hit → return (log cache_hit=true)
-4. Cache miss → select active providers ordered by position
+4. Cache miss → select active providers ordered by position, filtered to the key's allowed providers
 5. For each provider:
    a. Check state (healthy/cooldown/paused)
    b. Check rate limit (req/min)

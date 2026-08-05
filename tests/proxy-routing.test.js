@@ -211,9 +211,9 @@ describe('cached response labeling', () => {
     const body = { messages: [{ role: 'user', content: 'cache-hit-provider-log-1' }] }
     const cacheHitsBefore = dbMod.dbGet('SELECT COUNT(*) AS c FROM requests_log WHERE cache_hit = 1').c
 
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'llm_pk_xx' } })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'relio_sk_xx' } })
     flushAll()
-    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'llm_pk_xx' } })
+    await processRequest({ endpoint: '/v1/chat/completions', requestBody: body, authenticatedVia: 'api_key', requester: { name: 'Agent A', keyPrefix: 'relio_sk_xx' } })
     flushAll()
 
     const log = dbMod.dbGet(
@@ -223,7 +223,7 @@ describe('cached response labeling', () => {
     expect(log.provider_id).toBeTruthy()
     expect(log.provider_name).toBeTruthy()
     expect(log.requester_name).toBe('Agent A')
-    expect(log.requester_key).toBe('llm_pk_xx')
+    expect(log.requester_key).toBe('relio_sk_xx')
   })
 
   it('marks cached responses with _cache_hit when provider metadata is exposed', async () => {

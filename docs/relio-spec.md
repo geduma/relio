@@ -91,6 +91,7 @@
         ├── providers (config)
         ├── requests_log (audit)
         ├── api_keys (local keys)
+        ├── api_key_providers (per-key provider scoping)
         ├── cache (deduplication)
         ├── metrics (aggregates)
         └── circuit_breaker_state (temporal state)
@@ -119,25 +120,31 @@ The dashboard requires **no login** — all `/admin/*` endpoints are open. Only 
 Keys are generated in the dashboard (*Keys* tab), stored locally in the `api_keys` table, and used as Bearer tokens:
 
 ```
-Authorization: Bearer llm_pk_xxx...
+Authorization: Bearer relio_sk_xxx...
 ```
 
 - Keys are shown **only once** at creation (never retrievable again)
 - Keys can be revoked at any time
+- Keys are **scoped to a subset of providers** via the `api_key_providers` N:N table. A key must have at least one provider assigned (validated on create/edit). The proxy only routes that key to its assigned providers
 - `/v1` requests are rate-limited per API Key + IP (`rateLimit.proxyPerMinute`)
 
 ### 3.2 Auth Flow (Proxy)
 
 ```
 1. AI agent requests /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
 
 2. authMiddleware:
    ├─ Extract and validate API key in SQLite
+   ├─ Load allowedProviderIds (api_key_providers)
    ├─ Check not revoked
    └─ Update last_used_at
 
-3. FailoverEngine processes normally
+3. Provider scoping:
+   ├─ Specific provider: must be in allowedProviderIds → else 403 provider_access_denied
+   └─ "auto" (failover): only assigned providers are considered for failover
+
+4. FailoverEngine processes normally
    └─> Log in requests_log
 ```
 
@@ -260,15 +267,27 @@ Locally generated API Keys.
 ```sql
 CREATE TABLE api_keys (
   id TEXT PRIMARY KEY,
-  key TEXT NOT NULL UNIQUE,
+  key_hash TEXT NOT NULL UNIQUE,
+  key_prefix TEXT NOT NULL,
   name TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_used_at DATETIME,
-  revoked BOOLEAN DEFAULT FALSE,
-  revoked_at DATETIME,
 
-  INDEX(key),
-  INDEX(revoked, created_at)
+  INDEX(key_hash)
+);
+```
+
+### 4.4b Table: `api_key_providers`
+
+Defines which providers each API key can access (N:N, scoped keys).
+
+```sql
+CREATE TABLE api_key_providers (
+  api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+  provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+  PRIMARY KEY (api_key_id, provider_id),
+
+  INDEX(provider_id)
 );
 ```
 
@@ -320,14 +339,22 @@ CREATE TABLE metrics (
 
 ```
 1. AI agent requests /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
 
 2. authMiddleware:
    ├─ Extract and validate API key in SQLite
+   ├─ Load allowedProviderIds (api_key_providers)
    ├─ Check not revoked
    └─ Update last_used_at
 
-3. FailoverEngine processes normally
+3. Provider scoping:
+   ├─ Specific provider (model: "ProviderName")
+   │   ├─ Not in allowedProviderIds → 403 provider_access_denied (before any cache/adapter call)
+   │   └─ Allowed → proceed
+   └─ "auto" (failover) → filter selectProviders(capability) to allowedProviderIds
+      └─ Zero providers left → 503 (same as "all providers failed")
+
+4. FailoverEngine processes normally
    └─> Log in requests_log
 ```
 
@@ -413,6 +440,7 @@ PAUSED (manual):
                     ▼
 ┌────────────────────────────────────────────────┐
 │ 3. Select provider (order_position)            │
+│    Filter to key's allowedProviderIds          │
 │    Gets: Main → Fallback 1 → Fallback 2...    │
 └────────────────────────────────────────────────┘
                     ▼
@@ -557,34 +585,45 @@ Proxy health check.
 ### 7.3 Dashboard: API Keys
 
 #### POST /admin/api/keys
-Creates a new API Key.
+Creates a new API Key, scoped to the given providers.
 
 ```javascript
-// Body: { "name": "Production App" }
-// Returns: { "apiKey": "llm_pk_xxx...", "message": "..." }
+// Body: { "name": "Production App", "providerIds": ["<provider-uuid>", ...] }
+// providerIds: required, non-empty, all must exist (else 400)
+// Returns: { "apiKey": "relio_sk_xxx...", "message": "..." }
 // NOTE: Key shown only once
 ```
 
 #### GET /admin/api/keys
-Lists API Keys (sanitized).
+Lists API Keys (sanitized) with their assigned providers.
 
 ```javascript
 // Returns: [
 //   {
-//     "key_preview": "llm_pk_...xxx",
+//     "id": "<uuid>",
+//     "key_preview": "relio_sk_...xxx",
 //     "name": "Production App",
 //     "created_at": "2024-01-15T10:00:00Z",
 //     "last_used_at": "2024-01-31T15:30:00Z",
-//     "revoked": false
+//     "providers": [{ "id": "<uuid>", "name": "Alpha", "capability": "chat" }]
 //   }
 // ]
 ```
 
-#### DELETE /admin/api/keys/:keyPreview
+#### PATCH /admin/api/keys/:id
+Updates a key's provider access.
+
+```javascript
+// Param: id (key UUID)
+// Body: { "providerIds": ["<provider-uuid>", ...] }  // non-empty, else 400
+// Returns: the updated key object (same shape as GET /admin/api/keys)
+```
+
+#### DELETE /admin/api/keys/:id
 Revokes an API Key.
 
 ```javascript
-// Param: keyPreview (e.g. "llm_pk_...xxx")
+// Param: id (key UUID)
 // Returns: { success: true }
 ```
 
@@ -594,7 +633,7 @@ Revokes an API Key.
 OpenAI-compatible chat/vision.
 
 ```javascript
-// Requires: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer relio_sk_xxx...
 // Body: { "model": "model-chat", "messages": [...], ... }
 // Returns: OpenAI-identical response
 ```
@@ -603,7 +642,7 @@ OpenAI-compatible chat/vision.
 OpenAI-compatible embeddings.
 
 ```javascript
-// Requires: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer relio_sk_xxx...
 // Body: { "model": "text-embedding-ada-002", "input": "...", ... }
 // Returns: OpenAI-identical response
 ```
@@ -705,13 +744,15 @@ relio/
 
 ```
 1. AI agent: POST /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
    Body: { "model": "model-chat", "messages": [...] }
 
 2. Backend - authMiddleware:
-   ├─ Extract API key: "llm_pk_xxx..."
+   ├─ Extract API key: "relio_sk_xxx..."
    ├─ Lookup in SQLite: api_keys
+   ├─ Load allowedProviderIds from api_key_providers
    ├─ Validate: not revoked, exists
+   ├─ Specific provider not allowed → 403 provider_access_denied
    └─> Continue to next step
 
 3. Backend - cacheManager:
@@ -721,7 +762,7 @@ relio/
    └─> If miss, continue
 
 4. Backend - failoverEngine:
-   ├─ Get providers by type = 'chat'
+   ├─ Get providers by capability = 'chat', filtered to allowedProviderIds
    ├─ Order by order_position
    └─> For each provider in order:
 
@@ -843,7 +884,7 @@ TOTAL OVERHEAD:                        ~15-25ms (0.3%-2.5% of total)
 ## 14. V1 IMPLEMENTATION CHECKLIST
 
 - [x] Setup Express.js + better-sqlite3 + native fetch
-- [x] Create all tables (7 tables)
+- [x] Create all tables (8 tables, incl. api_key_providers)
 - [x] Implement authService.js (API Key management)
 - [x] Implement authMiddleware.js (API Key for proxy)
 - [x] Implement failoverEngine.js
@@ -873,6 +914,7 @@ TOTAL OVERHEAD:                        ~15-25ms (0.3%-2.5% of total)
 ## 15. SECURITY
 
 - ✅ API Keys shown only at creation (never retrieved)
+- ✅ Per-key provider scoping enforced by the `/v1/*` proxy (`api_key_providers`, 403 `provider_access_denied`)
 - ✅ Full access audit (requests_log)
 - ✅ Input validation on all endpoints
 - ✅ `/v1` rate limiting per API Key + IP (`rateLimit.proxyPerMinute`)
@@ -921,10 +963,11 @@ Dashboard:
 1. Click "Manage API Keys"
 2. Click "Create New Key"
 3. Name: "My AI Agent"
-4. Click "Create"
-5. Shows: "llm_pk_abc123def456..."
-6. Message: "Save this key now, you won't see it again"
-7. User copies the key
+4. Select the providers the key can access (at least one)
+5. Click "Create"
+6. Shows: "relio_sk_abc123def456..."
+7. Message: "Save this key now, you won't see it again"
+8. User copies the key (Copy button) or dismisses the banner
 ```
 
 ### 16.4 AI Agent uses API Key
@@ -933,7 +976,7 @@ Dashboard:
 const response = await fetch('http://localhost:3000/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer llm_pk_abc123def456...',
+    'Authorization': 'Bearer relio_sk_abc123def456...',
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({

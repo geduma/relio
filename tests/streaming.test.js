@@ -11,6 +11,9 @@ let upstreamCancelled = false
 
 const encoder = new TextEncoder()
 
+const TEST_KEY = `relio_sk_${'a'.repeat(64)}`
+const TEST_KEY_PREFIX = TEST_KEY.slice(0, 10)
+
 function streamingMockResponse(chunks, delayMs = 15) {
   upstreamCancelled = false
   const stream = new ReadableStream({
@@ -56,7 +59,7 @@ async function postStream(path, body, opts = {}) {
   const { headers, ...fetchOpts } = opts
   return realFetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer llm_pk_test_stream_key', 'Content-Type': 'application/json', ...headers },
+    headers: { 'Authorization': `Bearer ${TEST_KEY}`, 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
     ...fetchOpts,
   })
@@ -81,7 +84,8 @@ beforeAll(async () => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ['pA', 'AlphaOne', 'https://alpha.example.com/v1', encrypt('sk-a'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main']
   )
-  dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['k1', hashApiKey('llm_pk_test_stream_key'), 'llm_pk_te', 'test'])
+  dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['k1', hashApiKey(TEST_KEY), TEST_KEY_PREFIX, 'test'])
+  dbRun("INSERT INTO api_key_providers (api_key_id, provider_id) VALUES (?, ?)", ['k1', 'pA'])
 
   proxyRoutes = (await import('../src/routes/proxy.routes.js')).default
 
@@ -368,7 +372,7 @@ describe('streaming request logging', () => {
     expect(log.provider_id).toBe('pA')
     expect(log.provider_name).toBe('AlphaOne')
     expect(log.requester_name).toBe('test')
-    expect(log.requester_key).toBe('llm_pk_te')
+    expect(log.requester_key).toBe(TEST_KEY_PREFIX)
   })
 })
 
