@@ -112,13 +112,13 @@ export default function ProvidersList() {
         <tbody>
           {pageRows.map(p => p.status === 'paused' ? (
             <tr key={p.id} className="row-paused">
-              <td><span className="order-label">--</span></td>
-              <td>{p.name}</td>
-              <td>{p.model}</td>
-              <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
-              <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
-              <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td>
+              <td data-label="Order"><span className="order-label">--</span></td>
+              <td data-label="Name">{p.name}</td>
+              <td data-label="Model">{p.model}</td>
+              <td data-label="Type">{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
+              <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
+              <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
+              <td data-label="Actions">
                 <div className="actions-cell">
                   <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
                   <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
@@ -131,7 +131,7 @@ export default function ProvidersList() {
               const idx = sameCap.findIndex(ap => ap.id === p.id)
               return (
                 <tr key={p.id}>
-                  <td>
+                  <td data-label="Order">
                     <span className="order-label">{p.order_label}</span>
                     <div className="order-arrows">
                       <button
@@ -144,12 +144,12 @@ export default function ProvidersList() {
                       >&#9660;</button>
                     </div>
                   </td>
-                  <td>{p.name}</td>
-                  <td>{p.model}</td>
-                  <td>{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
-                  <td><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
-                  <td><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-                  <td>
+                  <td data-label="Name">{p.name}</td>
+                  <td data-label="Model">{p.model}</td>
+                  <td data-label="Type">{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
+                  <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
+                  <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
+                  <td data-label="Actions">
                     <div className="actions-cell">
                       <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
                       <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>

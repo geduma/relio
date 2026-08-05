@@ -100,11 +100,11 @@ export default function ApiKeys() {
         <tbody>
           {pageRows.map(k => (
             <tr key={k.id}>
-              <td>{k.name}</td>
-              <td><code>{k.key_preview}</code></td>
-              <td>{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
-              <td>{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
-              <td>
+              <td data-label="Name">{k.name}</td>
+              <td data-label="Key"><code>{k.key_preview}</code></td>
+              <td data-label="Created">{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
+              <td data-label="Last Used">{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
+              <td data-label="Actions">
                 <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k)}>
                   Revoke
                 </button>

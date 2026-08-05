@@ -14,10 +14,9 @@ function formatLogLine(log) {
   const tokens = (log.input_tokens || 0) + (log.output_tokens || 0)
   const provider = log.provider_name || (log.provider_id ? log.provider_id.slice(0, 8) : '-')
   const requester = log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')
-  const ip = log.origin_ip || '-'
   const cache = log.cache_hit ? 'HIT' : 'MISS'
   const error = log.error_message || '-'
-  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${ip.padEnd(15)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(tokens).padStart(5)} tok  ${cache.padEnd(4)}  ${error}`
+  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(tokens).padStart(5)} tok  ${cache.padEnd(4)}  ${error}`
 }
 
 export default function Logs() {
@@ -54,7 +53,7 @@ export default function Logs() {
   }, [page, pageSize])
 
   function exportTxt() {
-    const header = 'Time                          Endpoint                       Provider         Requester        IP               Status  Time      Tokens   Cache  Error'
+    const header = 'Time                          Endpoint                       Provider         Requester        Status  Time      Tokens   Cache  Error'
     const lines = logs.map(formatLogLine)
     const content = [header, ...lines].join('\n')
     const blob = new Blob([content], { type: 'text/plain' })
@@ -124,7 +123,6 @@ export default function Logs() {
                 <th>Endpoint</th>
                 <th>Provider</th>
                 <th>Requester</th>
-                <th>IP</th>
                 <th>Status</th>
                 <th>Tokens</th>
                 <th>Time (ms)</th>
@@ -135,16 +133,15 @@ export default function Logs() {
             <tbody>
               {logs.map(log => (
                 <tr key={log.id}>
-                  <td>{parseDate(log.request_at)?.toLocaleString() || '-'}</td>
-                  <td><code>{log.endpoint}</code></td>
-                  <td>{log.provider_name || (log.provider_id ? log.provider_id.slice(0, 8) : '-')}</td>
-                  <td>{log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')}</td>
-                  <td>{log.origin_ip || '-'}</td>
-                  <td><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>
-                  <td>{(log.input_tokens || 0) + (log.output_tokens || 0)}</td>
-                  <td>{log.response_time_ms}</td>
-                  <td>{log.cache_hit ? <span className="badge badge-active">HIT</span> : 'MISS'}</td>
-                  <td className="error-cell">{log.error_message || '-'}</td>
+                  <td data-label="Time">{parseDate(log.request_at)?.toLocaleString() || '-'}</td>
+                  <td data-label="Endpoint"><code>{log.endpoint}</code></td>
+                  <td data-label="Provider">{log.provider_name || (log.provider_id ? log.provider_id.slice(0, 8) : '-')}</td>
+                  <td data-label="Requester">{log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')}</td>
+                  <td data-label="Status"><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>
+                  <td data-label="Tokens">{(log.input_tokens || 0) + (log.output_tokens || 0)}</td>
+                  <td data-label="Time (ms)">{log.response_time_ms}</td>
+                  <td data-label="Cache">{log.cache_hit ? 'HIT' : 'MISS'}</td>
+                  <td data-label="Error" className="error-cell">{log.error_message || '-'}</td>
                 </tr>
               ))}
             </tbody>

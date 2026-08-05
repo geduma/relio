@@ -346,11 +346,11 @@ body {
     position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 99;
   }
   .main-content { padding: 3.5rem 1rem 1rem; margin-left: 0; width: 100%; }
-  .table-wrapper { overflow-x: auto; }
-  .table { min-width: 600px; }
   .header-row { flex-direction: column; align-items: stretch; gap: 0.5rem; }
   .header-row .btn { text-align: center; }
+  .filter-bar { flex-wrap: wrap; }
   .filter-bar > * { flex: 1; min-width: 0; }
+  .filter-bar .btn { flex: 1; }
   .form-inline { flex-direction: column; }
   .form-inline input { width: 100%; }
   .form-grid { grid-template-columns: 1fr; }
@@ -364,6 +364,70 @@ body {
   .modal { min-width: 0; width: calc(100% - 2rem); margin: 1rem; }
   .toast { max-width: none; width: calc(100% - 2rem); }
   .toast-container { left: 1rem; right: 1rem; bottom: 1rem; }
+
+  /* Tables -> stacked cards */
+  .table-wrapper { overflow: visible; }
+  .table { min-width: 0; }
+  .table thead { display: none; }
+  .table tbody tr {
+    display: block;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 0.75rem;
+    overflow: hidden;
+  }
+  .table tbody tr:hover { background: var(--bg-surface); }
+  .table tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0.75rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.875rem;
+    word-break: break-word;
+  }
+  .table tbody td:last-child { border-bottom: none; }
+  .table tbody td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    text-align: left;
+  }
+  .table tbody td code { word-break: break-all; }
+  .table tbody .error-cell {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+  .row-paused { opacity: 0.55; }
+  .order-label + .order-arrows { display: inline-flex; }
+
+  /* Chat fills available space below the fixed topbar */
+  .chat-page {
+    height: calc(100vh - 4.5rem);
+    height: calc(100dvh - 4.5rem);
+    max-height: calc(100vh - 4.5rem);
+    max-height: calc(100dvh - 4.5rem);
+  }
+  .chat-controls { width: 100%; }
+  .chat-controls select { flex: 1; min-width: 0; width: 100%; }
+  .chat-msg { max-width: 90%; }
+  .chat-input-area {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .main-content {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .settings-actions { margin-left: 0; margin-right: 0; }
 }
 
 @media (max-width: 480px) {
