@@ -79,7 +79,7 @@ beforeAll(async () => {
   dbRun(
     `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ['pA', 'AlphaChat', 'https://alpha.example.com/v1', encrypt('sk-a'), 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main']
+    ['pA', 'AlphaOne', 'https://alpha.example.com/v1', encrypt('sk-a'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main']
   )
   dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['k1', hashApiKey('llm_pk_test_stream_key'), 'llm_pk_te', 'test'])
 
@@ -173,7 +173,7 @@ describe('POST /v1/chat/completions streaming', () => {
       { id: 'chatcmpl-D', created: 4000, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 9, completion_tokens: 12, total_tokens: 21 } },
     ]
     const sse = chunkBodies
-      .map(c => `data: ${JSON.stringify({ object: 'chat.completion.chunk', model: 'gpt-4o', ...c })}\n\n`)
+      .map(c => `data: ${JSON.stringify({ object: 'chat.completion.chunk', model: 'model-chat', ...c })}\n\n`)
       .join('') + 'data: [DONE]\n\n'
 
     installUpstreamMock((_url, _opts) => {
@@ -366,7 +366,7 @@ describe('streaming request logging', () => {
     const log = dbMod.dbGet("SELECT provider_id, provider_name, requester_name, requester_key FROM requests_log WHERE endpoint = '/v1/chat/completions' ORDER BY request_at DESC LIMIT 1")
     expect(log).toBeTruthy()
     expect(log.provider_id).toBe('pA')
-    expect(log.provider_name).toBe('AlphaChat')
+    expect(log.provider_name).toBe('AlphaOne')
     expect(log.requester_name).toBe('test')
     expect(log.requester_key).toBe('llm_pk_te')
   })
@@ -423,7 +423,7 @@ describe('GeminiNativeAdapter streaming (incremental chunks)', () => {
       return new Response(stream, { status: 200 })
     }
 
-    const provider = { api_url: 'https://gamma.example.com', api_key: 'sk-g', model: 'gemini-pro' }
+    const provider = { api_url: 'https://gamma.example.com', api_key: 'sk-g', model: 'model-native' }
     const body = { messages: [{ role: 'user', content: 'What is the weather in Paris?' }], stream: true }
     const nodeStream = await adapter.stream(provider, body, new AbortController().signal)
 
@@ -474,7 +474,7 @@ describe('GeminiNativeAdapter streaming (incremental chunks)', () => {
       return new Response(stream, { status: 200 })
     }
 
-    const provider = { api_url: 'https://gamma.example.com', api_key: 'sk-g', model: 'gemini-pro' }
+    const provider = { api_url: 'https://gamma.example.com', api_key: 'sk-g', model: 'model-native' }
     const nodeStream = await adapter.stream(provider, { messages: [{ role: 'user', content: 'x' }] }, new AbortController().signal)
     const sse = (await (async () => {
       const chunks = []

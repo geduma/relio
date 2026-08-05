@@ -2,29 +2,8 @@ import ProviderAdapter from './base.js'
 import { Readable } from 'stream'
 import { logger } from '../utils/logger.js'
 import { config } from '../config.js'
-
-const DEBUG_BODY_LIMIT = 4000
-
-function redactAuthHeaders(headers) {
-  if (!headers) return headers
-  const clone = { ...headers }
-  if (clone.Authorization) {
-    const key = clone.Authorization
-    clone.Authorization = key.length > 12
-      ? `${key.slice(0, 11)}…${key.slice(-4)}`
-      : '***'
-  }
-  if (clone['api-key']) {
-    clone['api-key'] = '***'
-  }
-  return clone
-}
-
-function truncate(value, limit = DEBUG_BODY_LIMIT) {
-  const str = typeof value === 'string' ? value : JSON.stringify(value)
-  if (!str) return null
-  return str.length > limit ? `${str.slice(0, limit)}…[truncated ${str.length - limit} chars]` : str
-}
+import { sanitizeChatBody } from './messageSerializer.js'
+import { redactAuthHeaders, truncate } from './debugUtils.js'
 
 export default class OpenAICompatibleAdapter extends ProviderAdapter {
   static get type() { return 'openai-compatible' }
@@ -90,25 +69,6 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     })
   }
 
-  _sanitizeBody(body) {
-    if (!body || typeof body !== 'object') return body
-    const clone = Array.isArray(body) ? [...body] : { ...body }
-
-    if (Array.isArray(clone.messages)) {
-      clone.messages = clone.messages.map(msg => {
-        if (!msg || typeof msg !== 'object' || msg.user === undefined) return msg
-        const { user, ...rest } = msg
-        if (typeof user === 'string') return msg
-        if (clone.user == null && user && typeof user === 'object' && typeof user.id === 'string') {
-          clone.user = user.id
-        }
-        return rest
-      })
-    }
-
-    return clone
-  }
-
   async _fetch(method, url, headers, body, signal) {
     this._logRequest(method, url, headers, body)
     return fetch(url, { method, headers, body, signal })
@@ -117,7 +77,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async chat(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const body = this._sanitizeBody(requestBody)
+    const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
 
     const response = await this._fetch('POST', url, headers, JSON.stringify(body), signal)
@@ -153,7 +113,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async stream(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const body = this._sanitizeBody(requestBody)
+    const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
 
     const response = await this._fetch('POST', url, headers, JSON.stringify({ ...body, stream: true }), signal)
@@ -178,7 +138,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async embeddings(provider, requestBody, signal) {
     const url = this.buildUrlForEmbeddings(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const body = this._sanitizeBody(requestBody)
+    const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
 
     const response = await this._fetch('POST', url, headers, JSON.stringify(body), signal)

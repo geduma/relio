@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It centralizes multiple providers (OpenAI, Anthropic, Groq, etc.), implements automatic failover with circuit breaker, caches responses, audits every request in SQLite, and exposes an OpenAI-compatible API so any AI agent can consume it without changes.
+Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It centralizes multiple providers, implements automatic failover with circuit breaker, caches responses, audits every request in SQLite, and exposes an OpenAI-compatible API so any AI agent can consume it without changes.
 
 **Problem it solves:** AI applications using multiple LLM providers need to handle failover, rate limits, costs, auditing, and caching themselves. Relio centralizes all of this into a single service with a visual management dashboard, designed for personal/self-hosted use.
 
@@ -23,7 +23,7 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 - Needs audit trail for every request
 
 ### 2.2 Solo Admin / Hobbyist
-- Manages multiple providers (OpenAI, Anthropic, Groq...)
+- Manages multiple providers
 - Needs a visual dashboard for cost and usage monitoring
 - Wants to control rate limits and failover order
 - Requires daily metrics and audit logs

@@ -20,14 +20,14 @@ afterAll(async () => {
 
 describe('CacheManager', () => {
   it('generates consistent hash for same body', () => {
-    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'hi' }] }
+    const body = { model: 'model-chat', messages: [{ role: 'user', content: 'hi' }] }
     const hash1 = generateHash(body)
     const hash2 = generateHash(body)
     expect(hash1).toBe(hash2)
   })
 
   it('stores and retrieves cache (including memCache hits)', () => {
-    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'hello' }] }
+    const body = { model: 'model-chat', messages: [{ role: 'user', content: 'hello' }] }
     const response = { choices: [{ message: { content: 'Hi!' } }] }
 
     setCache('/v1/chat/completions', body, response)
@@ -42,7 +42,7 @@ describe('CacheManager', () => {
   })
 
   it('does not return a cache entry stored under a different endpoint', () => {
-    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'cross' }] }
+    const body = { model: 'model-chat', messages: [{ role: 'user', content: 'cross' }] }
     setCache('/v1/chat/completions', body, { choices: [{ message: { content: 'Chat' } }] })
     const hash = generateHash(body)
     expect(getCache('/v1/embeddings', hash)).toBeNull()
@@ -100,7 +100,7 @@ describe('CacheManager', () => {
   it('queues hit_count increments and flushes them in batch', async () => {
     const dbMod = await import('../src/db.js')
     const cacheMod = await import('../src/services/cacheManager.js')
-    const body = { model: 'gpt-4', messages: [{ role: 'user', content: 'hitcount' }] }
+    const body = { model: 'model-chat', messages: [{ role: 'user', content: 'hitcount' }] }
     setCache('/v1/chat/completions', body, { ok: 1 })
     const hash = generateHash(body)
     const before = dbMod.dbGet('SELECT hit_count FROM cache WHERE query_hash = ?', [hash]).hit_count

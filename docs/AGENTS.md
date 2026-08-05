@@ -93,7 +93,7 @@ src/
 
 ### Provider Connection Test
 
-`testProviderConnection()` in `providers.routes.js` delegates to the adapter's `testConnection(apiUrl, apiKey, { model })`. For `openai-compatible`, validation first calls `GET {baseUrl}/models`; on `200` the connection is valid (no chat probe is sent). Only when `/models` is `404` (some providers, e.g. Cohere Compatibility, don't expose it) does it fall back to a minimal chat-completions probe that reuses the configured `model` when available. In the probe, only `401`/`403` mean an invalid key; a `4xx` with an OpenAI-style JSON error body (e.g. "Invalid model") proves the endpoint and key are valid, so it passes. A `404` with a non-JSON body means the endpoint path is wrong.
+`testProviderConnection()` in `providers.routes.js` delegates to the adapter's `testConnection(apiUrl, apiKey, { model })`. For `openai-compatible`, validation first calls `GET {baseUrl}/models`; on `200` the connection is valid (no chat probe is sent). Only when `/models` is `404` (some providers don't expose it) does it fall back to a minimal chat-completions probe that reuses the configured `model` when available. In the probe, only `401`/`403` mean an invalid key; a `4xx` with an OpenAI-style JSON error body (e.g. "Invalid model") proves the endpoint and key are valid, so it passes. A `404` with a non-JSON body means the endpoint path is wrong.
 
 ### Proxy Request Flow
 

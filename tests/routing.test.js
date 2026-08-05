@@ -29,9 +29,9 @@ beforeAll(async () => {
   processRequest = (await import('../src/handlers/requestHandler.js')).processRequest
 
   const seed = [
-    ['p1', 'Alpha', 'https://alpha.example.com/v1', 'sk-a', 'gpt-4o', 0],
-    ['p2', 'Beta', 'https://beta.example.com/v1', 'sk-b', 'claude-3', 1],
-    ['p3', 'Gamma', 'https://gamma.example.com/v1', 'sk-c', 'gemini-pro', 2],
+    ['p1', 'Alpha', 'https://alpha.example.com/v1', 'sk-a', 'model-chat', 0],
+    ['p2', 'Beta', 'https://beta.example.com/v1', 'sk-b', 'model-claude', 1],
+    ['p3', 'Gamma', 'https://gamma.example.com/v1', 'sk-c', 'model-native', 2],
   ]
   for (const [id, name, url, key, model, pos] of seed) {
     dbRun(

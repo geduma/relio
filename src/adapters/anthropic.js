@@ -372,7 +372,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-3-haiku-20240307',
+          model: 'model-probe',
           max_tokens: 10,
           messages: [{ role: 'user', content: 'hi' }],
         }),

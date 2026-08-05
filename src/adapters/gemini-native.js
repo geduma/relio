@@ -6,7 +6,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
 
   buildUrl(baseUrl, model) {
     let url = baseUrl.replace(/\/+$/, '')
-    const modelPath = model || 'gemini-pro'
+    const modelPath = model || 'model-default'
     if (!url.includes('/models/')) {
       if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
       url += `/models/${modelPath}:generateContent`
@@ -16,7 +16,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
 
   buildStreamUrl(baseUrl, model) {
     let url = baseUrl.replace(/\/+$/, '')
-    const modelPath = model || 'gemini-pro'
+    const modelPath = model || 'model-default'
     if (!url.includes('/models/')) {
       if (!/\/v\d[\w.]*(\/|$)/.test(url)) url += '/v1'
       url += `/models/${modelPath}:streamGenerateContent`
@@ -183,10 +183,10 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
   transformResponse(data) {
     if (!data.candidates || data.candidates.length === 0) {
       return {
-        id: 'gemini-empty',
+        id: 'model-empty',
         object: 'chat.completion',
         created: Math.floor(Date.now() / 1000),
-        model: data.model || 'gemini',
+        model: data.model || 'model-default',
         choices: [{
           index: 0,
           message: { role: 'assistant', content: '' },
@@ -237,7 +237,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       id: `chatcmpl-${Date.now()}`,
       object: 'chat.completion',
       created: Math.floor(Date.now() / 1000),
-      model: data.model || 'gemini',
+      model: data.model || 'model-default',
       choices: [choice],
       usage: this._mapUsage(data.usageMetadata),
     }
@@ -367,7 +367,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
               id: streamId,
               object: 'chat.completion.chunk',
               created: streamCreated,
-              model: geminiData.model || provider.model || 'gemini',
+              model: geminiData.model || provider.model || 'model-default',
               choices: [{
                 index: 0,
                 delta,

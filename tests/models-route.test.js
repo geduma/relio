@@ -31,7 +31,7 @@ describe('GET /v1/models', () => {
     const cols = {
       api_url: 'https://alpha.example.com/v1',
       api_key: encrypt('sk-test'),
-      model: 'gpt-4o',
+      model: 'model-chat',
       order_label: 'Main',
       ...extra,
     }

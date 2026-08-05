@@ -27,9 +27,9 @@ beforeAll(async () => {
   processRequest = req.processRequest
 
   const seed = [
-    ['pA', 'AlphaChat', 'https://alpha.example.com/v1', 'sk-a', 'gpt-4o', 'chat', 'openai-compatible', 0, 'Main'],
-    ['pB', 'BetaClaude', 'https://beta.example.com/v1', 'sk-b', 'claude-3-haiku', 'chat', 'anthropic', 1, 'Fallback 1'],
-    ['pC', 'GammaGemini', 'https://gamma.example.com/v1', 'sk-c', 'gemini-pro', 'chat', 'gemini-native', 2, 'Fallback 2'],
+    ['pA', 'AlphaOne', 'https://alpha.example.com/v1', 'sk-a', 'model-chat', 'chat', 'openai-compatible', 0, 'Main'],
+    ['pB', 'BetaTwo', 'https://beta.example.com/v1', 'sk-b', 'model-claude', 'chat', 'anthropic', 1, 'Fallback 1'],
+    ['pC', 'GammaThree', 'https://gamma.example.com/v1', 'sk-c', 'model-native', 'chat', 'gemini-native', 2, 'Fallback 2'],
     ['pE', 'EpsilonEmb', 'https://epsilon.example.com/v1', 'sk-e', 'text-embedding-3-small', 'embeddings', 'openai-compatible', 0, 'Main'],
   ]
   for (const [id, name, url, key, model, cap, type, pos, label] of seed) {
@@ -81,13 +81,13 @@ describe('parseModelSelector', () => {
   })
 
   it('maps a provider name case-insensitively to provider mode', () => {
-    const r = parseModelSelector('alphaChat', 'chat')
+    const r = parseModelSelector('alphaOne', 'chat')
     expect(r.mode).toBe('provider')
-    expect(r.provider.name).toBe('AlphaChat')
+    expect(r.provider.name).toBe('AlphaOne')
   })
 
   it('rejects a provider from another capability', () => {
-    expect(parseModelSelector('AlphaChat', 'embeddings')).toEqual({ error: 'unknown' })
+    expect(parseModelSelector('AlphaOne', 'embeddings')).toEqual({ error: 'unknown' })
     expect(parseModelSelector('EpsilonEmb', 'chat')).toEqual({ error: 'unknown' })
   })
 
@@ -98,14 +98,14 @@ describe('parseModelSelector', () => {
 
   it('resolves by id regardless of name casing', () => {
     const byId = resolveProvider('pB', 'chat')
-    expect(byId.name).toBe('BetaClaude')
-    const byName = resolveProvider('betaClaude', 'chat')
+    expect(byId.name).toBe('BetaTwo')
+    const byName = resolveProvider('betaTwo', 'chat')
     expect(byName.id).toBe('pB')
     expect(resolveProvider('nope', 'chat')).toBeNull()
   })
 
   it('strips the model selector from the forwarded body', () => {
-    expect(stripModel({ model: 'AlphaChat', messages: [] })).toEqual({ messages: [] })
+    expect(stripModel({ model: 'AlphaOne', messages: [] })).toEqual({ messages: [] })
     expect(stripModel({ model: 'auto', messages: [], temperature: 0.4 })).toEqual({ messages: [], temperature: 0.4 })
     expect(stripModel({ messages: [] })).toEqual({ messages: [] })
     expect(stripModel(undefined)).toBeUndefined()
@@ -124,7 +124,7 @@ describe('provider-routed requests', () => {
     const last = calls[calls.length - 1]
     expect(calls.length).toBe(before + 1)
     expect(last.url).toContain('alpha.example.com')
-    expect(last.body.model).toBe('gpt-4o')
+    expect(last.body.model).toBe('model-chat')
     expect(last.body.messages).toBeDefined()
     expect(last.body.temperature).toBe(0.5)
   })
@@ -138,7 +138,7 @@ describe('provider-routed requests', () => {
     })
     const last = calls[calls.length - 1]
     expect(last.url).toContain('beta.example.com')
-    expect(last.body.model).toBe('claude-3-haiku')
+    expect(last.body.model).toBe('model-claude')
   })
 
   it('uses the provider configured model (gemini-native, model in URL)', async () => {
@@ -150,7 +150,7 @@ describe('provider-routed requests', () => {
     })
     const last = calls[calls.length - 1]
     expect(last.url).toContain('gamma.example.com')
-    expect(last.url).toContain('/models/gemini-pro:generateContent')
+    expect(last.url).toContain('/models/model-native:generateContent')
   })
 
   it('isolates cache between routed providers with identical bodies', async () => {
@@ -291,7 +291,7 @@ describe('failover mode', () => {
     expect(callsMade.some(c => c.url.includes('alpha.example.com'))).toBe(true)
     const beta = callsMade.find(c => c.url.includes('beta.example.com'))
     expect(beta).toBeDefined()
-    expect(beta.body.model).toBe('claude-3-haiku')
+    expect(beta.body.model).toBe('model-claude')
     expect(callsMade.some(c => c.url.includes('gamma.example.com'))).toBe(false)
 
     globalThis.fetch = originalFetch

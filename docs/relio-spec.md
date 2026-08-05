@@ -32,7 +32,7 @@
 ## 1. EXECUTIVE SUMMARY
 
 **Relio** is an intelligent, minimalistic proxy that:
-- ✅ Centralizes multiple LLM providers (OpenAI, Anthropic, Groq, etc.)
+- ✅ Centralizes multiple LLM providers
 - ✅ Implements automatic failover with intelligent circuit breaker
 - ✅ Exposes an OpenAI-compatible API (`/v1/chat/completions`, `/v1/embeddings`)
 - ✅ Logs every request to SQLite for full audit
@@ -82,10 +82,10 @@
                             │
         ┌───────────────────┴────────────────────┐
         │                                        │
-   ┌────▼─────┐  ┌────────┐  ┌────────┐  ┌─────▼──┐
-   │  OpenAI  │  │Anthropic│ │ Groq  │  │ ... N  │
-   │   API    │  │   API   │  │  API  │  │Providers
-   └──────────┘  └─────────┘  └───────┘  └────────┘
+   ┌────▼────────┐  ┌─────────┐  ┌─────────┐  ┌─────▼──┐
+   │ Provider A │  │Provider B│ │Provider C│  │ ... N  │
+   │    API     │  │   API    │  │   API    │  │Providers
+   └────────────┘  └──────────┘  └──────────┘  └────────┘
 
         DB Layer (SQLite)
         ├── providers (config)
@@ -465,10 +465,10 @@ Creates a new provider.
 
 ```javascript
 // Body: {
-//   "name": "OpenAI GPT-4",
+//   "name": "Example Provider",
 //   "api_url": "https://api.provider.com/v1",
 //   "api_key": "sk-...",
-//   "model": "gpt-4",
+//   "model": "model-chat",
 //   "type": "chat",
 //   "rate_limit_req_per_min": 60,
 //   "tokens_per_day": 0,
@@ -595,7 +595,7 @@ OpenAI-compatible chat/vision.
 
 ```javascript
 // Requires: Authorization: Bearer llm_pk_xxx...
-// Body: { "model": "gpt-4", "messages": [...], ... }
+// Body: { "model": "model-chat", "messages": [...], ... }
 // Returns: OpenAI-identical response
 ```
 
@@ -706,7 +706,7 @@ relio/
 ```
 1. AI agent: POST /v1/chat/completions
    Header: Authorization: Bearer llm_pk_xxx...
-   Body: { "model": "gpt-4", "messages": [...] }
+   Body: { "model": "model-chat", "messages": [...] }
 
 2. Backend - authMiddleware:
    ├─ Extract API key: "llm_pk_xxx..."
@@ -890,10 +890,10 @@ TOTAL OVERHEAD:                        ~15-25ms (0.3%-2.5% of total)
 Dashboard:
 1. Click "Add Provider"
 2. Fill in:
-   - Name: "OpenAI GPT-4"
+   - Name: "Example Provider"
    - API URL: "https://api.provider.com/v1"
    - API Key: "sk-..."
-   - Model: "gpt-4"
+   - Model: "model-chat"
    - Type: "chat"
    - Rate limit: 60 req/min
    - Tokens/day: 0 (no limit)
@@ -909,7 +909,7 @@ Dashboard:
 ```
 Dashboard:
 1. Click "Add Provider"
-2. Fill in Anthropic Claude details
+2. Fill in provider details
 3. Click "Create"
 4. Provider created with order_position = 1 ("Fallback 1")
 ```
@@ -937,7 +937,7 @@ const response = await fetch('http://localhost:3000/v1/chat/completions', {
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    model: 'gpt-4',
+    model: 'model-chat',
     messages: [
       { role: 'user', content: 'Hello, how are you?' }
     ]
@@ -954,12 +954,12 @@ console.log(data.choices[0].message.content);
 Agent requests /v1/chat/completions
 
 Relio tries in order:
-1. OpenAI (order_position=0, "Main")
+1. Provider A (order_position=0, "Main")
    └─> Fails: rate limit exceeded
 
-2. Anthropic Claude (order_position=1, "Fallback 1")
+2. Provider B (order_position=1, "Fallback 1")
    └─> OK: Returns response + caches
 
 Agent receives OpenAI-identical response
-(Does not know it came from Anthropic)
+(Does not know which provider served it)
 ```
