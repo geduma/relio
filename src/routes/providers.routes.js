@@ -9,9 +9,9 @@ import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
 
-async function testProviderConnection(apiUrl, apiKey, providerType) {
+async function testProviderConnection(apiUrl, apiKey, providerType, model) {
   const adapter = getAdapter(providerType)
-  return adapter.testConnection(apiUrl, apiKey)
+  return adapter.testConnection(apiUrl, apiKey, { model })
 }
 
 const router = Router()
@@ -38,7 +38,7 @@ router.get('/', (req, res) => {
 })
 
 router.post('/test-connection', wrap(async (req, res) => {
-  let { api_url, api_key, provider_type, provider_id } = req.body
+  let { api_url, api_key, provider_type, provider_id, model } = req.body
 
   if (api_key === '***' && provider_id) {
     const provider = getProvider(provider_id)
@@ -58,7 +58,7 @@ router.post('/test-connection', wrap(async (req, res) => {
     return res.status(400).json({ valid: false, error: err.message })
   }
 
-  const result = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
+  const result = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible', model)
   if (!result.valid) {
     logger.warn('Provider connection test from dashboard failed', { api_url, provider_type, error: result.error })
   }
@@ -94,7 +94,7 @@ router.post('/', wrap(async (req, res) => {
     return res.status(400).json({ error: err.message })
   }
 
-  const validation = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible')
+  const validation = await testProviderConnection(api_url, api_key, provider_type || 'openai-compatible', model)
   if (!validation.valid) {
     logger.warn('Provider creation rejected — connection test failed', { name, api_url, error: validation.error })
     return res.status(400).json({ error: `Connection test failed: ${validation.error}` })
@@ -204,12 +204,13 @@ router.patch('/:id', wrap(async (req, res) => {
     const testUrl = req.body.api_url || provider.api_url
     const testKey = keyChanged ? req.body.api_key : provider.api_key
     const testProviderType = req.body.provider_type || provider.provider_type
+    const testModel = req.body.model || provider.model
     try {
       await assertPublicUrl(testUrl)
     } catch (err) {
       return res.status(400).json({ error: err.message })
     }
-    const validation = await testProviderConnection(testUrl, testKey, testProviderType)
+    const validation = await testProviderConnection(testUrl, testKey, testProviderType, testModel)
     if (!validation.valid) {
       logger.warn('Provider update rejected — connection test failed', { id: provider.id, name: provider.name, api_url: testUrl, error: validation.error })
       return res.status(400).json({ error: `Connection test failed: ${validation.error}` })

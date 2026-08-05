@@ -64,6 +64,7 @@ export function normalizeConfig(raw) {
 
   cfg.relay ??= {}
   cfg.relay.exposeProvider ??= false
+  cfg.relay.debugProviderRequests ??= false
   cfg.relay.streamTimeoutSeconds ??= 300
   cfg.relay.streamIdleTimeoutMs ??= 30000
   cfg.relay.requestTimeoutMs ??= 30000

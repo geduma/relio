@@ -92,6 +92,7 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | `server.nodeEnv` | `development` or `production` (overridable via `NODE_ENV` env) |
 | `server.trustedProxy` | `false` (default). Set to `true` only behind a trusted reverse proxy so `X-Forwarded-For` is honored |
 | `relay.exposeProvider` | `false` (default) — includes `_provider` in proxy responses. Set to `true` to expose resolved provider metadata |
+| `relay.debugProviderRequests` | `false` (default) — when `true`, logs every outgoing provider request (method, URL, redacted headers, payload, response status/body) to `logs/app.log`. Useful to debug OpenAI-compatible providers |
 | `relay.streamTimeoutSeconds` | Max duration for streaming requests (default `300`) |
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
 | `relay.requestTimeoutMs` | Max duration for non-streaming requests (default `30000`) |
@@ -145,7 +146,7 @@ Relio normalizes all LLM providers to an OpenAI-compatible format using a plugga
 
 | Provider Type | Auth | Endpoint | Notes |
 |---|---|---|---|
-| `openai-compatible` | Bearer token | `/v1/chat/completions` | Passthrough — works with OpenAI, Groq, Together, etc. |
+| `openai-compatible` | Bearer token | `/v1/chat/completions` | Passthrough — works with any provider implementing the OpenAI Chat Completions API (OpenAI, Cerebras, Groq, OpenRouter, Ollama Cloud, HuggingFace Inference, NVIDIA NIM, Together AI, Cohere Compatibility API, etc.). Only `baseUrl` + `apiKey` + `model` are needed; connection validation tolerates providers that don't expose `GET /models` or reject probe models |
 | `anthropic` | x-api-key | `/v1/messages` | Transforms request/response, includes tool calls and streaming |
 | `gemini-native` | Bearer token | `/v1/models/{model}:generateContent` | Uses native Gemini API (not Vertex), supports streaming |
 | `azure-openai` | api-key header | `/chat/completions` | Appends `api-version` parameter automatically |

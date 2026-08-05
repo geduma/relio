@@ -73,9 +73,33 @@ describe('OpenAICompatibleAdapter', () => {
     expect(adapter.buildUrl('https://example.com/v1/chat/completions')).toBe('https://example.com/v1/chat/completions')
   })
 
+  it('builds correct URL for OpenAI-compatible provider bases', () => {
+    expect(adapter.buildUrl('https://api.cerebras.ai/v1')).toBe('https://api.cerebras.ai/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.cohere.com/compatibility/v1')).toBe('https://api.cohere.com/compatibility/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.groq.com/openai/v1')).toBe('https://api.groq.com/openai/v1/chat/completions')
+    expect(adapter.buildUrl('https://openrouter.ai/api/v1')).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(adapter.buildUrl('https://ollama.com/v1')).toBe('https://ollama.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://router.huggingface.co/v1')).toBe('https://router.huggingface.co/v1/chat/completions')
+    expect(adapter.buildUrl('https://integrate.api.nvidia.com/v1')).toBe('https://integrate.api.nvidia.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.together.xyz/v1')).toBe('https://api.together.xyz/v1/chat/completions')
+  })
+
+  it('never produces double slashes and strips query strings', () => {
+    expect(adapter.buildUrl('https://api.example.com/v1/')).toBe('https://api.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.example.com/v1/?x=1')).toBe('https://api.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.example.com/v1/chat/completions/')).toBe('https://api.example.com/v1/chat/completions')
+    expect(adapter.buildUrl('https://api.example.com/v1/chat/completions?api-version=1')).toBe('https://api.example.com/v1/chat/completions')
+  })
+
   it('builds correct embeddings URL', () => {
     expect(adapter.buildUrlForEmbeddings('https://api.example.com/v1')).toBe('https://api.example.com/v1/embeddings')
     expect(adapter.buildUrlForEmbeddings('https://api.example.com')).toBe('https://api.example.com/v1/embeddings')
+  })
+
+  it('builds correct models URL', () => {
+    expect(adapter.buildUrlForModels('https://api.example.com/v1')).toBe('https://api.example.com/v1/models')
+    expect(adapter.buildUrlForModels('https://api.example.com')).toBe('https://api.example.com/v1/models')
+    expect(adapter.buildUrlForModels('https://api.example.com/v1/chat/completions')).toBe('https://api.example.com/v1/models')
   })
 
   it('builds correct headers', () => {
@@ -86,6 +110,215 @@ describe('OpenAICompatibleAdapter', () => {
 
   it('has correct type', () => {
     expect(OpenAICompatibleAdapter.type).toBe('openai-compatible')
+  })
+})
+
+describe('OpenAICompatibleAdapter testConnection', () => {
+  const adapter = new OpenAICompatibleAdapter()
+
+  function jsonResponse(body, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  function mockFetch(handler) {
+    const originalFetch = globalThis.fetch
+    const calls = []
+    globalThis.fetch = async (url, opts) => {
+      calls.push({ url: String(url), opts })
+      return handler(String(url), opts)
+    }
+    return { calls, restore: () => { globalThis.fetch = originalFetch } }
+  }
+
+  it('validates via GET /models and skips the chat probe on 200 (Cerebras case)', async () => {
+    const { calls, restore } = mockFetch(() => jsonResponse({ data: [{ id: 'gpt-oss-120b' }] }))
+    try {
+      const result = await adapter.testConnection('https://api.cerebras.ai/v1', 'sk-valid')
+      expect(result.valid).toBe(true)
+      expect(calls).toHaveLength(1)
+      expect(calls[0].url).toBe('https://api.cerebras.ai/v1/models')
+      expect((calls[0].opts.method || 'GET').toUpperCase()).toBe('GET')
+      expect(calls[0].opts.headers.Authorization).toBe('Bearer sk-valid')
+    } finally {
+      restore()
+    }
+  })
+
+  it('rejects an invalid key reported by GET /models', async () => {
+    const { restore } = mockFetch(() => jsonResponse({ error: { message: 'invalid api key' } }, 401))
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-bad')
+      expect(result.valid).toBe(false)
+      expect(result.error).toMatch(/API key is invalid/)
+    } finally {
+      restore()
+    }
+  })
+
+  it('falls back to a chat probe when GET /models is unsupported and accepts a 400 model error (Cohere case)', async () => {
+    const { calls, restore } = mockFetch((url) => {
+      if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
+      return jsonResponse({ error: { message: 'Invalid model relio-test-connection' } }, 400)
+    })
+    try {
+      const result = await adapter.testConnection('https://api.cohere.com/compatibility/v1', 'sk-valid')
+      expect(result.valid).toBe(true)
+      expect(calls).toHaveLength(2)
+      expect(calls[1].url).toBe('https://api.cohere.com/compatibility/v1/chat/completions')
+      expect(calls[1].opts.method).toBe('POST')
+    } finally {
+      restore()
+    }
+  })
+
+  it('passes the configured model through to the chat probe', async () => {
+    const { calls, restore } = mockFetch((url) => {
+      if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
+      return jsonResponse({ error: { message: 'model unknown' } }, 404)
+    })
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid', { model: 'command-r-plus' })
+      expect(result.valid).toBe(true)
+      const probeBody = JSON.parse(calls[1].opts.body)
+      expect(probeBody.model).toBe('command-r-plus')
+    } finally {
+      restore()
+    }
+  })
+
+  it('treats an authenticated chat probe 404 with a JSON error as valid', async () => {
+    const { restore } = mockFetch((url) => {
+      if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
+      return jsonResponse({ error: { message: 'The model does not exist' } }, 404)
+    })
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid')
+      expect(result.valid).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('treats a chat probe 200 as valid', async () => {
+    const { restore } = mockFetch((url) => {
+      if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
+      return jsonResponse({ choices: [{ message: { content: 'hi' } }] })
+    })
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid')
+      expect(result.valid).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('rejects an invalid key discovered by the chat probe', async () => {
+    const { restore } = mockFetch((url) => {
+      if (url.endsWith('/models')) return jsonResponse({ error: { message: 'not found' } }, 404)
+      return jsonResponse({ error: { message: 'unauthorized' } }, 401)
+    })
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-bad')
+      expect(result.valid).toBe(false)
+      expect(result.error).toMatch(/API key is invalid/)
+    } finally {
+      restore()
+    }
+  })
+
+  it('reports a non-JSON 404 from the chat probe as endpoint not found', async () => {
+    const { restore } = mockFetch(() => new Response('Not Found', { status: 404 }))
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid')
+      expect(result.valid).toBe(false)
+      expect(result.error).toMatch(/Endpoint not found/)
+    } finally {
+      restore()
+    }
+  })
+
+  it('reports network failures', async () => {
+    const { restore } = mockFetch(() => { throw new Error('fetch failed') })
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid')
+      expect(result.valid).toBe(false)
+      expect(result.error).toMatch(/Cannot reach server/)
+    } finally {
+      restore()
+    }
+  })
+
+  it('reports connection timeouts', async () => {
+    const { restore } = mockFetch((url, opts) => new Promise((resolve, reject) => {
+      opts.signal.addEventListener('abort', () => {
+        const err = new Error('This operation was aborted')
+        err.name = 'AbortError'
+        reject(err)
+      })
+    }))
+    try {
+      const result = await adapter.testConnection('https://api.example.com/v1', 'sk-valid')
+      expect(result.valid).toBe(false)
+      expect(result.error).toMatch(/timed out/)
+    } finally {
+      restore()
+    }
+  })
+})
+
+describe('OpenAICompatibleAdapter payload normalization', () => {
+  const adapter = new OpenAICompatibleAdapter()
+
+  function jsonResponse(body, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  it('passes the request body through unchanged, only injecting model when missing', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { messages: [{ role: 'user', content: 'hi' }], temperature: 0.5 },
+        new AbortController().signal
+      )
+      expect(sentBody).toEqual({
+        messages: [{ role: 'user', content: 'hi' }],
+        temperature: 0.5,
+        model: 'gpt-4o',
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not override an explicit model in the request body', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return jsonResponse({ id: 'x', choices: [{ message: { role: 'assistant', content: 'hi' } }], usage: {} })
+    }
+    try {
+      await adapter.chat(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'gpt-4o' },
+        { model: 'custom-model', messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      expect(sentBody.model).toBe('custom-model')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })
 

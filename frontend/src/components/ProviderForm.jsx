@@ -58,7 +58,7 @@ export default function ProviderForm() {
     }
     setTesting(true)
     try {
-      const body = { api_url: form.api_url, api_key: form.api_key, provider_type: form.provider_type }
+      const body = { api_url: form.api_url, api_key: form.api_key, provider_type: form.provider_type, model: form.model }
       if (isEdit && form.api_key === '***') body.provider_id = id
       const res = await fetch('/admin/api/providers/test-connection', {
         method: 'POST',

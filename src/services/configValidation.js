@@ -18,6 +18,7 @@ const validators = {
   'server.nodeEnv': (v) => NODE_ENVS.includes(v),
   'cache.ttlSeconds': (v) => isPositiveInt(v),
   'relay.exposeProvider': (v) => typeof v === 'boolean',
+  'relay.debugProviderRequests': (v) => typeof v === 'boolean',
   'relay.streamTimeoutSeconds': (v) => isPositiveInt(v),
   'relay.streamIdleTimeoutMs': (v) => isPositiveInt(v),
   'relay.requestTimeoutMs': (v) => isPositiveInt(v),
