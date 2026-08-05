@@ -167,7 +167,7 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 
 ### API key storage and provider scoping (S1)
 
-- Client API keys (`llm_pk_*`) are stored **hashed** (SHA-256) in `api_keys.key_hash`, plus a 10-char `key_prefix` for display. The raw key is shown once at creation.
+- Client API keys (`relio_sk_*`) are stored **hashed** (SHA-256) in `api_keys.key_hash`, plus a 10-char `key_prefix` for display. The raw key is shown once at creation. The format is `relio_sk_` + 64 lowercase hex chars (32 random bytes); `authService.isValidApiKeyFormat(key)` matches `/^relio_sk_[0-9a-f]{64}$/`, and `authMiddleware.requireApiKey` fast-fails malformed tokens with `403` before any DB lookup.
 - `src/db.js` exports `hashApiKey(key)`. Use it — never store raw keys.
 - The N:N table `api_key_providers` (`api_key_id`, `provider_id`, both `TEXT` with `ON DELETE CASCADE`) defines which providers each key can access. A key must have **at least one** provider; validated on create and on edit (400 if empty or if any provider ID doesn't exist).
 - `authService.createApiKey({ name, providerIds })` inserts the key + its provider rows inside a transaction and returns the raw key (shown once). `authService.updateApiKeyProviders(keyId, providerIds)` replaces the assignment and invalidates the in-memory key cache so the change applies immediately. `validateApiKey()` returns the key row plus `allowedProviderIds` (loaded with a single JOIN, cached for 5 min; invalidated on PATCH/revoke).

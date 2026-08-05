@@ -94,12 +94,12 @@ describe('circuitBreaker', () => {
 
 describe('logQueue', () => {
   it('flushes logs, metrics and api key touches to sqlite', () => {
-    dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['lk1', hashApiKey('llm_pk_log_key'), 'llm_pk_lo', 'log test'])
+    dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['lk1', hashApiKey('relio_sk_log_key'), 'relio_sk_l', 'log test'])
 
     enqueueLog({
       providerId: 'cb1', providerName: 'Circuit', endpoint: '/v1/chat/completions', requestBody: { messages: [] },
       originIp: '127.0.0.1', statusCode: 200, inputTokens: 10, outputTokens: 5,
-      responseTimeMs: 42, authenticatedVia: 'api_key', requesterName: 'log test', requesterKey: 'llm_pk_lo', cacheHit: false,
+      responseTimeMs: 42, authenticatedVia: 'api_key', requesterName: 'log test', requesterKey: 'relio_sk_l', cacheHit: false,
     })
     enqueueMetric('cb1', { inputTokens: 10, outputTokens: 5, cost: 0.01, responseTimeMs: 42, cacheHit: false })
     enqueueApiKeyTouch('lk1')
@@ -111,7 +111,7 @@ describe('logQueue', () => {
     expect(log.status_code).toBe(200)
     expect(log.provider_name).toBe('Circuit')
     expect(log.requester_name).toBe('log test')
-    expect(log.requester_key).toBe('llm_pk_lo')
+    expect(log.requester_key).toBe('relio_sk_l')
 
     const metric = dbGet("SELECT * FROM metrics WHERE provider_id = 'cb1'")
     expect(metric).toBeTruthy()

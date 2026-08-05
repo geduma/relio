@@ -73,7 +73,7 @@ describe('GET /v1/models', () => {
     expect(noKey.status).toBe(401)
 
     const badKey = await fetch(`${baseUrl}/v1/models`, {
-      headers: { Authorization: 'Bearer llm_pk_invalid' },
+      headers: { Authorization: 'Bearer relio_sk_invalid' },
     })
     expect(badKey.status).toBe(403)
   })

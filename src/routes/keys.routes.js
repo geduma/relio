@@ -2,7 +2,6 @@ import { Router } from 'express'
 import { createApiKey, listApiKeys, revokeApiKey, updateApiKeyProviders } from '../services/authService.js'
 import { dbGet, hashApiKey } from '../db.js'
 import { invalidateModelsCache } from './proxy.routes.js'
-
 const router = Router()
 
 router.post('/', (req, res) => {
@@ -27,9 +26,7 @@ router.post('/', (req, res) => {
   )
   res.json({
     apiKey,
-    key: row
-      ? { id: row.id, key_preview: `${row.key_prefix}...`, name: row.name, created_at: row.created_at, last_used_at: row.last_used_at }
-      : null,
+    key: row ? listApiKeys().find(k => k.id === row.id) : null,
     message: 'Save this key now. You won\'t be able to see it again.',
   })
 })

@@ -71,7 +71,7 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 ### 3.5 Authentication & API Keys
 | ID | Requirement | Priority |
 |---|---|---|
-| F-19 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
+| F-19 | Local API Keys for AI agents (`relio_sk_xxx` format) | P0 |
 | F-20 | API Key shown only once at creation | P0 |
 | F-21 | API Key revocation | P0 |
 | F-21b | Per-key provider scoping (each key defines which providers it can access, enforced by the `/v1/*` proxy in `auto` and specific-provider modes) | P0 |
@@ -171,7 +171,7 @@ circuitBreaker + metricsLogger + SQLite
 
 ```
 POST /v1/chat/completions
-  Authorization: Bearer llm_pk_xxx
+  Authorization: Bearer relio_sk_xxx
 
 1. Validate API Key
 2. Hash request body → check cache

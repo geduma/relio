@@ -38,7 +38,7 @@ afterAll(() => closeDb())
 describe('API key hashing (S1)', () => {
   it('stores only the SHA-256 hash and a prefix, never the raw key', () => {
     const raw = authService.createApiKey({ name: 'test key', providerIds: ['prov-1'] })
-    expect(raw.startsWith('llm_pk_')).toBe(true)
+    expect(raw.startsWith('relio_sk_')).toBe(true)
     expect(raw.length).toBeGreaterThanOrEqual(48)
 
     const row = dbGet('SELECT * FROM api_keys WHERE key_prefix = ?', [raw.slice(0, 10)])
@@ -55,7 +55,7 @@ describe('API key hashing (S1)', () => {
     expect(row.name).toBe('validate me')
     expect(row.allowedProviderIds).toEqual(expect.arrayContaining(['prov-1', 'prov-2']))
 
-    expect(authService.validateApiKey('llm_pk_does-not-exist')).toBeNull()
+    expect(authService.validateApiKey('relio_sk_does-not-exist')).toBeNull()
   })
 
   it('rejects creation with an empty or unknown provider list', () => {
@@ -119,9 +119,18 @@ describe('authMiddleware', () => {
 
   it('rejects requests with an invalid API key', async () => {
     const res = await fetch(`${baseUrl}/protected`, {
-      headers: { Authorization: 'Bearer llm_pk_bad_key_that_does_not_exist' },
+      headers: { Authorization: 'Bearer relio_sk_bad_key_that_does_not_exist' },
     })
     expect(res.status).toBe(403)
+  })
+
+  it('rejects requests with a token that does not match the key format', async () => {
+    const res = await fetch(`${baseUrl}/protected`, {
+      headers: { Authorization: 'Bearer not-a-key' },
+    })
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body.error.message).toMatch(/Invalid API key/i)
   })
 
   it('allows requests with a valid API key', async () => {

@@ -4,7 +4,12 @@ import { enqueueApiKeyTouch } from './logQueue.js'
 
 const API_KEY_CACHE_TTL = 300_000
 const CACHE_MAX = 500
-const API_KEY_PREFIX = 'llm_pk_'
+export const API_KEY_PREFIX = 'relio_sk_'
+export const API_KEY_PATTERN = /^relio_sk_[0-9a-f]{64}$/
+
+export function isValidApiKeyFormat(key) {
+  return API_KEY_PATTERN.test(key)
+}
 const apiKeyCache = new Map()
 const apiKeyOrder = []
 

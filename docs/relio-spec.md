@@ -120,7 +120,7 @@ The dashboard requires **no login** — all `/admin/*` endpoints are open. Only 
 Keys are generated in the dashboard (*Keys* tab), stored locally in the `api_keys` table, and used as Bearer tokens:
 
 ```
-Authorization: Bearer llm_pk_xxx...
+Authorization: Bearer relio_sk_xxx...
 ```
 
 - Keys are shown **only once** at creation (never retrievable again)
@@ -132,7 +132,7 @@ Authorization: Bearer llm_pk_xxx...
 
 ```
 1. AI agent requests /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
 
 2. authMiddleware:
    ├─ Extract and validate API key in SQLite
@@ -339,7 +339,7 @@ CREATE TABLE metrics (
 
 ```
 1. AI agent requests /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
 
 2. authMiddleware:
    ├─ Extract and validate API key in SQLite
@@ -590,7 +590,7 @@ Creates a new API Key, scoped to the given providers.
 ```javascript
 // Body: { "name": "Production App", "providerIds": ["<provider-uuid>", ...] }
 // providerIds: required, non-empty, all must exist (else 400)
-// Returns: { "apiKey": "llm_pk_xxx...", "message": "..." }
+// Returns: { "apiKey": "relio_sk_xxx...", "message": "..." }
 // NOTE: Key shown only once
 ```
 
@@ -601,7 +601,7 @@ Lists API Keys (sanitized) with their assigned providers.
 // Returns: [
 //   {
 //     "id": "<uuid>",
-//     "key_preview": "llm_pk_...xxx",
+//     "key_preview": "relio_sk_...xxx",
 //     "name": "Production App",
 //     "created_at": "2024-01-15T10:00:00Z",
 //     "last_used_at": "2024-01-31T15:30:00Z",
@@ -633,7 +633,7 @@ Revokes an API Key.
 OpenAI-compatible chat/vision.
 
 ```javascript
-// Requires: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer relio_sk_xxx...
 // Body: { "model": "model-chat", "messages": [...], ... }
 // Returns: OpenAI-identical response
 ```
@@ -642,7 +642,7 @@ OpenAI-compatible chat/vision.
 OpenAI-compatible embeddings.
 
 ```javascript
-// Requires: Authorization: Bearer llm_pk_xxx...
+// Requires: Authorization: Bearer relio_sk_xxx...
 // Body: { "model": "text-embedding-ada-002", "input": "...", ... }
 // Returns: OpenAI-identical response
 ```
@@ -744,11 +744,11 @@ relio/
 
 ```
 1. AI agent: POST /v1/chat/completions
-   Header: Authorization: Bearer llm_pk_xxx...
+   Header: Authorization: Bearer relio_sk_xxx...
    Body: { "model": "model-chat", "messages": [...] }
 
 2. Backend - authMiddleware:
-   ├─ Extract API key: "llm_pk_xxx..."
+   ├─ Extract API key: "relio_sk_xxx..."
    ├─ Lookup in SQLite: api_keys
    ├─ Load allowedProviderIds from api_key_providers
    ├─ Validate: not revoked, exists
@@ -965,7 +965,7 @@ Dashboard:
 3. Name: "My AI Agent"
 4. Select the providers the key can access (at least one)
 5. Click "Create"
-6. Shows: "llm_pk_abc123def456..."
+6. Shows: "relio_sk_abc123def456..."
 7. Message: "Save this key now, you won't see it again"
 8. User copies the key (Copy button) or dismisses the banner
 ```
@@ -976,7 +976,7 @@ Dashboard:
 const response = await fetch('http://localhost:3000/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer llm_pk_abc123def456...',
+    'Authorization': 'Bearer relio_sk_abc123def456...',
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
