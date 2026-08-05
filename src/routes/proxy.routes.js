@@ -24,12 +24,14 @@ function selectionProviderId(selection) {
 }
 
 const MODELS_CACHE_TTL_MS = 60_000
-let modelsCache = null
-let modelsCacheAt = 0
+const modelsCache = new Map()
 
 export function invalidateModelsCache() {
-  modelsCache = null
-  modelsCacheAt = 0
+  modelsCache.clear()
+}
+
+const PROVIDER_ACCESS_DENIED = {
+  error: { message: 'API key does not have access to this provider', type: 'invalid_request_error', code: 'provider_access_denied' },
 }
 
 function createdUnix(value) {
@@ -38,22 +40,25 @@ function createdUnix(value) {
   return Number.isNaN(ts) ? 0 : Math.floor(ts / 1000)
 }
 
-router.get('/models', (_req, res) => {
+router.get('/models', (req, res) => {
   try {
-    if (modelsCache && Date.now() - modelsCacheAt < MODELS_CACHE_TTL_MS) {
-      return res.json(modelsCache)
+    const allowed = req.apiKey.allowedProviderIds || []
+    const cacheKey = req.apiKey.id
+    const cached = modelsCache.get(cacheKey)
+    if (cached && Date.now() - cached.at < MODELS_CACHE_TTL_MS) {
+      return res.json(cached.body)
     }
 
     const providers = [
-      ...selectProviders('chat'),
-      ...selectProviders('embeddings'),
+      ...selectProviders('chat', allowed),
+      ...selectProviders('embeddings', allowed),
     ].filter(p => p.name !== FAILOVER_MODEL)
       .filter((p, i, all) => all.findIndex(x => x.name === p.name) === i)
 
-    modelsCache = {
+    const body = {
       object: 'list',
       data: [
-        { id: FAILOVER_MODEL, object: 'model', created: 0, owned_by: 'relio' },
+        ...(allowed.length > 0 ? [{ id: FAILOVER_MODEL, object: 'model', created: 0, owned_by: 'relio' }] : []),
         ...providers.map(p => ({
           id: p.name,
           object: 'model',
@@ -62,8 +67,8 @@ router.get('/models', (_req, res) => {
         })),
       ],
     }
-    modelsCacheAt = Date.now()
-    res.json(modelsCache)
+    modelsCache.set(cacheKey, { at: Date.now(), body })
+    res.json(body)
   } catch (err) {
     res.status(503).json(normalizeError(Object.assign(err, { status: 503 })))
   }
@@ -87,10 +92,14 @@ router.post('/chat/completions', async (req, res) => {
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       providerId: selectionProviderId(selection),
+      allowedProviderIds: req.apiKey.allowedProviderIds,
       requester: { name: req.apiKey.name, keyPrefix: req.apiKey.key_prefix },
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
+    if (err.code === 'provider_access_denied') {
+      return res.status(403).json(PROVIDER_ACCESS_DENIED)
+    }
     res.status(err.status || 503).json(normalizeError(err))
   }
 })
@@ -109,10 +118,14 @@ router.post('/embeddings', async (req, res) => {
       originHeader: req.headers['user-agent'],
       authenticatedVia: 'api_key',
       providerId: selectionProviderId(selection),
+      allowedProviderIds: req.apiKey.allowedProviderIds,
       requester: { name: req.apiKey.name, keyPrefix: req.apiKey.key_prefix },
     })
     res.status(result.statusCode).json(result.body)
   } catch (err) {
+    if (err.code === 'provider_access_denied') {
+      return res.status(403).json(PROVIDER_ACCESS_DENIED)
+    }
     res.status(err.status || 503).json(normalizeError(err))
   }
 })
@@ -133,6 +146,10 @@ async function handleStreamingRequest(req, res) {
 
   let provider
   if (selection.mode === 'provider') {
+    if (!req.apiKey.allowedProviderIds.includes(selection.provider.id)) {
+      res.status(403).json(PROVIDER_ACCESS_DENIED)
+      return
+    }
     if (!isProviderAvailable(selection.provider)) {
       res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
       return
@@ -143,7 +160,7 @@ async function handleStreamingRequest(req, res) {
     }
     provider = selection.provider
   } else {
-    const providers = orderProvidersForRouting(selectProviders('chat'))
+    const providers = orderProvidersForRouting(selectProviders('chat', req.apiKey.allowedProviderIds))
     for (const p of providers) {
       if (!isProviderAvailable(p)) continue
       if (isRateLimitExceeded(p)) continue

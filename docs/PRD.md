@@ -74,6 +74,7 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 | F-19 | Local API Keys for AI agents (`llm_pk_xxx` format) | P0 |
 | F-20 | API Key shown only once at creation | P0 |
 | F-21 | API Key revocation | P0 |
+| F-21b | Per-key provider scoping (each key defines which providers it can access, enforced by the `/v1/*` proxy in `auto` and specific-provider modes) | P0 |
 
 ### 3.6 Dashboard
 | ID | Requirement | Priority |
@@ -153,11 +154,12 @@ circuitBreaker + metricsLogger + SQLite
 
 ### 5.3 Database Schema
 
-7 tables:
+8 tables:
 - `providers` — LLM provider configuration
 - `requests_log` — every proxy request
 - `cache` — cached responses by hash
 - `api_keys` — local API keys for AI agents
+- `api_key_providers` — N:N scoping of which providers each key can access
 - `circuit_breaker_state` — circuit breaker status
 - `metrics` — daily aggregated metrics
 
@@ -174,7 +176,7 @@ POST /v1/chat/completions
 1. Validate API Key
 2. Hash request body → check cache
 3. Cache hit → return (log cache_hit=true)
-4. Cache miss → select active providers ordered by position
+4. Cache miss → select active providers ordered by position, filtered to the key's allowed providers
 5. For each provider:
    a. Check state (healthy/cooldown/paused)
    b. Check rate limit (req/min)

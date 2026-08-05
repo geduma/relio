@@ -145,6 +145,12 @@ export function initDb() {
       last_used_at DATETIME
     );
 
+    CREATE TABLE IF NOT EXISTS api_key_providers (
+      api_key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+      provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+      PRIMARY KEY (api_key_id, provider_id)
+    );
+
     CREATE TABLE IF NOT EXISTS circuit_breaker_state (
       provider_id TEXT PRIMARY KEY REFERENCES providers(id),
       state TEXT DEFAULT 'healthy',
@@ -253,6 +259,7 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_cache_hash ON cache(query_hash);',
     'CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(endpoint, expires_at);',
     'CREATE INDEX IF NOT EXISTS idx_keys_hash ON api_keys(key_hash);',
+    'CREATE INDEX IF NOT EXISTS idx_akp_provider ON api_key_providers(provider_id);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',
     'CREATE INDEX IF NOT EXISTS idx_metrics_date ON metrics(metric_date);',
   ]

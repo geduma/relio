@@ -27,7 +27,7 @@ Relio does not attempt to evaluate the quality, cost, or capabilities of models.
 - **Rate limiting** — per-provider controls (req/min, tokens/day)
 - **Estimated costs** — per-provider input/output token pricing
 - **Full audit trail** — every request logged to SQLite
-- **Local API Keys** — for AI agents, with revocation
+- **Local API Keys** — for AI agents, with per-key provider scoping and revocation
 - **Dashboard** — visual provider management, metrics, logs, API keys
 - **Settings** — edit all `config.json` options (server, cache, relay, rate limits) from the dashboard, persisted back to the file
 - **Daily metrics** — requests, tokens, costs, errors, cache hits
@@ -132,12 +132,12 @@ In that case the frontend runs on `http://localhost:5173` and proxies API reques
 
 ## Authentication
 
-The dashboard requires no login and is intended for **trusted networks only**. Only the proxy API (`/v1/*`) is protected by **local API Keys** (`llm_pk_xxx`), managed in the dashboard under *Keys*.
+The dashboard requires no login and is intended for **trusted networks only**. Only the proxy API (`/v1/*`) is protected by **local API Keys** (`llm_pk_xxx`), managed in the dashboard under *Keys*. Each key is scoped to a subset of providers (see [Provider scoping per API key](#provider-scoping-per-api-key)).
 
 ## Security
 
 - **API keys at rest** — provider API keys are encrypted with AES-256-GCM using `security.encryptionKey`. Rotate the key by updating the config and re-entering provider keys.
-- **Client API keys hashed** — your `llm_pk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation.
+- **Client API keys hashed** — your `llm_pk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation. Each key only has access to the providers explicitly assigned to it.
 - **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols.
 - **Dashboard exposure** — the dashboard has no login; put it behind a trusted reverse proxy with authentication if exposed beyond your local network.
 - **Encryption key** — `security.encryptionKey` is required (min 32 chars); the server refuses the example placeholder. Set it via `ENCRYPTION_KEY` in production.
@@ -234,7 +234,7 @@ Open `http://localhost:3000/admin`. The sidebar includes a **theme toggle** (dar
 
 1. Add providers — select **provider type** (openai-compatible, anthropic, gemini-native, azure-openai) and **capability** (chat, embeddings)
 2. Order them: Main, Fallback 1, Fallback 2...
-3. Generate API Keys for your AI agents
+3. Generate API Keys for your AI agents — each key must be assigned at least one provider
 4. Use the **Chat** tab to test providers interactively with response time display (toggle **Proxy** to route through the full failover/cache pipeline)
 
 ### Proxy API
@@ -263,6 +263,27 @@ curl http://localhost:3000/v1/chat/completions \
 
 An unknown provider returns `400` with `code: "unknown_provider"`.
 
+#### Provider scoping per API key
+
+Every API key defines which providers it can use (assigned at creation and editable later from the dashboard under *Keys*). The proxy enforces that scope on `/v1/*` in both routing modes:
+
+- **`"auto"` (failover)** — failover only ever considers the providers assigned to the key. If the key has no allowed provider available for the requested capability, the request ends with `503` (same as "all providers failed").
+- **Specific provider** (`model: "ProviderName"`) — the key must include that provider, otherwise the request is rejected **before any provider call or cache lookup** with:
+
+```json
+{
+  "error": {
+    "message": "API key does not have access to this provider",
+    "type": "invalid_request_error",
+    "code": "provider_access_denied"
+  }
+}
+```
+
+- `GET /v1/models` only lists the providers allowed for the key used (the `auto` entry stays present whenever the key has at least one provider assigned). The response is cached for 60 seconds **per key**.
+
+The dashboard Chat tab (session-based) is not affected by API key scoping.
+
 ## API Endpoints
 
 ### Dashboard
@@ -280,9 +301,10 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 | GET | `/admin/api/metrics/health` | Health check |
 | GET | `/admin/api/chat/providers` | List chat-capable providers |
 | POST | `/admin/api/chat/send` | Send a message to a provider via Chat UI |
-| POST | `/admin/api/keys` | Create API Key |
-| GET | `/admin/api/keys` | List API Keys |
-| DELETE | `/admin/api/keys/:keyPreview` | Revoke API Key |
+| POST | `/admin/api/keys` | Create API Key (requires `providerIds`) |
+| GET | `/admin/api/keys` | List API Keys (includes assigned providers) |
+| PATCH | `/admin/api/keys/:id` | Update a key's provider access |
+| DELETE | `/admin/api/keys/:id` | Revoke API Key |
 
 ### Proxy (public)
 
@@ -292,7 +314,7 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 | POST | `/v1/chat/completions` | API Key | Chat/vision (multimodal) |
 | POST | `/v1/embeddings` | API Key | Embeddings |
 
-`GET /v1/models` lists the configured Relio providers that are currently available (active, both `chat` and `embeddings` capabilities), using an OpenAI-compatible shape:
+`GET /v1/models` lists the configured Relio providers that are currently available **and assigned to the API key used** (active, both `chat` and `embeddings` capabilities), using an OpenAI-compatible shape:
 
 ```json
 {
@@ -304,7 +326,7 @@ An unknown provider returns `400` with `code: "unknown_provider"`.
 }
 ```
 
-`auto` is always present and enables failover/proxy mode; the other `id`s are provider names, which are also the model selectors to send in `POST /v1/chat/completions` / `POST /v1/embeddings`. Paused and in-cooldown providers are excluded. The response is cached for 60 seconds.
+`auto` is always present (as long as the key has at least one provider assigned) and enables failover/proxy mode; the other `id`s are provider names, which are also the model selectors to send in `POST /v1/chat/completions` / `POST /v1/embeddings`. Paused and in-cooldown providers are excluded. The response is cached for 60 seconds per API key.
 
 ## Tests
 

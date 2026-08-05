@@ -99,19 +99,20 @@ src/
 
 1. `proxy.routes.js` receives POST → `authMiddleware.requireApiKey`
 2. `requestHandler.processRequest()`:
+   - If a specific `providerId` is selected and it is **not** in the key's `allowedProviderIds`, throws a `provider_access_denied` error (403) **before** any cache lookup or provider call
    - Computes `queryHash` → checks cache
    - Cache hit → returns immediately
-   - Cache miss → `selectProviders(capability)` ordered by `order_position`
+   - Cache miss → `selectProviders(capability, allowedProviderIds)` ordered by `order_position`, already filtered to the key's allowed providers
    - For each provider: checks `isProviderAvailable()`, `isRateLimitExceeded()` (in-memory), `isDailyLimitExceeded()` (via `metrics` table)
    - `callProvider()` → `getAdapter(provider.provider_type)` resolves adapter from registry (singleton cache) → `adapter.chat()` with 30s timeout
    - Success → `recordSuccess()`, `setCache()`, `enqueueLog()`, `enqueueMetric()`
    - Retryable failure (network/5xx/408/429) → `recordFailure()`, next provider; non-retryable (4xx) → thrown immediately, no failover
-3. All failed → 503
+3. All failed (or zero providers allowed) → 503
 
 ### Streaming Flow
 
 1. `proxy.routes.js` detects `stream: true` in request body → `handleStreamingRequest()`
-2. Resolves provider (by provider name/ID, or first available for `chat` capability skipping paused/cooldown/rate-limited/daily-limited providers)
+2. Resolves provider: for a specific provider name/ID, it must be in the key's `allowedProviderIds` (otherwise immediate `403 provider_access_denied`); in failover mode it uses `selectProviders('chat', allowedProviderIds)` skipping paused/cooldown/rate-limited/daily-limited providers
 3. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`
 4. Enforces an idle timeout (`relay.streamIdleTimeoutMs`) and a max duration (`relay.streamTimeoutSeconds`) via `AbortController`; client disconnect aborts the upstream fetch
 5. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
@@ -120,7 +121,7 @@ src/
 
 ### Models Endpoint
 
-`GET /v1/models` (in `proxy.routes.js`) does **not** call upstream providers. It reads the `providers` table via `selectProviders('chat')` + `selectProviders('embeddings')`, excludes providers named `auto` (`FAILOVER_MODEL`), dedupes by name, and maps each available provider to an OpenAI-compatible entry `{ id: name, object: 'model', created, owned_by: 'relio' }` where `id` is the provider name (the model selector clients send back to `/v1/*`). The reserved `auto` entry (`{ id: 'auto', object: 'model', created: 0, owned_by: 'relio' }`) is always returned first and enables failover/proxy mode. Paused and in-cooldown providers are excluded; response is cached for 60s.
+`GET /v1/models` (in `proxy.routes.js`) does **not** call upstream providers. It reads the `providers` table via `selectProviders('chat', allowed)` + `selectProviders('embeddings', allowed)` where `allowed` is the requesting key's `allowedProviderIds`, excludes providers named `auto` (`FAILOVER_MODEL`), dedupes by name, and maps each available provider to an OpenAI-compatible entry `{ id: name, object: 'model', created, owned_by: 'relio' }` where `id` is the provider name (the model selector clients send back to `/v1/*`). The reserved `auto` entry (`{ id: 'auto', object: 'model', created: 0, owned_by: 'relio' }`) is returned first whenever the key has at least one provider assigned and enables failover/proxy mode. Paused and in-cooldown providers are excluded. The response is cached for 60s **per API key** (a `Map` keyed by `req.apiKey.id`; `invalidateModelsCache()` clears it entirely).
 
 ### Reserved provider name
 
@@ -164,11 +165,14 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 - `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
 - `rateLimit.proxyPerMinute` (default `120`): `/v1` requests per min, keyed by API key + IP.
 
-### API key storage (S1)
+### API key storage and provider scoping (S1)
 
 - Client API keys (`llm_pk_*`) are stored **hashed** (SHA-256) in `api_keys.key_hash`, plus a 10-char `key_prefix` for display. The raw key is shown once at creation.
 - `src/db.js` exports `hashApiKey(key)`. Use it — never store raw keys.
-- `authService.createApiKey()` returns the raw key to the caller (shown once); `validateApiKey()` looks up by `key_hash`.
+- The N:N table `api_key_providers` (`api_key_id`, `provider_id`, both `TEXT` with `ON DELETE CASCADE`) defines which providers each key can access. A key must have **at least one** provider; validated on create and on edit (400 if empty or if any provider ID doesn't exist).
+- `authService.createApiKey({ name, providerIds })` inserts the key + its provider rows inside a transaction and returns the raw key (shown once). `authService.updateApiKeyProviders(keyId, providerIds)` replaces the assignment and invalidates the in-memory key cache so the change applies immediately. `validateApiKey()` returns the key row plus `allowedProviderIds` (loaded with a single JOIN, cached for 5 min; invalidated on PATCH/revoke).
+- In `authMiddleware.requireApiKey`, `req.apiKey.allowedProviderIds` is available to downstream code. `processRequest()` and `handleStreamingRequest()` take it as `allowedProviderIds`; the dashboard chat routes don't pass it, so they are unaffected.
+- Unauthorized specific-provider requests return `403` with `{ error: { message: "API key does not have access to this provider", type: "invalid_request_error", code: "provider_access_denied" } }` — sent directly, **not** through `normalizeError()`. A nonexistent provider still returns the existing `400 unknown_provider`.
 
 ### SSRF guard (S3)
 
@@ -221,7 +225,7 @@ beforeAll(async () => {
 | `ProvidersList.jsx` | `/admin/dashboard/providers` | List with reorder |
 | `ProviderForm.jsx` | Modal | Create/edit provider |
 | `Metrics.jsx` | `/admin/dashboard/metrics` | Stats + table |
-| `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys |
+| `ApiKeys.jsx` | `/admin/dashboard/keys` | CRUD API keys + provider scoping (multi-select, edit) |
 | `Logs.jsx` | `/admin/dashboard/logs` | Requests table |
 | `Chat.jsx` | `/admin/chat` | Chat interface to test providers |
 | `Pagination.jsx` | — | Shared paginator + `usePagination` hook (tables) |

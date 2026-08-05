@@ -121,13 +121,18 @@ export function stripModel(body) {
   return clone
 }
 
-export function selectProviders(capability) {
-  return dbAll(
+export function selectProviders(capability, allowedProviderIds = null) {
+  const providers = dbAll(
     `SELECT * FROM providers
      WHERE capability = ? AND (status = 'active' OR (status = 'cooldown' AND cooldown_until <= ?))
      ORDER BY order_position ASC`,
     [capability, new Date().toISOString()]
   ).map(decryptProvider)
+
+  if (allowedProviderIds) {
+    return providers.filter(p => allowedProviderIds.includes(p.id))
+  }
+  return providers
 }
 
 export function isProviderAvailable(provider) {

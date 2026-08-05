@@ -258,6 +258,22 @@ body {
 .form-inline { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
 .form-inline input { flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); }
 
+.text-muted { color: var(--text-muted); font-size: 0.85rem; }
+.form-section { margin-bottom: 1rem; }
+.form-label { display: block; margin-bottom: 0.35rem; font-size: 0.85rem; color: var(--text-secondary); }
+.provider-select {
+  display: flex; flex-direction: column; gap: 0.35rem; max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; background: var(--input-bg);
+}
+.provider-select-option {
+  display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.25rem 0.35rem; border-radius: 4px;
+}
+.provider-select-option:hover { background: var(--bg-hover); }
+.provider-select-option span:first-of-type { flex: 1; }
+.provider-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.key-reveal { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.key-reveal code { word-break: break-all; }
+
 /* Chat */
 .chat-page {
   display: flex; flex-direction: column; height: calc(100vh - 3rem); max-height: calc(100vh - 3rem);

@@ -82,6 +82,7 @@ beforeAll(async () => {
     ['pA', 'AlphaOne', 'https://alpha.example.com/v1', encrypt('sk-a'), 'model-chat', 'chat', 'openai-compatible', 0, 'Main']
   )
   dbRun("INSERT INTO api_keys (id, key_hash, key_prefix, name) VALUES (?, ?, ?, ?)", ['k1', hashApiKey('llm_pk_test_stream_key'), 'llm_pk_te', 'test'])
+  dbRun("INSERT INTO api_key_providers (api_key_id, provider_id) VALUES (?, ?)", ['k1', 'pA'])
 
   proxyRoutes = (await import('../src/routes/proxy.routes.js')).default
 
