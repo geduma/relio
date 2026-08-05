@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
 import Pagination, { usePagination } from './Pagination.jsx'
 
+function toUtcBound(offsetDays) {
+  const now = new Date()
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays)
+  return localMidnight.toISOString().slice(0, 10)
+}
+
 export default function Metrics() {
   const [metrics, setMetrics] = useState(null)
   const [error, setError] = useState(null)
-  const [from, setFrom] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 7)
-    return d.toISOString().slice(0, 10)
-  })
-  const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [from, setFrom] = useState(() => toUtcBound(-7))
+  const [to, setTo] = useState(() => toUtcBound(1))
   const providers = metrics?.providers || []
   const { page, pageSize, totalPages, pageRows, setPage, setPageSize } = usePagination(providers)
 
@@ -81,14 +83,14 @@ export default function Metrics() {
             <tbody>
               {pageRows.map(p => (
                 <tr key={p.provider_id}>
-                  <td>{p.provider_name}</td>
-                  <td>{p.total_requests}</td>
-                  <td>{p.total_input_tokens.toLocaleString()}</td>
-                  <td>{p.total_output_tokens.toLocaleString()}</td>
-                  <td>${Number(p.total_cost).toFixed(4)}</td>
-                  <td>{p.error_count}</td>
-                  <td>{p.cache_hits}</td>
-                  <td>{Math.round(p.avg_response_time_ms)}</td>
+                  <td data-label="Provider">{p.provider_name}</td>
+                  <td data-label="Requests">{p.total_requests}</td>
+                  <td data-label="Input Tokens">{p.total_input_tokens.toLocaleString()}</td>
+                  <td data-label="Output Tokens">{p.total_output_tokens.toLocaleString()}</td>
+                  <td data-label="Cost">${Number(p.total_cost).toFixed(4)}</td>
+                  <td data-label="Errors">{p.error_count}</td>
+                  <td data-label="Cache Hits">{p.cache_hits}</td>
+                  <td data-label="Avg Response (ms)">{Math.round(p.avg_response_time_ms)}</td>
                 </tr>
               ))}
             </tbody>

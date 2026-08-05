@@ -49,6 +49,12 @@ const SECTIONS = [
         type: 'toggle',
         desc: 'Include the resolved _provider metadata in proxy responses.',
       },
+      {
+        key: 'relay.debugProviderRequests',
+        label: 'Debug provider requests',
+        type: 'toggle',
+        desc: 'Log every outgoing provider request (URL, headers, payload, response) to logs/app.log. Useful to debug OpenAI-compatible providers.',
+      },
       { key: 'relay.requestTimeoutMs', label: 'Request timeout (ms)', type: 'number', half: true },
       { key: 'relay.streamTimeoutSeconds', label: 'Stream timeout (s)', type: 'number', half: true },
       { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number', half: true },

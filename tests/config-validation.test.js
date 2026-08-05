@@ -7,6 +7,7 @@ describe('configValidation', () => {
       'server.nodeEnv': 'production',
       'cache.ttlSeconds': 60,
       'relay.exposeProvider': false,
+      'relay.debugProviderRequests': true,
       'relay.streamTimeoutSeconds': 300,
       'relay.streamIdleTimeoutMs': 30000,
       'relay.requestTimeoutMs': 30000,

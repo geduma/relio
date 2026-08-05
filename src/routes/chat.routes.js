@@ -1,14 +1,30 @@
 import { Router } from 'express'
+import { pipeline } from 'stream/promises'
 import { dbAll } from '../db.js'
-import { callProvider, getProvider } from '../services/failoverEngine.js'
+import {
+  callProvider, getProvider, streamProvider,
+  orderProvidersForRouting, selectProviders,
+  isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded,
+  recordProviderRequest, isRetryableError,
+} from '../services/failoverEngine.js'
+import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
+import { generateHash, getCache } from '../services/cacheManager.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { logger } from '../utils/logger.js'
+import { config } from '../config.js'
 
 const router = Router()
 
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
+}
+
 router.post('/send', async (req, res) => {
-  const { provider_id, messages, use_proxy } = req.body
+  const { provider_id, messages, use_proxy, stream } = req.body
   const start = Date.now()
 
   if (!messages || !Array.isArray(messages)) {
@@ -17,6 +33,10 @@ router.post('/send', async (req, res) => {
 
   if (!use_proxy && !provider_id) {
     return res.status(400).json({ error: 'provider_id is required when proxy is disabled' })
+  }
+
+  if (stream) {
+    return handleStreamingSend(req, res, { provider_id, messages, use_proxy, start })
   }
 
   function addTime(data) {
@@ -87,6 +107,136 @@ router.post('/send', async (req, res) => {
     res.status(err.status || 503).json(addTime({ error: err.message, details: err.data || null, _provider: { id: provider.id, name: provider.name, model: provider.model } }))
   }
 })
+
+async function handleStreamingSend(req, res, { provider_id, messages, use_proxy, start }) {
+  const controller = new AbortController()
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
+
+  const maxDurationMs = config.relay.streamTimeoutSeconds * 1000
+  const idleMs = config.relay.streamIdleTimeoutMs
+
+  let idleTimer = null
+  const clearIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = null
+  }
+  const resetIdle = () => {
+    clearIdle()
+    idleTimer = setTimeout(() => controller.abort(), idleMs)
+    if (idleTimer.unref) idleTimer.unref()
+  }
+  const durationTimer = setTimeout(() => controller.abort(), maxDurationMs)
+  if (durationTimer.unref) durationTimer.unref()
+
+  if (use_proxy) {
+    const queryHash = generateHash({ messages })
+    const cached = getCache('/v1/chat/completions', queryHash)
+    if (cached) {
+      const responseBody = JSON.parse(cached.response_body)
+      const provider = cached.provider_id ? getProvider(cached.provider_id) : null
+      const text = responseBody.choices?.[0]?.message?.content || ''
+
+      res.writeHead(200, SSE_HEADERS)
+      res.write(`data: ${JSON.stringify({
+        _provider: provider ? { id: provider.id, name: provider.name, model: provider.model } : null,
+        _cache_hit: true,
+        choices: [{ delta: { content: text } }],
+      })}\n\n`)
+      res.write('data: [DONE]\n\n')
+      res.end()
+
+      enqueueLog({
+        providerId: cached.provider_id, providerName: provider?.name || null,
+        endpoint: '/admin/api/chat/send', requestBody: req.body,
+        originIp: req.ip, originHeader: req.headers['user-agent'],
+        responseBody, statusCode: 200,
+        responseTimeMs: Date.now() - start,
+        authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: true, retryCount: 0,
+      })
+      if (cached.provider_id) {
+        enqueueMetric(cached.provider_id, { cacheHit: true, responseTimeMs: Date.now() - start })
+      }
+      return
+    }
+  }
+
+  let provider
+  if (use_proxy) {
+    const providers = orderProvidersForRouting(selectProviders('chat'))
+    for (const p of providers) {
+      if (!isProviderAvailable(p)) continue
+      if (isRateLimitExceeded(p)) continue
+      if (isDailyLimitExceeded(p)) continue
+      provider = p
+      break
+    }
+  } else {
+    provider = getProvider(provider_id)
+    if (!provider) {
+      clearTimeout(durationTimer)
+      return res.status(404).json({ error: 'Provider not found', response_time_ms: Date.now() - start })
+    }
+    if (!isProviderAvailable(provider)) {
+      clearTimeout(durationTimer)
+      return res.status(503).json({ error: `Provider "${provider.name}" is paused or in cooldown`, response_time_ms: Date.now() - start })
+    }
+  }
+
+  if (!provider) {
+    clearTimeout(durationTimer)
+    return res.status(503).json({ error: 'No available provider', response_time_ms: Date.now() - start })
+  }
+
+  try {
+    recordProviderRequest(provider.id)
+    const stream = await streamProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
+
+    res.writeHead(200, SSE_HEADERS)
+    res.write(`data: ${JSON.stringify({ _provider: { id: provider.id, name: provider.name, model: provider.model } })}\n\n`)
+
+    resetIdle()
+    stream.on('data', resetIdle)
+
+    await pipeline(stream, res)
+
+    clearIdle()
+    clearTimeout(durationTimer)
+
+    recordSuccess(provider.id)
+    enqueueLog({
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode: 200, responseBody: { stream: true },
+      responseTimeMs: Date.now() - start,
+      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
+    })
+    enqueueMetric(provider.id, { responseTimeMs: Date.now() - start, cacheHit: false })
+  } catch (err) {
+    clearIdle()
+    clearTimeout(durationTimer)
+    if (res.headersSent) return
+
+    enqueueLog({
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode: err.status || 503, errorMessage: err.message,
+      responseTimeMs: Date.now() - start,
+      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
+    })
+    enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - start })
+
+    if (isRetryableError(err)) {
+      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+    }
+    res.status(err.status || 503).json({
+      error: err.message, details: err.data || null,
+      _provider: { id: provider.id, name: provider.name, model: provider.model },
+      response_time_ms: Date.now() - start,
+    })
+  }
+}
 
 router.get('/providers', (req, res) => {
   const rows = dbAll(
