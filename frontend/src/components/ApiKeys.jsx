@@ -10,6 +10,31 @@ function parseDate(dateStr) {
   return new Date(dateStr.replace(' ', 'T') + 'Z')
 }
 
+const NEW_KEY_TTL = 60
+
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      return ok
+    } catch {
+      return false
+    }
+  }
+}
+
 function ProviderSelect({ providers, selected, onChange }) {
   function toggle(id) {
     onChange(
@@ -46,6 +71,7 @@ export default function ApiKeys() {
   const [selectedProviderIds, setSelectedProviderIds] = useState([])
   const [createOpen, setCreateOpen] = useState(false)
   const [newKey, setNewKey] = useState(null)
+  const [countdown, setCountdown] = useState(0)
   const [editTarget, setEditTarget] = useState(null) // { id, name, providerIds }
   const [editProviderIds, setEditProviderIds] = useState([])
   const [revokeTarget, setRevokeTarget] = useState(null) // { id, name }
@@ -73,6 +99,25 @@ export default function ApiKeys() {
       })
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    if (!newKey) {
+      setCountdown(0)
+      return
+    }
+    setCountdown(NEW_KEY_TTL)
+    const iv = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) {
+          clearInterval(iv)
+          setNewKey(null)
+          return 0
+        }
+        return c - 1
+      })
+    }, 1000)
+    return () => clearInterval(iv)
+  }, [newKey])
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -104,12 +149,8 @@ export default function ApiKeys() {
 
   async function handleCopy() {
     if (!newKey) return
-    try {
-      await navigator.clipboard.writeText(newKey)
-      toast('API key copied to clipboard', 'success')
-    } catch {
-      toast('Could not copy to clipboard', 'error')
-    }
+    const ok = await copyToClipboard(newKey)
+    toast(ok ? 'API key copied to clipboard' : 'Could not copy to clipboard', ok ? 'success' : 'error')
   }
 
   async function handleEdit(e) {
@@ -159,11 +200,20 @@ export default function ApiKeys() {
 
       {newKey && (
         <div className="alert alert-warning">
-          <strong>Save this key {`\u2014`} it won&apos;t be shown again:</strong>
+          <div className="key-alert-head">
+            <strong>Save this key {`\u2014`} it won&apos;t be shown again:</strong>
+            <span className="key-countdown">Auto-dismiss in {countdown}s</span>
+          </div>
           <div className="key-reveal">
             <code>{newKey}</code>
-            <button type="button" className="btn btn-sm" onClick={handleCopy}>
-              Copy
+            <button
+              type="button"
+              className="btn btn-sm btn-icon"
+              onClick={handleCopy}
+              title="Copy"
+              aria-label="Copy API key"
+            >
+              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
             </button>
             <button type="button" className="btn btn-sm" onClick={() => setNewKey(null)}>
               Dismiss
