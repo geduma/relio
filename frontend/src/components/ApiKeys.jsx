@@ -44,6 +44,7 @@ export default function ApiKeys() {
   const [providers, setProviders] = useState([])
   const [name, setName] = useState('')
   const [selectedProviderIds, setSelectedProviderIds] = useState([])
+  const [createOpen, setCreateOpen] = useState(false)
   const [newKey, setNewKey] = useState(null)
   const [editTarget, setEditTarget] = useState(null) // { id, name, providerIds }
   const [editProviderIds, setEditProviderIds] = useState([])
@@ -93,6 +94,7 @@ export default function ApiKeys() {
       setNewKey(data.apiKey)
       setName('')
       setSelectedProviderIds([])
+      setCreateOpen(false)
       if (data.key) setKeys(prev => [data.key, ...prev])
       toast('API key created', 'success')
     } catch (err) {
@@ -170,26 +172,40 @@ export default function ApiKeys() {
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="form-inline">
+      <form
+        onSubmit={e => { e.preventDefault(); setCreateOpen(true) }}
+        className="form-inline"
+      >
         <input
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="Key name (e.g. Production App)"
           required
         />
-        <button type="submit" className="btn btn-primary" disabled={selectedProviderIds.length === 0}>
+        <button type="submit" className="btn btn-primary">
           Create New Key
         </button>
       </form>
 
-      <div className="form-section">
-        <label className="form-label">Providers with access</label>
-        <ProviderSelect
-          providers={providers}
-          selected={selectedProviderIds}
-          onChange={setSelectedProviderIds}
-        />
-      </div>
+      {createOpen && (
+        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Create new API key</h3>
+            <p>Select the providers this key can access.</p>
+            <form onSubmit={handleCreate}>
+              <ProviderSelect
+                providers={providers}
+                selected={selectedProviderIds}
+                onChange={setSelectedProviderIds}
+              />
+              <div className="modal-actions">
+                <button type="button" className="btn" onClick={() => setCreateOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={selectedProviderIds.length === 0}>Create Key</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="table-wrapper"><table className="table">
         <thead>
@@ -220,7 +236,7 @@ export default function ApiKeys() {
               </td>
               <td data-label="Created">{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
               <td data-label="Last Used">{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
-              <td data-label="Actions">
+              <td data-label="Actions" className="actions-cell">
                 <button className="btn btn-sm" onClick={() => openEdit(k)}>
                   Edit Providers
                 </button>
