@@ -12,6 +12,8 @@ Relio is a self-hosted, intelligent proxy for Large Language Models (LLMs). It c
 
 **Problem it solves:** AI applications using multiple LLM providers need to handle failover, rate limits, costs, auditing, and caching themselves. Relio centralizes all of this into a single service with a visual management dashboard, designed for personal/self-hosted use.
 
+**Philosophy:** Relio does not attempt to evaluate the quality, cost, or capabilities of models. It treats every provider as a black box. Model selection, and the order or weighting of providers, are decisions left entirely to the user.
+
 ---
 
 ## 2. User Personas
