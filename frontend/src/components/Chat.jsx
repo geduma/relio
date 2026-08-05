@@ -7,6 +7,40 @@ function msgLabel(msg) {
   return msg._cacheHit ? `${base} · cached` : base
 }
 
+function readStream(body, onChunk) {
+  return new Promise((resolve, reject) => {
+    const reader = body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let meta = {}
+
+    const handleLine = line => {
+      if (!line.startsWith('data:')) return
+      const payload = line.slice(5).trim()
+      if (!payload || payload === '[DONE]') return
+      let chunk
+      try { chunk = JSON.parse(payload) } catch { return }
+      if (chunk._provider) meta._provider = chunk._provider
+      if (chunk._cache_hit) meta._cache_hit = true
+      const delta = chunk.choices?.[0]?.delta?.content
+      if (delta) onChunk(delta, meta)
+    }
+
+    ;(async () => {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) handleLine(line)
+      }
+      if (buffer.trim()) handleLine(buffer)
+      resolve(meta)
+    })().catch(reject)
+  })
+}
+
 export default function Chat() {
   const [providers, setProviders] = useState([])
   const [selectedId, setSelectedId] = useState('')
@@ -14,6 +48,7 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [useProxy, setUseProxy] = useState(false)
+  const [streamEnabled, setStreamEnabled] = useState(true)
   const messagesEndRef = useRef(null)
   const idRef = useRef(0)
   const controllerRef = useRef(null)
@@ -49,6 +84,7 @@ export default function Chat() {
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setSending(true)
+    const startedAt = Date.now()
 
     const controller = new AbortController()
     controllerRef.current = controller
@@ -62,25 +98,49 @@ export default function Chat() {
           provider_id: useProxy ? null : selectedId,
           messages: [...messages.map(m => ({ role: m.role, content: m.content })), userMsg],
           use_proxy: useProxy,
+          stream: streamEnabled,
         }),
       })
-      const data = await res.json().catch(() => ({}))
+
+      const data = (!streamEnabled || !res.ok) ? await res.json().catch(() => ({})) : null
+      if (!res.ok) {
+        throw new Error(errorMessage(data?.error || `Request failed (${res.status})`))
+      }
+
+      if (streamEnabled && res.body) {
+        const assistantId = ++idRef.current
+        let acc = ''
+        setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', streaming: true }])
+        let meta = {}
+        try {
+          meta = await readStream(res.body, delta => {
+            acc += delta
+            setMessages(prev => prev.map(msg => msg.id === assistantId ? { ...msg, content: acc } : msg))
+          })
+        } catch (err) {
+          if (err.name !== 'AbortError') throw err
+        }
+        const provider = meta._provider
+        setMessages(prev => prev.map(msg => msg.id === assistantId ? {
+          ...msg,
+          streaming: false,
+          content: acc || 'No content in response',
+          responseTimeMs: Date.now() - startedAt,
+          _providerName: provider ? `${provider.name} (${provider.model})` : null,
+          _cacheHit: Boolean(meta._cache_hit),
+        } : msg))
+        return
+      }
+
       const choice = data.choices?.[0]?.message
-      const content = choice?.content || (
-        data.error
-          ? errorMessage(data.error)
-          : res.ok
-            ? 'No content in response'
-            : `Request failed (${res.status})`
-      )
-      const prov = data._provider
-      const providerName = prov ? `${prov.name} (${prov.model})` : null
-      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content, responseTimeMs: data.response_time_ms, _providerName: providerName, _cacheHit: data._cache_hit }])
+      const content = choice?.content || (data.error ? errorMessage(data.error) : 'No content in response')
+      const provider = data._provider
+      setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content, responseTimeMs: Date.now() - startedAt, _providerName: provider ? `${provider.name} (${provider.model})` : null, _cacheHit: data._cache_hit }])
     } catch (err) {
       if (err.name === 'AbortError') {
         setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request cancelled' }])
       } else {
-        setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: 'Request failed' }])
+        setMessages(prev => [...prev, { id: ++idRef.current, role: 'assistant', content: errorMessage(err) || 'Request failed' }])
       }
     } finally {
       controllerRef.current = null
@@ -100,6 +160,7 @@ export default function Chat() {
   }
 
   const selectedProvider = providers.find(p => p.id === selectedId)
+  const streaming = messages.some(m => m.streaming)
 
   function clearChat() {
     setMessages([])
@@ -129,6 +190,13 @@ export default function Chat() {
             ))}
           </select>
           <div className="chat-toggle-label">
+            <span>Stream</span>
+            <label className="switch">
+              <input type="checkbox" checked={streamEnabled} onChange={e => setStreamEnabled(e.target.checked)} />
+              <span className="switch-slider"></span>
+            </label>
+          </div>
+          <div className="chat-toggle-label">
             <span>Proxy</span>
             <label className="switch">
               <input type="checkbox" checked={useProxy} onChange={e => setUseProxy(e.target.checked)} />
@@ -153,10 +221,10 @@ export default function Chat() {
               {msgLabel(msg)}
               {msg.responseTimeMs != null && <span className="chat-msg-time">{msg.responseTimeMs}ms</span>}
             </div>
-            <div className="chat-msg-content">{msg.content}</div>
+            <div className="chat-msg-content">{msg.content}{msg.streaming && <span className="chat-cursor" />}</div>
           </div>
         ))}
-        {sending && (
+        {sending && !streaming && (
           <div className="chat-msg chat-msg--assistant">
             <div className="chat-msg-role">{loadingLabel()}</div>
             <div className="chat-msg-content chat-msg-thinking">Thinking...</div>

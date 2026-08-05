@@ -3,6 +3,7 @@ import express from 'express'
 
 let setDbPath, initDb, closeDb, dbRun, encrypt
 let chatRoutes
+let setCache
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -16,6 +17,7 @@ beforeAll(async () => {
   initDb()
 
   chatRoutes = (await import('../src/routes/chat.routes.js')).default
+  setCache = (await import('../src/services/cacheManager.js')).setCache
 })
 
 afterAll(() => closeDb())
@@ -115,5 +117,124 @@ describe('GET /admin/api/chat/providers', () => {
     expect('api_key' in row).toBe(false)
     expect(row.name).toBe('ChatP')
     expect(row.model).toBe('gpt-4o')
+  })
+})
+
+describe('POST /admin/api/chat/send streaming', () => {
+  const encoder = new TextEncoder()
+  let server
+  let baseUrl
+  let realFetch
+
+  function streamingMock(chunks, delayMs = 5) {
+    const stream = new ReadableStream({
+      start(controller) {
+        chunks.forEach((chunk, i) => {
+          setTimeout(() => {
+            try {
+              controller.enqueue(encoder.encode(chunk))
+              if (i === chunks.length - 1) controller.close()
+            } catch { /* stream already closed */ }
+          }, delayMs * (i + 1))
+        })
+      },
+    })
+    return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  function sseEvents(text) {
+    return text.split('\n\n').map(b => b.trim()).filter(Boolean)
+  }
+
+  beforeAll(async () => {
+    const app = express()
+    app.use(express.json())
+    app.use('/admin/api/chat', chatRoutes)
+    app.use((err, _req, res, _next) => {
+      res.status(err.status || 500).json({ error: { message: err.message } })
+    })
+    server = app.listen(0)
+    await new Promise(r => server.once('listening', r))
+    baseUrl = `http://localhost:${server.address().port}`
+    realFetch = globalThis.fetch
+  })
+
+  afterAll(async () => {
+    globalThis.fetch = realFetch
+    if (server) await new Promise(r => server.close(r))
+  })
+
+  it('streams a _provider meta chunk, delta content and [DONE] in direct mode', async () => {
+    globalThis.fetch = async () => streamingMock([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ])
+
+    const res = await realFetch(`${baseUrl}/admin/api/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hi' }],
+        use_proxy: false,
+        provider_id: 'chatp1',
+        stream: true,
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+
+    const events = sseEvents(await res.text())
+    const providerEvent = events.find(e => e.includes('_provider'))
+    expect(providerEvent).toBeTruthy()
+    expect(providerEvent).toContain('"id":"chatp1"')
+    expect(providerEvent).toContain('"name":"ChatP"')
+
+    const content = events
+      .filter(e => e.startsWith('data:') && e.includes('delta'))
+      .map(e => {
+        try { return JSON.parse(e.slice(5)).choices?.[0]?.delta?.content || '' } catch { return '' }
+      })
+      .join('')
+    expect(content).toBe('Hello world')
+    expect(events.at(-1)).toBe('data: [DONE]')
+  })
+
+  it('returns cached content with _cache_hit when the proxy cache hits', async () => {
+    const cachedMessages = [{ role: 'user', content: 'cache me' }]
+    setCache('/v1/chat/completions', { messages: cachedMessages }, {
+      choices: [{ message: { role: 'assistant', content: 'CACHED CONTENT' } }],
+    }, 'chatp1')
+
+    const res = await realFetch(`${baseUrl}/admin/api/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: cachedMessages, use_proxy: true, stream: true }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+    const text = await res.text()
+    expect(text).toContain('"_cache_hit":true')
+    expect(text).toContain('CACHED CONTENT')
+    expect(text).toContain('data: [DONE]')
+  })
+
+  it('returns a JSON error for an unknown provider in streaming direct mode', async () => {
+    const res = await realFetch(`${baseUrl}/admin/api/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hi' }],
+        use_proxy: false,
+        provider_id: 'does-not-exist',
+        stream: true,
+      }),
+    })
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toBe('Provider not found')
   })
 })

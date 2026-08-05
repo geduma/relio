@@ -298,6 +298,15 @@ body {
   border-bottom-left-radius: 4px;
 }
 .chat-msg-thinking { color: var(--text-muted); font-style: italic; }
+.chat-cursor {
+  display: inline-block;
+  width: 2px; height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: chat-blink 0.9s steps(2, start) infinite;
+}
+@keyframes chat-blink { to { visibility: hidden; } }
 
 .chat-input-area {
   padding-top: 1rem;
