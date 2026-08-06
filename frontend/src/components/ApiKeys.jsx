@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useToast, errorMessage } from './Toast.jsx'
 import Pagination, { usePagination } from './Pagination.jsx'
+import RowActions from './RowActions.jsx'
 
 function parseDate(dateStr) {
   if (!dateStr) return null
@@ -287,12 +288,12 @@ export default function ApiKeys() {
               <td data-label="Created">{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
               <td data-label="Last Used">{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
               <td data-label="Actions" className="actions-cell">
-                <button className="btn btn-sm" onClick={() => openEdit(k)}>
-                  Edit Providers
-                </button>
-                <button className="btn btn-sm btn-danger" onClick={() => setRevokeTarget(k)}>
-                  Revoke
-                </button>
+                <RowActions
+                  actions={[
+                    { label: 'Edit Providers', onClick: () => openEdit(k) },
+                    { label: 'Revoke', onClick: () => setRevokeTarget(k), danger: true },
+                  ]}
+                />
               </td>
             </tr>
           ))}
