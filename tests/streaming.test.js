@@ -494,3 +494,89 @@ describe('GeminiNativeAdapter streaming (incremental chunks)', () => {
     expect(content).toBe('The quick fox')
   })
 })
+
+describe('streaming failover', () => {
+  let dbMod
+
+  beforeAll(async () => {
+    dbMod = await import('../src/db.js')
+  })
+
+  afterEach(() => {
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+    dbMod.dbRun("DELETE FROM circuit_breaker_state WHERE provider_id = 'pA'")
+  })
+
+  it('falls back to the next provider when the first returns 429 and applies a rate cooldown', async () => {
+    dbRun(
+      `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['pB', 'BetaTwo', 'https://beta.example.com/v1', encrypt('sk-b'), 'model-beta', 'chat', 'openai-compatible', 1, 'Fallback']
+    )
+    const authMod = await import('../src/services/authService.js')
+    authMod.updateApiKeyProviders('k1', ['pA', 'pB'])
+
+    installUpstreamMock(async (url) => {
+      if (String(url).includes('alpha.example.com')) {
+        return new Response(JSON.stringify({ error: { message: 'Rate limit reached', type: 'rate_limit_exceeded' } }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return streamingMockResponse([
+        'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+        'data: {"choices":[{"index":0,"delta":{"content":"Hello from beta"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'auto',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/event-stream')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+    }
+
+    expect(text).toContain('Hello from beta')
+    expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+
+    const alpha = dbMod.dbGet("SELECT status, cooldown_until FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('cooldown')
+    const remaining = new Date(alpha.cooldown_until).getTime() - Date.now()
+    expect(remaining).toBeGreaterThan(58 * 1000)
+    expect(remaining).toBeLessThanOrEqual(60 * 1000)
+  })
+
+  it('applies a quota cooldown and returns the error for a direct-provider 402 stream (no empty SSE)', async () => {
+    installUpstreamMock(async () => new Response(
+      JSON.stringify({ error: { message: 'Insufficient credits', type: 'billing_error' } }),
+      { status: 402, headers: { 'Content-Type': 'application/json' } }
+    ))
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+
+    expect(res.status).toBe(402)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body.error.message).toMatch(/insufficient credits/i)
+
+    const alpha = dbMod.dbGet("SELECT status, cooldown_until FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('cooldown')
+    expect(new Date(alpha.cooldown_until).getTime() - Date.now()).toBeGreaterThan(3000 * 1000 - 60000)
+  })
+})

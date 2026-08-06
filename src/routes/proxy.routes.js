@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
-import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, isRetryableError, recordProviderRequest, FAILOVER_MODEL, orderProvidersForRouting } from '../services/failoverEngine.js'
+import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, classifyProviderError, extractRetryAfter, recordProviderRequest, FAILOVER_MODEL, orderProvidersForRouting } from '../services/failoverEngine.js'
 import { processRequest } from '../handlers/requestHandler.js'
-import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
+import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { pipeline } from 'stream/promises'
 import { normalizeError } from '../utils/logger.js'
@@ -32,6 +32,13 @@ export function invalidateModelsCache() {
 
 const PROVIDER_ACCESS_DENIED = {
   error: { message: 'API key does not have access to this provider', type: 'invalid_request_error', code: 'provider_access_denied' },
+}
+
+const SSE_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+  'X-Accel-Buffering': 'no',
 }
 
 function createdUnix(value) {
@@ -144,37 +151,6 @@ async function handleStreamingRequest(req, res) {
     return
   }
 
-  let provider
-  if (selection.mode === 'provider') {
-    if (!req.apiKey.allowedProviderIds.includes(selection.provider.id)) {
-      res.status(403).json(PROVIDER_ACCESS_DENIED)
-      return
-    }
-    if (!isProviderAvailable(selection.provider)) {
-      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" is paused or in cooldown`), { status: 503 })))
-      return
-    }
-    if (isRateLimitExceeded(selection.provider) || isDailyLimitExceeded(selection.provider)) {
-      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${selection.provider.name}" has reached its rate or daily limit`), { status: 503 })))
-      return
-    }
-    provider = selection.provider
-  } else {
-    const providers = orderProvidersForRouting(selectProviders('chat', req.apiKey.allowedProviderIds))
-    for (const p of providers) {
-      if (!isProviderAvailable(p)) continue
-      if (isRateLimitExceeded(p)) continue
-      if (isDailyLimitExceeded(p)) continue
-      provider = p
-      break
-    }
-  }
-
-  if (!provider) {
-    res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
-    return
-  }
-
   const maxDurationMs = config.relay.streamTimeoutSeconds * 1000
   const idleMs = config.relay.streamIdleTimeoutMs
 
@@ -191,16 +167,92 @@ async function handleStreamingRequest(req, res) {
   const durationTimer = setTimeout(() => controller.abort(), maxDurationMs)
   if (durationTimer.unref) durationTimer.unref()
 
-  try {
-    recordProviderRequest(provider.id)
-    const stream = await streamProvider(provider, stripModel(req.body), controller.signal)
-
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
+  const logError = (provider, statusCode, errorMessage, retryCount) => {
+    enqueueLog({
+      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode, errorMessage,
+      responseTimeMs: Date.now() - startTime,
+      authenticatedVia: 'api_key',
+      requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
+      cacheHit: false, wasRetry: retryCount > 0, retryCount,
     })
+    enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
+  }
+
+  let provider = null
+  let stream = null
+  let lastError = null
+  let retryCount = 0
+
+  if (selection.mode === 'provider') {
+    const p = selection.provider
+    if (!req.apiKey.allowedProviderIds.includes(p.id)) {
+      clearTimeout(durationTimer)
+      res.status(403).json(PROVIDER_ACCESS_DENIED)
+      return
+    }
+    if (!isProviderAvailable(p)) {
+      clearTimeout(durationTimer)
+      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${p.name}" is paused or in cooldown`), { status: 503 })))
+      return
+    }
+    if (isRateLimitExceeded(p) || isDailyLimitExceeded(p)) {
+      clearTimeout(durationTimer)
+      res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${p.name}" has reached its rate or daily limit`), { status: 503 })))
+      return
+    }
+    try {
+      recordProviderRequest(p.id)
+      stream = await streamProvider(p, stripModel(req.body), controller.signal)
+      provider = p
+    } catch (err) {
+      lastError = err
+      provider = null
+      logError(p, err.status || 503, err.message, 0)
+      const { immediateCooldown } = classifyProviderError(err, p)
+      recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
+      if (immediateCooldown === 'circuit') {
+        recordFailure(p.id, p.cooldown_after_failures, p.cooldown_duration_seconds)
+      }
+    }
+  } else {
+    const providers = orderProvidersForRouting(selectProviders('chat', req.apiKey.allowedProviderIds))
+    for (const p of providers) {
+      if (!isProviderAvailable(p)) continue
+      if (isRateLimitExceeded(p)) continue
+      if (isDailyLimitExceeded(p)) continue
+      try {
+        recordProviderRequest(p.id)
+        stream = await streamProvider(p, stripModel(req.body), controller.signal)
+        provider = p
+        break
+      } catch (err) {
+        lastError = err
+        retryCount++
+        logError(p, err.status || 503, err.message, retryCount)
+        const { retryable, immediateCooldown } = classifyProviderError(err, p)
+        recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
+        if (!retryable) break
+        if (immediateCooldown === 'circuit') {
+          recordFailure(p.id, p.cooldown_after_failures, p.cooldown_duration_seconds)
+        }
+      }
+    }
+  }
+
+  if (!provider) {
+    clearTimeout(durationTimer)
+    const err = lastError
+    const finalErr = new Error(err?.message || 'No available provider for streaming')
+    finalErr.status = err?.status || 503
+    finalErr.data = err?.data || null
+    res.status(finalErr.status).json(normalizeError(finalErr))
+    return
+  }
+
+  try {
+    res.writeHead(200, SSE_HEADERS)
 
     resetIdle()
     stream.on('data', resetIdle)
@@ -218,7 +270,7 @@ async function handleStreamingRequest(req, res) {
       responseTimeMs: Date.now() - startTime,
       authenticatedVia: 'api_key',
       requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
-      cacheHit: false, retryCount: 0,
+      cacheHit: false, retryCount,
     })
     enqueueMetric(provider.id, {
       responseTimeMs: Date.now() - startTime, cacheHit: false,
@@ -228,20 +280,9 @@ async function handleStreamingRequest(req, res) {
     clearTimeout(durationTimer)
     if (res.headersSent) return
 
-    enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
-      originIp: req.ip, originHeader: req.headers['user-agent'],
-      statusCode: err.status || 503, errorMessage: err.message,
-      responseTimeMs: Date.now() - startTime,
-      authenticatedVia: 'api_key',
-      requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
-      cacheHit: false, retryCount: 0,
-    })
-    enqueueMetric(provider.id, {
-      error: true, responseTimeMs: Date.now() - startTime,
-    })
-
-    if (isRetryableError(err)) {
+    const { retryable, immediateCooldown } = classifyProviderError(err, provider)
+    recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
+    if (retryable && immediateCooldown === 'circuit') {
       recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
     }
     res.status(err.status || 503).json(normalizeError(err))

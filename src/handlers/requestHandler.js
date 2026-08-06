@@ -1,5 +1,5 @@
-import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, isRetryableError, recordProviderRequest, orderProvidersForRouting } from '../services/failoverEngine.js'
-import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
+import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, callProvider, classifyProviderError, extractRetryAfter, recordProviderRequest, orderProvidersForRouting } from '../services/failoverEngine.js'
+import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { config } from '../config.js'
@@ -137,7 +137,10 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         error: true, responseTimeMs: Date.now() - startTime,
       })
 
-      if (!isRetryableError(err)) {
+      const { retryable, immediateCooldown } = classifyProviderError(err, provider)
+      recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
+
+      if (!retryable) {
         const finalErr = new Error(err.message)
         finalErr.status = err.status || 400
         finalErr.data = err.data || null
@@ -145,7 +148,9 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         throw finalErr
       }
 
-      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+      if (immediateCooldown === 'circuit') {
+        recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+      }
     }
   }
 

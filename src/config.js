@@ -69,6 +69,10 @@ export function normalizeConfig(raw) {
   cfg.relay.streamIdleTimeoutMs ??= 30000
   cfg.relay.requestTimeoutMs ??= 30000
   cfg.relay.routingStrategy ??= 'order'
+  cfg.relay.failoverOnQuota ??= true
+  cfg.relay.quotaCooldownSeconds ??= 3600
+  cfg.relay.rateLimitCooldownSeconds ??= 60
+  cfg.relay.retryAfterMaxSeconds ??= 900
 
   cfg.rateLimit ??= {}
   cfg.rateLimit.proxyPerMinute ??= 120

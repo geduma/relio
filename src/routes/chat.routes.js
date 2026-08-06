@@ -5,9 +5,9 @@ import {
   callProvider, getProvider, streamProvider,
   orderProvidersForRouting, selectProviders,
   isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded,
-  recordProviderRequest, isRetryableError,
+  recordProviderRequest, classifyProviderError, extractRetryAfter,
 } from '../services/failoverEngine.js'
-import { recordSuccess, recordFailure } from '../services/circuitBreaker.js'
+import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache } from '../services/cacheManager.js'
 import { processRequest } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
@@ -162,15 +162,46 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
     }
   }
 
+  const logError = (provider, statusCode, errorMessage, retryCount) => {
+    enqueueLog({
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      originIp: req.ip, originHeader: req.headers['user-agent'],
+      statusCode, errorMessage,
+      responseTimeMs: Date.now() - start,
+      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, wasRetry: retryCount > 0, retryCount,
+    })
+    enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - start })
+  }
+
   let provider
+  let stream
+  let lastError = null
+  let lastFailedProvider = null
+  let retryCount = 0
+
   if (use_proxy) {
     const providers = orderProvidersForRouting(selectProviders('chat'))
     for (const p of providers) {
       if (!isProviderAvailable(p)) continue
       if (isRateLimitExceeded(p)) continue
       if (isDailyLimitExceeded(p)) continue
-      provider = p
-      break
+      try {
+        recordProviderRequest(p.id)
+        stream = await streamProvider(p, { messages, model: req.body.model || p.model }, controller.signal)
+        provider = p
+        break
+      } catch (err) {
+        lastError = err
+        retryCount++
+        logError(p, err.status || 503, err.message, retryCount)
+        lastFailedProvider = p
+        const { retryable, immediateCooldown } = classifyProviderError(err, p)
+        recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
+        if (!retryable) break
+        if (immediateCooldown === 'circuit') {
+          recordFailure(p.id, p.cooldown_after_failures, p.cooldown_duration_seconds)
+        }
+      }
     }
   } else {
     provider = getProvider(provider_id)
@@ -182,17 +213,33 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
       clearTimeout(durationTimer)
       return res.status(503).json({ error: `Provider "${provider.name}" is paused or in cooldown`, response_time_ms: Date.now() - start })
     }
+    try {
+      recordProviderRequest(provider.id)
+      stream = await streamProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
+    } catch (err) {
+      lastError = err
+      lastFailedProvider = provider
+      logError(provider, err.status || 503, err.message, 0)
+      const { immediateCooldown } = classifyProviderError(err, provider)
+      recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
+      if (immediateCooldown === 'circuit') {
+        recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+      }
+      provider = null
+    }
   }
 
   if (!provider) {
     clearTimeout(durationTimer)
-    return res.status(503).json({ error: 'No available provider', response_time_ms: Date.now() - start })
+    const err = lastError
+    return res.status(err?.status || 503).json({
+      error: err?.message || 'No available provider', details: err?.data || null,
+      _provider: lastFailedProvider ? { id: lastFailedProvider.id, name: lastFailedProvider.name, model: lastFailedProvider.model } : null,
+      response_time_ms: Date.now() - start,
+    })
   }
 
   try {
-    recordProviderRequest(provider.id)
-    const stream = await streamProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
-
     res.writeHead(200, SSE_HEADERS)
     res.write(`data: ${JSON.stringify({ _provider: { id: provider.id, name: provider.name, model: provider.model } })}\n\n`)
 
@@ -210,7 +257,7 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
       responseTimeMs: Date.now() - start,
-      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
+      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount,
     })
     enqueueMetric(provider.id, { responseTimeMs: Date.now() - start, cacheHit: false })
   } catch (err) {
@@ -218,16 +265,9 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
     clearTimeout(durationTimer)
     if (res.headersSent) return
 
-    enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
-      originIp: req.ip, originHeader: req.headers['user-agent'],
-      statusCode: err.status || 503, errorMessage: err.message,
-      responseTimeMs: Date.now() - start,
-      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
-    })
-    enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - start })
-
-    if (isRetryableError(err)) {
+    const { retryable, immediateCooldown } = classifyProviderError(err, provider)
+    recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
+    if (retryable && immediateCooldown === 'circuit') {
       recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
     }
     res.status(err.status || 503).json({

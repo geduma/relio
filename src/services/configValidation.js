@@ -23,6 +23,10 @@ const validators = {
   'relay.streamIdleTimeoutMs': (v) => isPositiveInt(v),
   'relay.requestTimeoutMs': (v) => isPositiveInt(v),
   'relay.routingStrategy': (v) => ROUTING_STRATEGIES.includes(v),
+  'relay.failoverOnQuota': (v) => typeof v === 'boolean',
+  'relay.quotaCooldownSeconds': (v) => isPositiveInt(v),
+  'relay.rateLimitCooldownSeconds': (v) => isPositiveInt(v),
+  'relay.retryAfterMaxSeconds': (v) => isPositiveInt(v),
 }
 
 export function getEditableConfigKeys() {
