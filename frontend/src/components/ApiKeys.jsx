@@ -92,7 +92,7 @@ export default function ApiKeys() {
     ])
       .then(([keyData, providerData]) => {
         setKeys(keyData)
-        setProviders(providerData)
+        setProviders(providerData.filter(p => p.status === 'active'))
       })
       .catch(err => {
         if (err.name !== 'AbortError') toast(errorMessage(err), 'error')
