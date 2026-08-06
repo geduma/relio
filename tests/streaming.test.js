@@ -579,4 +579,23 @@ describe('streaming failover', () => {
     expect(alpha.status).toBe('cooldown')
     expect(new Date(alpha.cooldown_until).getTime() - Date.now()).toBeGreaterThan(3000 * 1000 - 60000)
   })
+
+  it('returns 404 when no provider is available for streaming (all in cooldown)', async () => {
+    const authMod = await import('../src/services/authService.js')
+    authMod.updateApiKeyProviders('k1', ['pA'])
+    dbMod.dbRun(
+      "UPDATE providers SET status = 'cooldown', cooldown_until = ? WHERE id = 'pA'",
+      [new Date(Date.now() + 3600000).toISOString()]
+    )
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'auto',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error.message).toMatch(/No available provider for streaming/i)
+  })
 })

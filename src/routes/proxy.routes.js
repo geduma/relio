@@ -243,11 +243,14 @@ async function handleStreamingRequest(req, res) {
 
   if (!provider) {
     clearTimeout(durationTimer)
-    const err = lastError
-    const finalErr = new Error(err?.message || 'No available provider for streaming')
-    finalErr.status = err?.status || 503
-    finalErr.data = err?.data || null
-    res.status(finalErr.status).json(normalizeError(finalErr))
+    if (lastError) {
+      const finalErr = new Error(lastError.message)
+      finalErr.status = lastError.status || 503
+      finalErr.data = lastError.data || null
+      res.status(finalErr.status).json(normalizeError(finalErr))
+      return
+    }
+    res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
     return
   }
 
