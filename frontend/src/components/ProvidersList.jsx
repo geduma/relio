@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast, errorMessage } from './Toast.jsx'
 import Pagination, { usePagination } from './Pagination.jsx'
+import RowActions from './RowActions.jsx'
 
 const TYPE_LABELS = {
   'openai-compatible': 'OpenAI Compatible',
@@ -119,10 +120,12 @@ export default function ProvidersList() {
               <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
               <td data-label="Actions">
-                <div className="actions-cell">
-                  <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                  <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
-                </div>
+                <RowActions
+                  actions={[
+                    { label: 'Edit', to: `/admin/providers/${p.id}/edit` },
+                    { label: 'Delete', onClick: () => setDeleteTarget(p.id), danger: true },
+                  ]}
+                />
               </td>
             </tr>
           ) : (
@@ -150,10 +153,12 @@ export default function ProvidersList() {
                   <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
                   <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
                   <td data-label="Actions">
-                    <div className="actions-cell">
-                      <Link to={`/admin/providers/${p.id}/edit`} className="btn btn-sm">Edit</Link>
-                      <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(p.id)}>Delete</button>
-                    </div>
+                    <RowActions
+                      actions={[
+                        { label: 'Edit', to: `/admin/providers/${p.id}/edit` },
+                        { label: 'Delete', onClick: () => setDeleteTarget(p.id), danger: true },
+                      ]}
+                    />
                   </td>
                 </tr>
               )
