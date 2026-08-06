@@ -266,7 +266,7 @@ export default function ApiKeys() {
             <th>Providers</th>
             <th>Created</th>
             <th>Last Used</th>
-            <th>Actions</th>
+            <th className="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -287,7 +287,7 @@ export default function ApiKeys() {
               </td>
               <td data-label="Created">{parseDate(k.created_at)?.toLocaleDateString() || '-'}</td>
               <td data-label="Last Used">{parseDate(k.last_used_at)?.toLocaleDateString() || '-'}</td>
-              <td data-label="Actions" className="actions-cell">
+              <td data-label="Actions" className="actions-col">
                 <RowActions
                   actions={[
                     { label: 'Edit Providers', onClick: () => openEdit(k) },
