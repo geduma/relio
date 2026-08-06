@@ -271,6 +271,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Gemini returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 
@@ -297,6 +298,7 @@ export default class GeminiNativeAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Gemini stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 

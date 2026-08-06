@@ -58,6 +58,33 @@ const SECTIONS = [
       { key: 'relay.requestTimeoutMs', label: 'Request timeout (ms)', type: 'number', half: true },
       { key: 'relay.streamTimeoutSeconds', label: 'Stream timeout (s)', type: 'number', half: true },
       { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number', half: true },
+      {
+        key: 'relay.failoverOnQuota',
+        label: 'Failover on quota/rate errors',
+        type: 'toggle',
+        desc: 'When a provider returns 402 (billing), 413 (too large) or 429 (rate/quota), apply an immediate cooldown and continue with the next provider (streaming and non-streaming). When off, 402/413 fail fast and 429 is handled by the circuit breaker only.',
+      },
+      {
+        key: 'relay.quotaCooldownSeconds',
+        label: 'Quota cooldown (s)',
+        type: 'number',
+        half: true,
+        desc: 'Cooldown after a billing/quota error (402, or 429 with a quota marker such as insufficient_quota / credit_balance_exhausted / quota_exceeded).',
+      },
+      {
+        key: 'relay.rateLimitCooldownSeconds',
+        label: 'Rate-limit cooldown (s)',
+        type: 'number',
+        half: true,
+        desc: 'Cooldown after a plain 429 rate limit.',
+      },
+      {
+        key: 'relay.retryAfterMaxSeconds',
+        label: 'Max retry-after (s)',
+        type: 'number',
+        half: true,
+        desc: 'When the provider sends Retry-After / retry_after_seconds / "retry in Ns", that value is used as the cooldown, capped at this maximum.',
+      },
     ],
   },
 ]

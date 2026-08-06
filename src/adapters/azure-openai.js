@@ -81,6 +81,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Azure returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 
@@ -110,6 +111,7 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Azure stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 

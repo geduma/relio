@@ -17,6 +17,10 @@
   "relay": {
     "exposeProvider": false,
     "requestTimeoutMs": 30000,
-    "routingStrategy": "order"
+    "routingStrategy": "order",
+    "failoverOnQuota": true,
+    "quotaCooldownSeconds": 3600,
+    "rateLimitCooldownSeconds": 60,
+    "retryAfterMaxSeconds": 900
   }
 }

@@ -104,6 +104,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
       const err = new Error(msg)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 
@@ -127,6 +128,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 
@@ -162,6 +164,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Provider returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 

@@ -23,6 +23,7 @@ Relio does not attempt to evaluate the quality, cost, or capabilities of models.
 - **OpenAI-compatible proxy** — `/v1/chat/completions`, `/v1/embeddings`, `/v1/models`
 - **Automatic failover** — tries providers in order (Main → Fallback 1 → N)
 - **Circuit breaker** — auto-cooldown after N consecutive failures
+- **Quota/rate-aware failover** — `402`/`413`/`429` (and Anthropic `529`) trigger immediate provider cooldown and continue with the next provider, including for streaming requests
 - **Persistent cache** — identical responses never reach the provider
 - **Rate limiting** — per-provider controls (req/min, tokens/day)
 - **Estimated costs** — per-provider input/output token pricing
@@ -101,6 +102,10 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | `relay.streamIdleTimeoutMs` | Abort a stream if no data arrives for this long (default `30000`) |
 | `relay.requestTimeoutMs` | Max duration for non-streaming requests (default `30000`) |
 | `relay.routingStrategy` | How the proxy picks the starting provider in failover (`auto`) mode. `order` (default, by provider order) or `least-used` (provider with the fewest tokens used today, balancing free-tier usage). Editable from the dashboard (Settings → Load balancer) |
+| `relay.failoverOnQuota` | `true` (default) — when a provider answers `402` (billing), `413` (request too large) or `429` (rate limit/quota), the proxy applies an immediate cooldown and continues with the next provider (non-streaming **and** streaming). When `false`, `402`/`413` abort the request immediately and `429` is only handled by the circuit breaker as before. Editable from the dashboard |
+| `relay.quotaCooldownSeconds` | Cooldown applied after a billing/quota error (`402`, `429` with a quota marker like `insufficient_quota`, `credit_balance_exhausted`, `quota_exceeded`, `spend_limit`). Default `3600` (1 hour). Editable from the dashboard |
+| `relay.rateLimitCooldownSeconds` | Cooldown applied after a plain rate-limit `429`. Default `60`. Editable from the dashboard |
+| `relay.retryAfterMaxSeconds` | When the provider sends `Retry-After` / `retry_after_seconds` / "retry in Ns", that value is used as the cooldown instead of the defaults, capped at this maximum. Default `900` (15 minutes). Editable from the dashboard |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `120`) |
 
@@ -262,6 +267,22 @@ curl http://localhost:3000/v1/chat/completions \
 ```
 
 An unknown provider returns `400` with `code: "unknown_provider"`.
+
+#### Failover on provider errors
+
+When a provider request fails, Relio classifies the error and decides whether to continue with the next provider:
+
+| Status | Meaning | Behaviour in failover mode |
+|---|---|---|
+| `402` | Billing / out of credits (OpenRouter, Cohere, HuggingFace, etc.) | **Retryable** — provider goes into an immediate **quota cooldown** (`quotaCooldownSeconds`, 1h default) and the request continues with the next provider. Exception: an Anthropic `402` (Max-plan rate limit) is treated as a rate limit |
+| `429` | Rate limit **or** quota/billing (OpenAI `insufficient_quota`, `credit_balance_exhausted`, `*_spend_limit_exceeded`; Anthropic `quota_exceeded` with `x-should-retry:false`; Gemini quota) | **Retryable** — the error body is inspected: quota markers trigger a long **quota cooldown**, plain rate limits trigger a short **rate cooldown** (`rateLimitCooldownSeconds`, 60s default). If the provider sends `Retry-After`, `retry_after_seconds` or "retry in Ns", that exact value is used (capped at `retryAfterMaxSeconds`) |
+| `413` | Request too large (Groq context/TPM, Anthropic, Cohere) | **Retryable, no cooldown** — depends on the payload size, not provider health, so the next provider is tried immediately |
+| `400` | Provider-side rendering/template error (e.g. Groq's `Tools should have a name!` Harmony error) | **Retryable, no cooldown** — matched by message pattern, next provider is tried |
+| `529` | Anthropic "overloaded" | Retryable via the circuit breaker (counts toward the N-failure cooldown) |
+| `5xx`, `408`, timeout, network | Transient failures | Retryable via the circuit breaker (existing behaviour) |
+| `401`, `403`, `404`, `410`, `422`, other `400` | Client/provider configuration problems | **Not retryable** — the request fails fast |
+
+All cooldowns are **persistent** (stored in SQLite, shown in the dashboard and reflected in `/v1/models`). Immediate quota/rate cooldowns apply to both non-streaming and streaming requests (`auto` mode will retry with the next provider before opening the SSE stream). A direct provider route (`model: "ProviderName"`) never fails over, but the classified cooldown is still applied. `429` cooldown recovery happens automatically on expiry (via maintenance), and any successful request clears the cooldown.
 
 #### Provider scoping per API key
 

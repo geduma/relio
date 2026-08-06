@@ -1,4 +1,5 @@
 import { dbGet, dbRun, getDb } from '../db.js'
+import { config } from '../config.js'
 
 function getProviderState(providerId) {
   const state = dbGet(
@@ -74,4 +75,41 @@ export function recordFailure(providerId, cooldownAfter, cooldownDuration) {
       [providerId, newCount, newCount]
     )
   }
+}
+
+function applyImmediateCooldown(providerId, durationSeconds) {
+  const cooldownUntil = new Date(Date.now() + durationSeconds * 1000).toISOString()
+  const db = getDb()
+  const tx = db.transaction(() => {
+    dbRun(
+      `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, cooldown_until, updated_at)
+       VALUES (?, 'cooldown', 1, datetime('now'), ?, datetime('now'))
+       ON CONFLICT(provider_id) DO UPDATE SET
+         state = 'cooldown',
+         last_failure_at = datetime('now'),
+         cooldown_until = ?,
+         updated_at = datetime('now')`,
+      [providerId, cooldownUntil, cooldownUntil]
+    )
+    dbRun(
+      'UPDATE providers SET status = \'cooldown\', cooldown_until = ? WHERE id = ?',
+      [cooldownUntil, providerId]
+    )
+  })
+  tx()
+}
+
+export function recordProviderFailure(provider, kind, retryAfterSec = null) {
+  if (!provider || !provider.id) return
+  if (kind !== 'quota' && kind !== 'rate') return
+
+  let durationSeconds = kind === 'quota'
+    ? config.relay.quotaCooldownSeconds
+    : config.relay.rateLimitCooldownSeconds
+
+  if (retryAfterSec && retryAfterSec > 0) {
+    durationSeconds = Math.min(retryAfterSec, config.relay.retryAfterMaxSeconds)
+  }
+
+  applyImmediateCooldown(provider.id, durationSeconds)
 }

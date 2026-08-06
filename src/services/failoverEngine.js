@@ -153,6 +153,78 @@ export function isRetryableError(err) {
   return false
 }
 
+const PROVIDER_RENDER_ERROR_RE = /(tools? should have a name|template|harmony|render)/i
+const QUOTA_MARKERS = [
+  'insufficient_quota',
+  'credit_balance_exhausted',
+  'spend_limit',
+  'quota_exceeded',
+  'quota',
+  'billing_not_active',
+  'billing',
+  'payment',
+  'x-should-retry":false',
+]
+
+export function isProviderRenderError(data, message) {
+  const text = `${message || ''} ${JSON.stringify(data || {})}`.toLowerCase()
+  return PROVIDER_RENDER_ERROR_RE.test(text)
+}
+
+export function isQuotaError(body) {
+  if (!body || typeof body !== 'object') return false
+  const text = JSON.stringify(body).toLowerCase()
+  if (/retry in \d/.test(text) || text.includes('retry_after_seconds')) return false
+  return QUOTA_MARKERS.some(marker => text.includes(marker))
+}
+
+export function classifyProviderError(err, provider = null) {
+  if (!err) return { retryable: false, immediateCooldown: null }
+  if (err.name === 'AbortError') return { retryable: true, immediateCooldown: 'circuit' }
+  const status = err.status
+  if (!status) return { retryable: true, immediateCooldown: 'circuit' }
+
+  if (status === 402 || status === 413) {
+    if (!config.relay.failoverOnQuota) return { retryable: false, immediateCooldown: null }
+    if (status === 413) return { retryable: true, immediateCooldown: 'none' }
+    return provider?.provider_type === 'anthropic'
+      ? { retryable: true, immediateCooldown: 'rate' }
+      : { retryable: true, immediateCooldown: 'quota' }
+  }
+
+  if (status === 400 && isProviderRenderError(err.data, err.message)) {
+    if (!config.relay.failoverOnQuota) return { retryable: false, immediateCooldown: null }
+    return { retryable: true, immediateCooldown: 'none' }
+  }
+
+  if (status === 429) {
+    if (!config.relay.failoverOnQuota) return { retryable: true, immediateCooldown: 'circuit' }
+    return isQuotaError(err.data)
+      ? { retryable: true, immediateCooldown: 'quota' }
+      : { retryable: true, immediateCooldown: 'rate' }
+  }
+
+  if (status >= 500 || status === 408) {
+    return { retryable: true, immediateCooldown: 'circuit' }
+  }
+
+  return { retryable: false, immediateCooldown: null }
+}
+
+export function extractRetryAfter(err) {
+  if (!err) return null
+  if (typeof err.retryAfter === 'number' && Number.isFinite(err.retryAfter) && err.retryAfter > 0) {
+    return Math.ceil(err.retryAfter)
+  }
+  if (!err.data || typeof err.data !== 'object') return null
+  const text = JSON.stringify(err.data)
+  const inSeconds = text.match(/retry_after_seconds["']?\s*[:=]\s*(\d+(?:\.\d+)?)/i)
+  if (inSeconds) return Math.ceil(parseFloat(inSeconds[1]))
+  const retryIn = text.match(/retry in\s+(\d+(?:\.\d+)?)\s*s/i)
+  if (retryIn) return Math.ceil(parseFloat(retryIn[1]))
+  return null
+}
+
 export function isDailyLimitExceeded(provider) {
   if (provider.tokens_per_day <= 0) return false
   return getUsedTokensToday(provider) >= provider.tokens_per_day

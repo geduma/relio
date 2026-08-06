@@ -9,6 +9,22 @@ export default class ProviderAdapter {
     return data.error?.message || null
   }
 
+  static attachRetryAfter(err, response) {
+    if (!response || typeof response.headers?.get !== 'function') return err
+    const header = response.headers.get('retry-after')
+    if (!header) return err
+    const secs = Number(header)
+    if (Number.isFinite(secs) && secs >= 0) {
+      err.retryAfter = secs
+    } else {
+      const parsed = Date.parse(header)
+      if (!Number.isNaN(parsed)) {
+        err.retryAfter = Math.max(0, Math.ceil((parsed - Date.now()) / 1000))
+      }
+    }
+    return err
+  }
+
   async assertSseResponse(response) {
     const type = (response.headers.get('content-type') || '').toLowerCase()
     if (!type.includes('application/json')) return

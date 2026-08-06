@@ -283,6 +283,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Anthropic returned ${response.status} — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 
@@ -308,6 +309,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
       const err = new Error(errMsg || `Anthropic stream request failed (status ${response.status}) — body: ${detail}`)
       err.status = response.status
       err.data = data
+      ProviderAdapter.attachRetryAfter(err, response)
       throw err
     }
 

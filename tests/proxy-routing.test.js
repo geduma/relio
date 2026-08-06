@@ -297,3 +297,119 @@ describe('failover mode', () => {
     globalThis.fetch = originalFetch
   })
 })
+
+describe('failover on quota/rate errors', () => {
+  let dbMod
+
+  beforeAll(async () => {
+    dbMod = await import('../src/db.js')
+  })
+
+  afterEach(() => {
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+    dbMod.dbRun("DELETE FROM circuit_breaker_state WHERE provider_id = 'pA'")
+  })
+
+  it('applies an immediate 402 cooldown and falls back to the next provider', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url)
+      if (u.includes('alpha.example.com')) {
+        return {
+          ok: false, status: 402,
+          json: async () => ({ error: { message: 'Insufficient credits', type: 'billing_error' } }),
+        }
+      }
+      return originalFetch(url, opts)
+    }
+
+    const result = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: { messages: [{ role: 'user', content: 'quota-failover-1' }] },
+      authenticatedVia: 'api_key',
+    })
+
+    expect(result.statusCode).toBe(200)
+    expect(result.body.choices[0].message.content).toBe('hi')
+
+    const alpha = dbMod.dbGet("SELECT status, cooldown_until FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('cooldown')
+    expect(new Date(alpha.cooldown_until).getTime() - Date.now()).toBeGreaterThan(3000 * 1000 - 60000)
+
+    globalThis.fetch = originalFetch
+  })
+
+  it('distinguishes 429 quota (long cooldown) from 429 rate limit (short cooldown)', async () => {
+    const originalFetch = globalThis.fetch
+
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url)
+      if (u.includes('alpha.example.com')) {
+        return {
+          ok: false, status: 429,
+          json: async () => ({ error: { message: 'billing not active', type: 'insufficient_quota' } }),
+        }
+      }
+      return originalFetch(url, opts)
+    }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: { messages: [{ role: 'user', content: 'quota-429-1' }] },
+      authenticatedVia: 'api_key',
+    })
+    let alpha = dbMod.dbGet("SELECT cooldown_until FROM providers WHERE id = 'pA'")
+    const quotaRemaining = new Date(alpha.cooldown_until).getTime() - Date.now()
+    expect(quotaRemaining).toBeGreaterThan(3000 * 1000 - 60000)
+
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url)
+      if (u.includes('alpha.example.com')) {
+        return {
+          ok: false, status: 429,
+          headers: { get: () => '25' },
+          json: async () => ({ error: { message: 'Rate limit reached', type: 'rate_limit_exceeded' } }),
+        }
+      }
+      return originalFetch(url, opts)
+    }
+    await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: { messages: [{ role: 'user', content: 'rate-429-1' }] },
+      authenticatedVia: 'api_key',
+    })
+    alpha = dbMod.dbGet("SELECT cooldown_until FROM providers WHERE id = 'pA'")
+    const rateRemaining = new Date(alpha.cooldown_until).getTime() - Date.now()
+    expect(rateRemaining).toBeGreaterThan(23 * 1000)
+    expect(rateRemaining).toBeLessThanOrEqual(25 * 1000)
+
+    globalThis.fetch = originalFetch
+  })
+
+  it('skips a 413 provider without applying a cooldown', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => {
+      const u = String(url)
+      if (u.includes('alpha.example.com')) {
+        return {
+          ok: false, status: 413,
+          json: async () => ({ error: { message: 'Request too large for model context' } }),
+        }
+      }
+      return originalFetch(url, opts)
+    }
+
+    const result = await processRequest({
+      endpoint: '/v1/chat/completions',
+      requestBody: { messages: [{ role: 'user', content: 'too-large-1' }] },
+      authenticatedVia: 'api_key',
+    })
+    expect(result.statusCode).toBe(200)
+
+    const alpha = dbMod.dbGet("SELECT status FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('active')
+
+    globalThis.fetch = originalFetch
+  })
+})
