@@ -107,7 +107,7 @@ export default function ProvidersList() {
             <th>Type</th>
             <th>Capability</th>
             <th>Status</th>
-            <th>Actions</th>
+            <th className="actions-col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -119,7 +119,7 @@ export default function ProvidersList() {
               <td data-label="Type">{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
               <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
               <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-              <td data-label="Actions">
+              <td data-label="Actions" className="actions-col">
                 <RowActions
                   actions={[
                     { label: 'Edit', to: `/admin/providers/${p.id}/edit` },
@@ -152,7 +152,7 @@ export default function ProvidersList() {
                   <td data-label="Type">{TYPE_LABELS[p.provider_type] || p.provider_type || 'OpenAI Compatible'}</td>
                   <td data-label="Capability"><span className={`badge badge-${p.capability || 'chat'}`}>{p.capability || 'chat'}</span></td>
                   <td data-label="Status"><span className={`badge badge-${p.status}`}>{p.status}</span></td>
-                  <td data-label="Actions">
+                  <td data-label="Actions" className="actions-col">
                     <RowActions
                       actions={[
                         { label: 'Edit', to: `/admin/providers/${p.id}/edit` },

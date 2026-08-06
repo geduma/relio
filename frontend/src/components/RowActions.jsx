@@ -49,7 +49,7 @@ export default function RowActions({ actions }) {
       <button
         ref={toggleRef}
         type="button"
-        className="btn btn-sm btn-icon row-actions-toggle"
+        className="row-actions-toggle"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Actions"
@@ -57,7 +57,9 @@ export default function RowActions({ actions }) {
         onClick={toggleMenu}
       >
         <svg viewBox="0 0 24 24">
-          <path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+          <circle cx="12" cy="5" r="1.9" />
+          <circle cx="12" cy="12" r="1.9" />
+          <circle cx="12" cy="19" r="1.9" />
         </svg>
       </button>
       {open && (
