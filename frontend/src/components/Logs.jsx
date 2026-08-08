@@ -11,12 +11,13 @@ function parseDate(dateStr) {
 
 function formatLogLine(log) {
   const time = parseDate(log.request_at)?.toLocaleString() || '-'
-  const tokens = (log.input_tokens || 0) + (log.output_tokens || 0)
+  const inTokens = log.input_tokens || 0
+  const outTokens = log.output_tokens || 0
   const provider = log.provider_name || (log.provider_id ? log.provider_id.slice(0, 8) : '-')
   const requester = log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')
   const cache = log.cache_hit ? 'HIT' : 'MISS'
   const error = log.error_message || '-'
-  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(tokens).padStart(5)} tok  ${cache.padEnd(4)}  ${error}`
+  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(inTokens).padStart(6)} in  ${String(outTokens).padStart(6)} out  ${cache.padEnd(4)}  ${error}`
 }
 
 export default function Logs() {
@@ -53,7 +54,7 @@ export default function Logs() {
   }, [page, pageSize])
 
   function exportTxt() {
-    const header = 'Time                          Endpoint                       Provider         Requester        Status  Time      Tokens   Cache  Error'
+    const header = 'Time                          Endpoint                       Provider         Requester        Status  Time       In      Out    Cache  Error'
     const lines = logs.map(formatLogLine)
     const content = [header, ...lines].join('\n')
     const blob = new Blob([content], { type: 'text/plain' })
@@ -124,7 +125,8 @@ export default function Logs() {
                 <th>Provider</th>
                 <th>Requester</th>
                 <th>Status</th>
-                <th>Tokens</th>
+                <th>In Tokens</th>
+                <th>Out Tokens</th>
                 <th>Time (ms)</th>
                 <th>Cache</th>
                 <th>Error</th>
@@ -138,7 +140,8 @@ export default function Logs() {
                   <td data-label="Provider">{log.provider_name || (log.provider_id ? log.provider_id.slice(0, 8) : '-')}</td>
                   <td data-label="Requester">{log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')}</td>
                   <td data-label="Status"><span className={`badge badge-${log.status_code < 300 ? 'active' : log.status_code < 500 ? 'cooldown' : 'paused'}`}>{log.status_code}</span></td>
-                  <td data-label="Tokens">{(log.input_tokens || 0) + (log.output_tokens || 0)}</td>
+                  <td data-label="In Tokens">{log.input_tokens || 0}</td>
+                  <td data-label="Out Tokens">{log.output_tokens || 0}</td>
                   <td data-label="Time (ms)">{log.response_time_ms}</td>
                   <td data-label="Cache">{log.cache_hit ? 'HIT' : 'MISS'}</td>
                   <td data-label="Error" className="error-cell">{log.error_message || '-'}</td>
