@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest'
 
 let setDbPath, initDb, closeDb, dbRun, dbGet, encrypt
-let logQueue, metricsLogger, config
+let logQueue, metricsLogger, config, normalizeConfig
 let optimizeRelayBody, processRequest
 
 beforeAll(async () => {
@@ -18,7 +18,9 @@ beforeAll(async () => {
 
   logQueue = await import('../src/services/logQueue.js')
   metricsLogger = await import('../src/services/metricsLogger.js')
-  config = (await import('../src/config.js')).config
+  const configMod = await import('../src/config.js')
+  config = configMod.config
+  normalizeConfig = configMod.normalizeConfig
   const handler = await import('../src/handlers/requestHandler.js')
   optimizeRelayBody = handler.optimizeRelayBody
   processRequest = handler.processRequest
@@ -36,12 +38,24 @@ beforeEach(() => {
   dbRun('DELETE FROM providers')
 })
 
+const baseConfig = {
+  security: { encryptionKey: 'a'.repeat(64) },
+}
+
 describe('config: tokenOptimization defaults and validation', () => {
   it('defaults are applied', () => {
-    expect(config.relay.tokenOptimization).toBeDefined()
-    expect(config.relay.tokenOptimization.enabled).toBe(false)
-    expect(config.relay.tokenOptimization.logSavings).toBe(true)
-    expect(config.relay.tokenOptimization.aggressiveNormalization).toBe(false)
+    const cfg = normalizeConfig(baseConfig)
+    expect(cfg.relay.tokenOptimization).toBeDefined()
+    expect(cfg.relay.tokenOptimization.enabled).toBe(false)
+    expect(cfg.relay.tokenOptimization.logSavings).toBe(true)
+    expect(cfg.relay.tokenOptimization.aggressiveNormalization).toBe(false)
+  })
+
+  it('defaults are applied for writeBuffer', () => {
+    const cfg = normalizeConfig(baseConfig)
+    expect(cfg.relay.writeBuffer).toBeDefined()
+    expect(cfg.relay.writeBuffer.flushIntervalMs).toBe(500)
+    expect(cfg.relay.writeBuffer.maxBufferSize).toBe(50)
   })
 })
 
