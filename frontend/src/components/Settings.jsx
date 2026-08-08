@@ -85,6 +85,38 @@ const SECTIONS = [
         half: true,
         desc: 'When the provider sends Retry-After / retry_after_seconds / "retry in Ns", that value is used as the cooldown, capped at this maximum.',
       },
+      {
+        key: 'relay.writeBuffer.flushIntervalMs',
+        label: 'Write buffer flush (ms)',
+        type: 'number',
+        half: true,
+        desc: 'How often buffered provider responses are flushed to the client for streaming requests.',
+      },
+      {
+        key: 'relay.writeBuffer.maxBufferSize',
+        label: 'Write buffer max (chunks)',
+        type: 'number',
+        half: true,
+        desc: 'Maximum number of buffered chunks before forcing a flush.',
+      },
+      {
+        key: 'relay.tokenOptimization.enabled',
+        label: 'Token optimization',
+        type: 'toggle',
+        desc: 'Minify and normalize request bodies before hashing for cache and forwarding to providers, reducing token usage.',
+      },
+      {
+        key: 'relay.tokenOptimization.logSavings',
+        label: 'Log token savings',
+        type: 'toggle',
+        desc: 'Record the estimated tokens saved per request (visible in Metrics) when token optimization is enabled.',
+      },
+      {
+        key: 'relay.tokenOptimization.aggressiveNormalization',
+        label: 'Aggressive normalization',
+        type: 'toggle',
+        desc: 'Apply more aggressive whitespace normalization that may reduce formatting fidelity of the forwarded request.',
+      },
     ],
   },
 ]

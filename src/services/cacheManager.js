@@ -10,13 +10,17 @@ const HIT_FLUSH_MS = 1000
 let hitQueue = []
 let hitTimer = null
 
+function memDelete(key) {
+  memCache.delete(key)
+  const idx = memOrder.indexOf(key)
+  if (idx !== -1) memOrder.splice(idx, 1)
+}
+
 function memGet(key) {
   const entry = memCache.get(key)
   if (!entry) return null
   if (Date.now() > entry.expiresAt) {
-    memCache.delete(key)
-    const idx = memOrder.indexOf(key)
-    if (idx !== -1) memOrder.splice(idx, 1)
+    memDelete(key)
     return null
   }
   return entry.data
@@ -104,7 +108,7 @@ export function setCache(endpoint, requestBody, responseBody, providerId) {
 export function cleanExpiredCache() {
   const now = Date.now()
   for (const [key, entry] of memCache) {
-    if (now > entry.expiresAt) memCache.delete(key)
+    if (now > entry.expiresAt) memDelete(key)
   }
   const result = dbRun("DELETE FROM cache WHERE expires_at IS NOT NULL AND julianday(expires_at) < julianday('now')")
   return result.changes
