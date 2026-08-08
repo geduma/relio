@@ -25,6 +25,7 @@ export function getMetrics(from, to) {
     total_cost: 0,
     error_count: 0,
     cache_hits: 0,
+    tokens_saved_estimate: 0,
   }
 
   for (const r of rows) {
@@ -36,6 +37,12 @@ export function getMetrics(from, to) {
     totals.cache_hits += r.cache_hits
   }
 
+  totals.tokens_saved_estimate = dbGet(
+    `SELECT COALESCE(SUM(tokens_saved_estimate), 0) AS total
+     FROM requests_log WHERE substr(request_at, 1, 10) BETWEEN ? AND ?`,
+    [from, to]
+  ).total
+
   return { period: `${from} to ${to}`, providers: rows, totals }
 }
 
@@ -44,7 +51,8 @@ export function getLogs(limit = 50, offset = 0) {
     `SELECT l.id, l.provider_id, COALESCE(l.provider_name, p.name) AS provider_name,
             l.endpoint, l.status_code, l.input_tokens, l.output_tokens,
             l.response_time_ms, l.cache_hit, l.authenticated_via,
-            l.requester_name, l.requester_key, l.origin_ip, l.request_at, l.error_message
+            l.requester_name, l.requester_key, l.origin_ip, l.request_at, l.error_message,
+            l.tokens_saved_estimate
      FROM requests_log l
      LEFT JOIN providers p ON p.id = l.provider_id
      ORDER BY l.request_at DESC

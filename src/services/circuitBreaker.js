@@ -1,5 +1,8 @@
 import { dbGet, dbRun, getDb } from '../db.js'
 import { config } from '../config.js'
+import { enqueueCircuitCounter, dropCircuitCounters } from './logQueue.js'
+
+const runningCounts = new Map()
 
 function getProviderState(providerId) {
   const state = dbGet(
@@ -9,6 +12,21 @@ function getProviderState(providerId) {
   return state || { provider_id: providerId, state: 'healthy', failure_count: 0 }
 }
 
+function getRunningCount(providerId) {
+  if (!runningCounts.has(providerId)) {
+    runningCounts.set(providerId, getProviderState(providerId).failure_count || 0)
+  }
+  return runningCounts.get(providerId)
+}
+
+export function resetRunningCounts(providerId) {
+  if (providerId) {
+    runningCounts.delete(providerId)
+  } else {
+    runningCounts.clear()
+  }
+}
+
 
 export function recordSuccess(providerId) {
   const state = dbGet(
@@ -16,7 +34,11 @@ export function recordSuccess(providerId) {
             (SELECT status FROM providers WHERE id = ?) AS provider_status`,
     [providerId, providerId]
   )
-  if (state.failure_count === 0 && state.provider_status === 'active') return
+  const pending = runningCounts.get(providerId) || 0
+  if (state.failure_count === 0 && pending === 0 && state.provider_status === 'active') return
+
+  dropCircuitCounters(providerId)
+  runningCounts.delete(providerId)
 
   const db = getDb()
   const tx = db.transaction(() => {
@@ -38,13 +60,14 @@ export function recordSuccess(providerId) {
 }
 
 export function recordFailure(providerId, cooldownAfter, cooldownDuration) {
-  const state = getProviderState(providerId)
-  const newCount = state.failure_count + 1
-
-  const db = getDb()
+  const newCount = getRunningCount(providerId) + 1
+  runningCounts.set(providerId, newCount)
 
   if (newCount >= cooldownAfter) {
+    dropCircuitCounters(providerId)
+    runningCounts.delete(providerId)
     const cooldownUntil = new Date(Date.now() + cooldownDuration * 1000).toISOString()
+    const db = getDb()
     const tx = db.transaction(() => {
       dbRun(
         `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, cooldown_until, updated_at)
@@ -64,16 +87,7 @@ export function recordFailure(providerId, cooldownAfter, cooldownDuration) {
     })
     tx()
   } else {
-    dbRun(
-      `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, updated_at)
-       VALUES (?, 'healthy', ?, datetime('now'), datetime('now'))
-       ON CONFLICT(provider_id) DO UPDATE SET
-         state = 'healthy',
-         failure_count = ?,
-         last_failure_at = datetime('now'),
-         updated_at = datetime('now')`,
-      [providerId, newCount, newCount]
-    )
+    enqueueCircuitCounter(providerId, newCount)
   }
 }
 
@@ -97,6 +111,8 @@ function applyImmediateCooldown(providerId, durationSeconds) {
     )
   })
   tx()
+  dropCircuitCounters(providerId)
+  resetRunningCounts(providerId)
 }
 
 export function recordProviderFailure(provider, kind, retryAfterSec = null) {

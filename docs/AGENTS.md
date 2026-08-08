@@ -164,6 +164,9 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 - `relay.routingStrategy` (default `order`): how the proxy picks the starting provider in `auto` mode. `order` or `least-used` (provider with fewest tokens used today). Editable from the dashboard (Settings → Load balancer) and persisted to `config.json`; takes effect on restart.
 - `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
 - `rateLimit.proxyPerMinute` (default `120`): `/v1` requests per min, keyed by API key + IP.
+- `relay.tokenOptimization.enabled` (default `false`): when `true`, request bodies are normalized/minified before cache hashing and before being sent to the provider. Only applies to proxy-managed requests (all `/v1/*` paths, dashboard chat via proxy, and dashboard chat direct calls).
+- `relay.tokenOptimization.logSavings` (default `true`): records the estimated tokens saved per request in `requests_log.tokens_saved_estimate`. `false` keeps optimizing but stores `0`.
+- `relay.tokenOptimization.aggressiveNormalization` (default `false`): also maps typographic characters (curly quotes, em/en dashes, ellipsis) to ASCII in message content.
 
 ### API key storage and provider scoping (S1)
 
@@ -318,6 +321,27 @@ Relio must **always be provider-agnostic**. Every adapter or utility must apply 
 - ✅ When a provider returns non-standard formats (e.g. array `[{error}]` instead of object `{error}`), handle it generically in `base.js` so all adapters benefit
 
 If a fix would require detecting a specific provider, rethink the approach. The adapter architecture is designed so that `provider_type` is the only dimension of variation.
+
+## Adapter invariants
+
+- **Never send `headers: { Connection: 'close' }`** in adapter `fetch()` calls. Node 20 (undici) reuses keep-alive connections by default; an explicit `Connection: close` disables that and adds a new TLS/TCP handshake per request. The only allowed `Connection: keep-alive` headers are the SSE responses to the client in `proxy.routes.js`/`chat.routes.js` (outbound to the client, not the upstream provider).
+
+## Write buffering (logQueue)
+
+`src/services/logQueue.js` is the single write path for `requests_log`, `metrics`, API-key touches, and circuit-breaker counters. `enqueueLog`/`enqueueMetric`/`enqueueApiKeyTouch`/`enqueueCircuitCounter` are fire-and-forget (in-memory push); a flush (`flushAll()` or the `setInterval` timer) applies everything in one `better-sqlite3` transaction. Parameters come from `relay.writeBuffer.{flushIntervalMs,maxBufferSize}` (default `500`/`50`) and are read at flush time (hot-reload via the settings API works).
+
+- **Risk (by design):** rows buffered for up to `flushIntervalMs` are lost if the process crashes hard (`SIGKILL`, power loss). The shutdown handler (`src/index.js`) calls `flushAll()` on `SIGTERM`/`SIGINT` to drain the buffers before closing the DB. This trade-off is explicit.
+- Circuit-breaker **state transitions** (healthy → cooldown, immediate cooldown, success reset) are always synchronous — they affect failover decisions on the next request. Only intermediate `failure_count` increments are buffered; the running count is tracked in memory (`circuitBreaker.js`) so the cooldown threshold still fires correctly between flushes.
+
+## Token optimization
+
+`src/services/tokenOptimizer.js` exports pure, deterministic functions (`optimizeRequestBody`, `estimateTokens`) that reduce the input-token footprint of request bodies. It is **lossless** for JSON content (minifies whitespace while preserving number/string literals byte-for-byte) and **never touches code blocks** inside markdown fences. The requestHandler wrapper `optimizeRelayBody()` gates on `config.relay.tokenOptimization.*` and is used by every request path (non-streaming and streaming `/v1/*`, plus all four dashboard chat paths).
+
+- Optimizations applied: strip invisible/control characters, collapse blank lines and trim non-fenced whitespace, minify embedded JSON (including `tool_calls[].function.arguments` and tool/function descriptions), dedupe identical system messages, and dedupe consecutive identical messages.
+- `aggressiveNormalization: true` additionally maps typographic chars (curly quotes, em/en dashes, ellipsis) to ASCII in message content.
+- The optimizer runs **before** `generateHash`, so the cache key and the stored `request_body` reflect the optimized body. This keeps cache hits consistent between streaming and non-streaming paths (dashboard streaming hashes `optimizeRelayBody({ messages }).body` to match `processRequest`).
+- The estimated tokens saved (`estimateTokens(originalJson) - estimateTokens(optimizedJson)`, ~4 chars/token) is stored in `requests_log.tokens_saved_estimate` (migrated with `ALTER TABLE ... ADD COLUMN` in `db.js`), surfaced in `metricsLogger.getMetrics().totals.tokens_saved_estimate` and `getSummary().today_tokens_saved`.
+- **Provider-agnostic invariant:** normalization applies uniformly to all providers; never special-case a vendor here.
 
 ## Commands
 

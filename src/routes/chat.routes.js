@@ -9,7 +9,7 @@ import {
 } from '../services/failoverEngine.js'
 import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache } from '../services/cacheManager.js'
-import { processRequest } from '../handlers/requestHandler.js'
+import { processRequest, optimizeRelayBody } from '../handlers/requestHandler.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { logger } from '../utils/logger.js'
 import { config } from '../config.js'
@@ -73,19 +73,24 @@ router.post('/send', async (req, res) => {
   const timeout = setTimeout(() => controller.abort(), 120_000)
   req.on('close', () => { clearTimeout(timeout); controller.abort() })
 
+  const optimized = optimizeRelayBody({ messages, model: req.body.model || provider.model })
+  const requestBody = optimized.body
+  const tokensSavedEstimate = optimized.tokensSavedEstimate
+
   try {
-    const data = await callProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
+    const data = await callProvider(provider, requestBody, controller.signal)
     const responseTimeMs = Date.now() - start
     const inputTokens = data.usage?.prompt_tokens || 0
     const outputTokens = data.usage?.completion_tokens || 0
     const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: data,
       inputTokens, outputTokens, estimatedCost,
       responseTimeMs, authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount: 0,
+      tokensSavedEstimate,
     })
 
     enqueueMetric(provider.id, { inputTokens, outputTokens, cost: estimatedCost, responseTimeMs, cacheHit: false })
@@ -96,10 +101,11 @@ router.post('/send', async (req, res) => {
     logger.warn('Chat test failed', { provider_id, error: err.message })
 
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: err.status || 503, errorMessage: err.message,
       responseTimeMs, authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, wasRetry: false, retryCount: 0,
+      tokensSavedEstimate,
     })
 
     enqueueMetric(provider.id, { error: true, responseTimeMs })
@@ -113,6 +119,10 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
   res.on('close', () => {
     if (!res.writableEnded) controller.abort()
   })
+
+  const proxyBody = optimizeRelayBody({ messages })
+  const requestMessages = proxyBody.body.messages
+  const tokensSavedEstimate = proxyBody.tokensSavedEstimate
 
   const maxDurationMs = config.relay.streamTimeoutSeconds * 1000
   const idleMs = config.relay.streamIdleTimeoutMs
@@ -131,7 +141,7 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
   if (durationTimer.unref) durationTimer.unref()
 
   if (use_proxy) {
-    const queryHash = generateHash({ messages })
+    const queryHash = generateHash({ messages: requestMessages })
     const cached = getCache('/v1/chat/completions', queryHash)
     if (cached) {
       const responseBody = JSON.parse(cached.response_body)
@@ -149,11 +159,12 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
 
       enqueueLog({
         providerId: cached.provider_id, providerName: provider?.name || null,
-        endpoint: '/admin/api/chat/send', requestBody: req.body,
+        endpoint: '/admin/api/chat/send', requestBody: { messages: requestMessages },
         originIp: req.ip, originHeader: req.headers['user-agent'],
         responseBody, statusCode: 200,
         responseTimeMs: Date.now() - start,
         authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: true, retryCount: 0,
+        tokensSavedEstimate,
       })
       if (cached.provider_id) {
         enqueueMetric(cached.provider_id, { cacheHit: true, responseTimeMs: Date.now() - start })
@@ -164,11 +175,12 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
 
   const logError = (provider, statusCode, errorMessage, retryCount) => {
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: { messages: requestMessages },
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode, errorMessage,
       responseTimeMs: Date.now() - start,
       authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, wasRetry: retryCount > 0, retryCount,
+      tokensSavedEstimate,
     })
     enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - start })
   }
@@ -187,7 +199,7 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
       if (isDailyLimitExceeded(p)) continue
       try {
         recordProviderRequest(p.id)
-        stream = await streamProvider(p, { messages, model: req.body.model || p.model }, controller.signal)
+        stream = await streamProvider(p, { messages: requestMessages, model: req.body.model || p.model }, controller.signal)
         provider = p
         break
       } catch (err) {
@@ -215,7 +227,7 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
     }
     try {
       recordProviderRequest(provider.id)
-      stream = await streamProvider(provider, { messages, model: req.body.model || provider.model }, controller.signal)
+      stream = await streamProvider(provider, { messages: requestMessages, model: req.body.model || provider.model }, controller.signal)
     } catch (err) {
       lastError = err
       lastFailedProvider = provider
@@ -253,11 +265,11 @@ async function handleStreamingSend(req, res, { provider_id, messages, use_proxy,
 
     recordSuccess(provider.id)
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/admin/api/chat/send', requestBody: { messages: requestMessages },
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
       responseTimeMs: Date.now() - start,
-      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount,
+      authenticatedVia: 'dashboard_chat', requesterName: 'Dashboard Chat', cacheHit: false, retryCount, tokensSavedEstimate,
     })
     enqueueMetric(provider.id, { responseTimeMs: Date.now() - start, cacheHit: false })
   } catch (err) {

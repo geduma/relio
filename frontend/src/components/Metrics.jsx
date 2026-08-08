@@ -65,6 +65,10 @@ export default function Metrics() {
                 <strong>{metrics.totals.error_count}</strong>
                 <span>Errors</span>
               </div>
+              <div className="stat-card">
+                <strong>{metrics.totals.tokens_saved_estimate?.toLocaleString() || 0}</strong>
+                <span>Tokens Saved (est.)</span>
+              </div>
             </div>
           )}
           <div className="table-wrapper"><table className="table">

@@ -1,15 +1,19 @@
 import crypto from 'crypto'
 import { getDb } from '../db.js'
+import { config } from '../config.js'
 
-const MAX_BATCH = 500
+function maxBatchSize() {
+  return config.relay?.writeBuffer?.maxBufferSize || 50
+}
 
 const logQueue = []
 const metricQueue = []
 const apiKeyTouchQueue = []
+const circuitCounterQueue = []
 let flushTimer = null
 
 function toArray(queue) {
-  const len = Math.min(queue.length, MAX_BATCH)
+  const len = Math.min(queue.length, maxBatchSize())
   return queue.splice(0, len)
 }
 
@@ -17,8 +21,9 @@ function flush() {
   const logs = toArray(logQueue)
   const metrics = toArray(metricQueue)
   const touches = toArray(apiKeyTouchQueue)
+  const circuitCounters = toArray(circuitCounterQueue)
 
-  if (logs.length === 0 && metrics.length === 0 && touches.length === 0) return
+  if (logs.length === 0 && metrics.length === 0 && touches.length === 0 && circuitCounters.length === 0) return
 
   const db = getDb()
 
@@ -31,14 +36,15 @@ function flush() {
           (id, provider_id, provider_name, endpoint, request_body, origin_ip, origin_header,
            status_code, response_body, error_message,
            input_tokens, output_tokens, total_tokens, estimated_cost,
-           response_time_ms, authenticated_via, requester_name, requester_key, cache_hit, was_retry, retry_count, request_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           response_time_ms, authenticated_via, requester_name, requester_key, cache_hit, was_retry, retry_count, tokens_saved_estimate, request_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         ).run(
           crypto.randomUUID(), d.providerId, d.providerName || null, d.endpoint,
           JSON.stringify(d.requestBody), d.originIp, d.originHeader,
           d.statusCode, d.responseBody ? JSON.stringify(d.responseBody) : null, d.errorMessage,
           d.inputTokens || 0, d.outputTokens || 0, totalTokens, d.estimatedCost || 0,
           d.responseTimeMs, d.authenticatedVia, d.requesterName || null, d.requesterKey || null, d.cacheHit ? 1 : 0, d.wasRetry ? 1 : 0, d.retryCount || 0,
+          d.tokensSavedEstimate || 0,
           now
         )
       }
@@ -77,6 +83,16 @@ function flush() {
       for (const id of touches) {
         db.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(id)
       }
+
+      for (const { providerId, failureCount } of circuitCounters) {
+        db.prepare(`INSERT INTO circuit_breaker_state (provider_id, state, failure_count, last_failure_at, updated_at)
+           VALUES (?, 'healthy', ?, datetime('now'), datetime('now'))
+           ON CONFLICT(provider_id) DO UPDATE SET
+             failure_count = excluded.failure_count,
+             last_failure_at = datetime('now'),
+             updated_at = datetime('now')`
+        ).run(providerId, failureCount)
+      }
     })
     tx()
   } catch (err) {
@@ -86,26 +102,41 @@ function flush() {
 
 export function enqueueLog(data) {
   logQueue.push(data)
-  if (logQueue.length >= MAX_BATCH) flush()
+  if (logQueue.length >= maxBatchSize()) flush()
 }
 
 export function enqueueMetric(providerId, data) {
   metricQueue.push({ providerId, data })
-  if (metricQueue.length >= MAX_BATCH) flush()
+  if (metricQueue.length >= maxBatchSize()) flush()
 }
 
 export function enqueueApiKeyTouch(id) {
   apiKeyTouchQueue.push(id)
-  if (apiKeyTouchQueue.length >= MAX_BATCH) flush()
+  if (apiKeyTouchQueue.length >= maxBatchSize()) flush()
+}
+
+export function enqueueCircuitCounter(providerId, failureCount) {
+  circuitCounterQueue.push({ providerId, failureCount })
+  if (circuitCounterQueue.length >= maxBatchSize()) flush()
+}
+
+export function dropCircuitCounters(providerId) {
+  if (providerId === undefined) return
+  for (let i = circuitCounterQueue.length - 1; i >= 0; i -= 1) {
+    if (circuitCounterQueue[i].providerId === providerId) {
+      circuitCounterQueue.splice(i, 1)
+    }
+  }
 }
 
 export function flushAll() {
   flush()
-  if (logQueue.length > 0 || metricQueue.length > 0 || apiKeyTouchQueue.length > 0) flush()
+  if (logQueue.length > 0 || metricQueue.length > 0 || apiKeyTouchQueue.length > 0 || circuitCounterQueue.length > 0) flush()
 }
 
-export function startFlushTimer(intervalMs = 1000) {
+export function startFlushTimer() {
   if (flushTimer) return
+  const intervalMs = config.relay?.writeBuffer?.flushIntervalMs || 500
   flushTimer = setInterval(flush, intervalMs)
   if (flushTimer.unref) flushTimer.unref()
 }

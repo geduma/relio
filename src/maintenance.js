@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { dbRun, getDb } from './db.js'
 import { config } from './config.js'
 import { cleanExpiredCache } from './services/cacheManager.js'
+import { resetRunningCounts } from './services/circuitBreaker.js'
 import { logger } from './utils/logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -107,6 +108,7 @@ export function recoverCooldowns() {
        WHERE state = 'cooldown' AND cooldown_until <= ?`,
       [now]
     )
+    resetRunningCounts()
     logger.info('Cooldowns recovered', { count: recovered })
   }
 }
