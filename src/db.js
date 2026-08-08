@@ -121,7 +121,8 @@ export function initDb() {
       requester_key TEXT,
       cache_hit BOOLEAN DEFAULT FALSE,
       was_retry BOOLEAN DEFAULT FALSE,
-      retry_count INT DEFAULT 0
+      retry_count INT DEFAULT 0,
+      tokens_saved_estimate INT DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS cache (
@@ -216,6 +217,9 @@ function runMigrations(d) {
   }
   if (!logColumns.includes('requester_key')) {
     d.exec('ALTER TABLE requests_log ADD COLUMN requester_key TEXT')
+  }
+  if (!logColumns.includes('tokens_saved_estimate')) {
+    d.exec('ALTER TABLE requests_log ADD COLUMN tokens_saved_estimate INT DEFAULT 0')
   }
 
   migrateApiKeys(d)

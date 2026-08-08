@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireApiKey } from '../middleware/authMiddleware.js'
 import { streamProvider, selectProviders, parseModelSelector, stripModel, isProviderAvailable, isRateLimitExceeded, isDailyLimitExceeded, classifyProviderError, extractRetryAfter, recordProviderRequest, FAILOVER_MODEL, orderProvidersForRouting } from '../services/failoverEngine.js'
-import { processRequest } from '../handlers/requestHandler.js'
+import { processRequest, optimizeRelayBody } from '../handlers/requestHandler.js'
 import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { pipeline } from 'stream/promises'
@@ -141,6 +141,10 @@ async function handleStreamingRequest(req, res) {
   const startTime = Date.now()
   const controller = new AbortController()
 
+  const optimized = optimizeRelayBody(req.body)
+  const requestBody = optimized.body
+  const tokensSavedEstimate = optimized.tokensSavedEstimate
+
   res.on('close', () => {
     if (!res.writableEnded) controller.abort()
   })
@@ -169,13 +173,14 @@ async function handleStreamingRequest(req, res) {
 
   const logError = (provider, statusCode, errorMessage, retryCount) => {
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode, errorMessage,
       responseTimeMs: Date.now() - startTime,
       authenticatedVia: 'api_key',
       requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
       cacheHit: false, wasRetry: retryCount > 0, retryCount,
+      tokensSavedEstimate,
     })
     enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
   }
@@ -204,7 +209,7 @@ async function handleStreamingRequest(req, res) {
     }
     try {
       recordProviderRequest(p.id)
-      stream = await streamProvider(p, stripModel(req.body), controller.signal)
+      stream = await streamProvider(p, stripModel(requestBody), controller.signal)
       provider = p
     } catch (err) {
       lastError = err
@@ -224,7 +229,7 @@ async function handleStreamingRequest(req, res) {
       if (isDailyLimitExceeded(p)) continue
       try {
         recordProviderRequest(p.id)
-        stream = await streamProvider(p, stripModel(req.body), controller.signal)
+        stream = await streamProvider(p, stripModel(requestBody), controller.signal)
         provider = p
         break
       } catch (err) {
@@ -267,13 +272,13 @@ async function handleStreamingRequest(req, res) {
 
     recordSuccess(provider.id)
     enqueueLog({
-      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody: req.body,
+      providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
       responseTimeMs: Date.now() - startTime,
       authenticatedVia: 'api_key',
       requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
-      cacheHit: false, retryCount,
+      cacheHit: false, retryCount, tokensSavedEstimate,
     })
     enqueueMetric(provider.id, {
       responseTimeMs: Date.now() - startTime, cacheHit: false,

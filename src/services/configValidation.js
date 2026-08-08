@@ -27,6 +27,11 @@ const validators = {
   'relay.quotaCooldownSeconds': (v) => isPositiveInt(v),
   'relay.rateLimitCooldownSeconds': (v) => isPositiveInt(v),
   'relay.retryAfterMaxSeconds': (v) => isPositiveInt(v),
+  'relay.writeBuffer.flushIntervalMs': (v) => isPositiveInt(v),
+  'relay.writeBuffer.maxBufferSize': (v) => isPositiveInt(v),
+  'relay.tokenOptimization.enabled': (v) => typeof v === 'boolean',
+  'relay.tokenOptimization.logSavings': (v) => typeof v === 'boolean',
+  'relay.tokenOptimization.aggressiveNormalization': (v) => typeof v === 'boolean',
 }
 
 export function getEditableConfigKeys() {

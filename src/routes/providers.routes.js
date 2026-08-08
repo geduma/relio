@@ -9,6 +9,14 @@ import { logger } from '../utils/logger.js'
 
 const ORDER_LABELS = ['Main', 'Fallback 1', 'Fallback 2', 'Fallback 3', 'Fallback 4', 'Fallback 5']
 
+const MODELS_VISIBLE_FIELDS = ['name', 'capability', 'status', 'order_position', 'cooldown_until']
+
+function affectsModelsResponse(provider, body) {
+  return MODELS_VISIBLE_FIELDS.some(field =>
+    field in body && body[field] !== provider[field]
+  )
+}
+
 async function testProviderConnection(apiUrl, apiKey, providerType, model) {
   const adapter = getAdapter(providerType)
   return adapter.testConnection(apiUrl, apiKey, { model })
@@ -253,7 +261,7 @@ router.patch('/:id', wrap(async (req, res) => {
   tx()
 
   invalidateProviderCache(id)
-  invalidateModelsCache()
+  if (affectsModelsResponse(provider, req.body)) invalidateModelsCache()
   res.json({ success: true })
 }))
 

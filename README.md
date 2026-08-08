@@ -106,6 +106,11 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | `relay.quotaCooldownSeconds` | Cooldown applied after a billing/quota error (`402`, `429` with a quota marker like `insufficient_quota`, `credit_balance_exhausted`, `quota_exceeded`, `spend_limit`). Default `3600` (1 hour). Editable from the dashboard |
 | `relay.rateLimitCooldownSeconds` | Cooldown applied after a plain rate-limit `429`. Default `60`. Editable from the dashboard |
 | `relay.retryAfterMaxSeconds` | When the provider sends `Retry-After` / `retry_after_seconds` / "retry in Ns", that value is used as the cooldown instead of the defaults, capped at this maximum. Default `900` (15 minutes). Editable from the dashboard |
+| `relay.writeBuffer.flushIntervalMs` | How often buffered DB writes (requests_log, metrics, circuit-breaker counters) are flushed to SQLite in a single transaction. Default `500`. Lower = less data loss on crash, more write pressure |
+| `relay.writeBuffer.maxBufferSize` | Maximum buffered rows before an immediate flush is forced. Default `50` |
+| `relay.tokenOptimization.enabled` | `false` (default) — when `true`, the proxy normalizes and minifies request bodies (message whitespace, invisible characters, embedded JSON, duplicate system messages, tool-call arguments) before hashing for the cache and forwarding to the provider. The provider receives a semantically identical, compact request, so you pay for fewer input tokens |
+| `relay.tokenOptimization.logSavings` | `true` (default) — records the estimated tokens saved per request in `requests_log.tokens_saved_estimate` (visible in Metrics). Set to `false` to keep optimizing without logging the estimate |
+| `relay.tokenOptimization.aggressiveNormalization` | `false` (default) — additionally normalizes typographic characters (curly quotes, em/en dashes, ellipsis) to their ASCII equivalents in message content |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `120`) |
 

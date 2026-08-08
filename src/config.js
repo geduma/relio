@@ -63,6 +63,13 @@ export function normalizeConfig(raw) {
   validateEncryptionKey(cfg.security.encryptionKey)
 
   cfg.relay ??= {}
+  cfg.relay.writeBuffer ??= {}
+  cfg.relay.writeBuffer.flushIntervalMs ??= 500
+  cfg.relay.writeBuffer.maxBufferSize ??= 50
+  cfg.relay.tokenOptimization ??= {}
+  cfg.relay.tokenOptimization.enabled ??= false
+  cfg.relay.tokenOptimization.logSavings ??= true
+  cfg.relay.tokenOptimization.aggressiveNormalization ??= false
   cfg.relay.exposeProvider ??= false
   cfg.relay.debugProviderRequests ??= false
   cfg.relay.streamTimeoutSeconds ??= 300

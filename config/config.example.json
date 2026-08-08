@@ -21,6 +21,15 @@
     "failoverOnQuota": true,
     "quotaCooldownSeconds": 3600,
     "rateLimitCooldownSeconds": 60,
-    "retryAfterMaxSeconds": 900
+    "retryAfterMaxSeconds": 900,
+    "writeBuffer": {
+      "flushIntervalMs": 500,
+      "maxBufferSize": 50
+    },
+    "tokenOptimization": {
+      "enabled": false,
+      "logSavings": true,
+      "aggressiveNormalization": false
+    }
   }
 }

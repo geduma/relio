@@ -2,10 +2,28 @@ import { getCapabilityFromBody, selectProviders, getProvider, isProviderAvailabl
 import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { generateHash, getCache, setCache } from '../services/cacheManager.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
+import { optimizeRequestBody } from '../services/tokenOptimizer.js'
 import { config } from '../config.js'
+
+export function optimizeRelayBody(requestBody) {
+  const tokenOpt = config.relay.tokenOptimization
+  if (!tokenOpt.enabled) {
+    return { body: requestBody, tokensSavedEstimate: 0 }
+  }
+  const result = optimizeRequestBody(requestBody, {
+    aggressiveNormalization: tokenOpt.aggressiveNormalization,
+  })
+  return tokenOpt.logSavings
+    ? result
+    : { body: result.body, tokensSavedEstimate: 0 }
+}
 
 export async function processRequest({ endpoint, requestBody, originIp, originHeader, authenticatedVia, providerId, forceExposeProvider = false, requester = null, allowedProviderIds = null }) {
   const startTime = Date.now()
+
+  const optimized = optimizeRelayBody(requestBody)
+  const effectiveBody = optimized.body
+  const tokensSavedEstimate = optimized.tokensSavedEstimate
 
   const requesterName = requester?.name || null
   const requesterKey = requester?.keyPrefix || null
@@ -17,16 +35,16 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     throw err
   }
 
-  const capability = getCapabilityFromBody(requestBody)
+  const capability = getCapabilityFromBody(effectiveBody)
 
-  const hasTools = Array.isArray(requestBody.tools) && requestBody.tools.length > 0
-  const cacheable = !hasTools && !requestBody.tool_choice
+  const hasTools = Array.isArray(effectiveBody.tools) && effectiveBody.tools.length > 0
+  const cacheable = !hasTools && !effectiveBody.tool_choice
 
   let lastError = null
   let lastProvider = null
   let retryCount = 0
 
-  const cacheKeyBody = providerId ? { _provider: providerId, ...requestBody } : requestBody
+  const cacheKeyBody = providerId ? { _provider: providerId, ...effectiveBody } : effectiveBody
   const queryHash = cacheable ? generateHash(cacheKeyBody) : null
   const cached = cacheable ? getCache(endpoint, queryHash) : null
   if (cached) {
@@ -34,10 +52,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
     const provider = cached.provider_id ? getProvider(cached.provider_id) : null
     enqueueLog({
       providerId: cached.provider_id, providerName: provider?.name || null,
-      endpoint, requestBody, originIp, originHeader,
+      endpoint, requestBody: effectiveBody, originIp, originHeader,
       responseBody, statusCode: 200,
       responseTimeMs: Date.now() - startTime,
       authenticatedVia, requesterName, requesterKey, cacheHit: true,
+      tokensSavedEstimate,
     })
     if (cached.provider_id) {
       enqueueMetric(cached.provider_id, {
@@ -89,7 +108,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       const timeout = setTimeout(() => controller.abort(), config.relay.requestTimeoutMs)
 
       recordProviderRequest(provider.id)
-      const data = await callProvider(provider, requestBody, controller.signal, capability)
+      const data = await callProvider(provider, effectiveBody, controller.signal, capability)
       clearTimeout(timeout)
 
       const responseTimeMs = Date.now() - startTime
@@ -102,10 +121,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       if (cacheable) setCache(endpoint, cacheKeyBody, data, provider.id)
 
       enqueueLog({
-        providerId: provider.id, providerName: provider.name, endpoint, requestBody, originIp, originHeader,
+        providerId: provider.id, providerName: provider.name, endpoint, requestBody: effectiveBody, originIp, originHeader,
         statusCode: 200, responseBody: data,
         inputTokens, outputTokens, estimatedCost,
         responseTimeMs, authenticatedVia, requesterName, requesterKey, cacheHit: false, retryCount,
+        tokensSavedEstimate,
       })
 
       enqueueMetric(provider.id, {
@@ -113,7 +133,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
         responseTimeMs, cacheHit: false,
       })
 
-    const exposeProvider = forceExposeProvider || config.relay.exposeProvider
+      const exposeProvider = forceExposeProvider || config.relay.exposeProvider
       return {
         statusCode: 200,
         body: exposeProvider
@@ -125,10 +145,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       lastProvider = provider
 
       enqueueLog({
-        providerId: provider.id, providerName: provider.name, endpoint, requestBody, originIp, originHeader,
+        providerId: provider.id, providerName: provider.name, endpoint, requestBody: effectiveBody, originIp, originHeader,
         statusCode: err.status || 503, errorMessage: err.message,
         responseTimeMs: Date.now() - startTime,
         authenticatedVia, requesterName, requesterKey, cacheHit: false, wasRetry: retryCount > 0, retryCount,
+        tokensSavedEstimate,
       })
 
       retryCount++
@@ -155,10 +176,11 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
   }
 
   enqueueLog({
-    endpoint, requestBody, originIp, originHeader,
+    endpoint, requestBody: effectiveBody, originIp, originHeader,
     statusCode: 503, errorMessage: lastError?.message || 'All providers unavailable',
     responseTimeMs: Date.now() - startTime,
     authenticatedVia, requesterName, requesterKey, cacheHit: false, retryCount,
+    tokensSavedEstimate,
   })
 
   const finalErr = new Error(lastError?.message || 'All providers failed')
