@@ -34,25 +34,25 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Dependencias
+# Dependencies
 COPY --from=backend-build /app/node_modules ./node_modules
 
 # Backend
 COPY package*.json ./
 COPY src/ ./src/
 
-# Configuración por defecto (usada por el entrypoint para bootstrap)
+# Default config (used by the entrypoint for bootstrap)
 COPY config/config.example.json ./config.example.json
 
-# Frontend compilado
+# Compiled frontend
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Script de inicialización
+# Initialization script
 RUN apk add --no-cache su-exec
 COPY scripts/setup-config-perm.sh /usr/local/bin/setup-config-perm.sh
 RUN chmod +x /usr/local/bin/setup-config-perm.sh
 
-# Directorios persistentes
+# Persistent directories
 RUN mkdir -p logs db \
     && chown -R node:node /app
 
