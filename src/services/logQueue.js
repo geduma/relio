@@ -136,7 +136,14 @@ export function flushAll() {
 
 export function startFlushTimer() {
   if (flushTimer) return
-  const intervalMs = config.relay?.writeBuffer?.flushIntervalMs || 500
-  flushTimer = setInterval(flush, intervalMs)
+  scheduleFlush()
+}
+
+function scheduleFlush() {
+  const intervalMs = Math.max(1, config.relay?.writeBuffer?.flushIntervalMs || 500)
+  flushTimer = setTimeout(() => {
+    flush()
+    scheduleFlush()
+  }, intervalMs)
   if (flushTimer.unref) flushTimer.unref()
 }
