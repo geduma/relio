@@ -19,8 +19,8 @@ export default function Dashboard() {
           <h2>Relio <span className="subtitle">LLM Relay</span></h2>
         </div>
         <nav onClick={() => setSidebarOpen(false)}>
-          <Link to="/admin/providers">Providers</Link>
           <Link to="/admin">Metrics</Link>
+          <Link to="/admin/providers">Providers</Link>
           <Link to="/admin/keys">API Keys</Link>
           <Link to="/admin/chat">Chat</Link>
           <Link to="/admin/settings">Settings</Link>
