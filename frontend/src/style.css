@@ -364,6 +364,7 @@ body {
 .settings-desc { color: var(--text-muted); font-size: 0.85rem; margin: 0.25rem 0 0; max-width: 560px; line-height: 1.4; }
 .settings-desc.readonly-desc { margin-bottom: 1.5rem; }
 .settings-section { max-width: 960px; margin: 1.5rem auto 0; }
+.settings-section:not(:last-of-type) { padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-light); }
 .settings-section h3 { margin: 0 0 0.5rem; font-size: 1rem; }
 .settings-section--readonly {
   border: 1px solid var(--border); border-radius: 8px;
