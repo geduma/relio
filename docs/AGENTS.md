@@ -47,6 +47,22 @@ tx()
 - **WAL mode** enabled by default
 - **`:memory:`** for tests (via `setDbPath(':memory:')`)
 
+Key tables:
+
+- `providers` — provider definitions; `health_failures` column tracks consecutive failed probes (reset to 0 on success/activation)
+- `provider_health_checks` — one row per provider (PK = `provider_id`), representing the **latest** probe result. Truncated on every full `runHealthCheck()` (no history); manual per-provider checks upsert a single row
+- `circuit_breaker_state` — healthy/cooldown/paused state shared by failover and health checks
+
+### Health check job
+
+`src/services/healthCheck.js`:
+
+- `startHealthCheckScheduler()` / `stopHealthCheckScheduler()` — self-re-arming `setTimeout`; the next delay is recomputed from `config.healthCheck.intervalMinutes` on every cycle, so config edits apply live. `settings.routes.js` restarts it when a `healthCheck.*` key is saved.
+- `runHealthCheck()` — no-op when `enabled` is false; truncates `provider_health_checks`, probes every `active` provider in order, applies results.
+- `checkAndApply(provider)` — probe → classify → `paused` (permanent errors, or after `pauseAfterConsecutiveFailures`) or `cooldown` (transient) → upsert health record. A successful probe reactivates a paused/cooldown provider.
+- `probeProvider()` — minimal chat (`max_tokens: 1`) or embeddings (`input: 'ping'`) request with an abort timeout.
+- Cooldown/pause reuse the same statuses as failover (`providers.status`, `circuit_breaker_state`), so the daily `recoverCooldowns` maintenance re-activates expired cooldowns.
+
 ## Architecture
 
 ```
@@ -58,6 +74,7 @@ src/
 │   ├── authService.js    # API key management + validation
 │   ├── failoverEngine.js # Provider selection, rate/daily limits
 │   ├── circuitBreaker.js # healthy/cooldown/paused states
+│   ├── healthCheck.js    # Periodic provider probes (scheduler + classification)
 │   ├── cacheManager.js   # Hash + TTL cache
 │   └── metricsLogger.js  # Logging + daily metrics
 ├── middleware/
@@ -65,6 +82,7 @@ src/
 ├── routes/               # Express routers
 │   ├── providers.routes.js
 │   ├── metrics.routes.js
+│   ├── health.routes.js  # /admin/api/health (+ POST /check)
 │   ├── keys.routes.js    # /admin/api/keys
 │   ├── chat.routes.js    # /admin/api/chat/* (dashboard chat test)
 │   └── proxy.routes.js   # /v1/*
@@ -167,6 +185,10 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 - `relay.tokenOptimization.enabled` (default `false`): when `true`, request bodies are normalized/minified before cache hashing and before being sent to the provider. Only applies to proxy-managed requests (all `/v1/*` paths, dashboard chat via proxy, and dashboard chat direct calls).
 - `relay.tokenOptimization.logSavings` (default `true`): records the estimated tokens saved per request in `requests_log.tokens_saved_estimate`. `false` keeps optimizing but stores `0`.
 - `relay.tokenOptimization.aggressiveNormalization` (default `false`): also maps typographic characters (curly quotes, em/en dashes, ellipsis) to ASCII in message content.
+- `healthCheck.enabled` (default `true`): runs the periodic provider health-check job.
+- `healthCheck.intervalMinutes` (default `1440`): how often all active providers are probed (every 24h). Editable from **Settings → Health Check**; `settings.routes.js` restarts the scheduler on save so it applies without a restart.
+- `healthCheck.timeoutMs` (default `10000`): per-probe timeout; a timeout is classified as transient (cooldown).
+- `healthCheck.pauseAfterConsecutiveFailures` (default `2`): consecutive failures after which a transiently-failing provider is paused. Permanent errors (auth, quota/billing, model/endpoint not found) pause on the first failure.
 
 ### API key storage and provider scoping (S1)
 

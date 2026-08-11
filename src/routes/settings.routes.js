@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { normalizeConfig, getConfigPath, getEnvOverrides, applyConfigChanges } from '../config.js'
 import { validateConfigChanges, READ_ONLY_KEYS } from '../services/configValidation.js'
 import { readConfigFile, saveConfigChanges } from '../services/configStore.js'
+import { startHealthCheckScheduler } from '../services/healthCheck.js'
 
 const router = Router()
 
@@ -61,6 +62,9 @@ router.put('/', (req, res) => {
   try {
     saved = saveConfigChanges(changes)
     applyConfigChanges(changes)
+    if (Object.keys(changes).some(key => key.startsWith('healthCheck.'))) {
+      startHealthCheckScheduler()
+    }
   } catch (err) {
     return res.status(500).json({
       error: { message: err.message, type: 'server_error', code: 'config_write_failed' },

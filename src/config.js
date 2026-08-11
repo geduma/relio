@@ -81,6 +81,12 @@ export function normalizeConfig(raw) {
   cfg.relay.rateLimitCooldownSeconds ??= 60
   cfg.relay.retryAfterMaxSeconds ??= 900
 
+  cfg.healthCheck ??= {}
+  cfg.healthCheck.enabled ??= true
+  cfg.healthCheck.intervalMinutes ??= 10
+  cfg.healthCheck.timeoutMs ??= 10000
+  cfg.healthCheck.pauseAfterConsecutiveFailures ??= 2
+
   cfg.rateLimit ??= {}
   cfg.rateLimit.proxyPerMinute ??= 120
   cfg.rateLimit.dashboardPerMinute ??= 120

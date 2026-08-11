@@ -20,6 +20,8 @@ import keysRoutes from './routes/keys.routes.js'
 import proxyRoutes from './routes/proxy.routes.js'
 import chatRoutes from './routes/chat.routes.js'
 import settingsRoutes from './routes/settings.routes.js'
+import healthRoutes from './routes/health.routes.js'
+import { startHealthCheckScheduler, stopHealthCheckScheduler } from './services/healthCheck.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -86,6 +88,7 @@ app.use('/admin/api/metrics', dashboardLimiter, metricsRoutes)
 app.use('/admin/api/keys', dashboardLimiter, keysRoutes)
 app.use('/admin/api/chat', dashboardLimiter, chatRoutes)
 app.use('/admin/api/settings', dashboardLimiter, settingsRoutes)
+app.use('/admin/api/health', dashboardLimiter, healthRoutes)
 
 app.get('/admin/api/summary', dashboardLimiter, (req, res) => {
   const summary = getSummary()
@@ -124,12 +127,14 @@ app.use((_req, res) => {
 const server = app.listen(PORT, HOST, () => {
   startFlushTimer()
   startCacheFlushTimer()
+  startHealthCheckScheduler()
   logger.info(`Relio running on http://${HOST}:${PORT}`)
 })
 
 function shutdown(signal) {
   logger.info(`${signal} received — shutting down gracefully`)
   cron.getTasks().forEach(t => t.stop())
+  stopHealthCheckScheduler()
   flushCacheHits()
   flushAll()
   server.close(() => {

@@ -32,6 +32,7 @@ Relio does not attempt to evaluate the quality, cost, or capabilities of models.
 - **Dashboard** — visual provider management, metrics, logs, API keys
 - **Settings** — edit all `config.json` options (server, cache, relay, rate limits) from the dashboard, persisted back to the file
 - **Daily metrics** — requests, tokens, costs, errors, cache hits
+- **Provider health checks** — periodic minimal probes of active providers that automatically pause or cool down failing ones, visible under **Metrics → Provider Health**
 - **Chat dashboard** — test LLM providers directly from the UI with response time display
 - **Dark mode** — toggleable theme (dark by default) with localStorage persistence
 - **Auto-maintenance** — daily backups, data retention cleanup
@@ -111,12 +112,33 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | `relay.tokenOptimization.enabled` | `false` (default) — when `true`, the proxy normalizes and minifies request bodies (message whitespace, invisible characters, embedded JSON, duplicate system messages, tool-call arguments) before hashing for the cache and forwarding to the provider. The provider receives a semantically identical, compact request, so you pay for fewer input tokens |
 | `relay.tokenOptimization.logSavings` | `true` (default) — records the estimated tokens saved per request in `requests_log.tokens_saved_estimate` (visible in Metrics). Set to `false` to keep optimizing without logging the estimate |
 | `relay.tokenOptimization.aggressiveNormalization` | `false` (default) — additionally normalizes typographic characters (curly quotes, em/en dashes, ellipsis) to their ASCII equivalents in message content |
+| `healthCheck.enabled` | `true` (default) — runs the periodic provider health-check job. When `false`, no automatic or manual checks run. Editable from the dashboard |
+| `healthCheck.intervalMinutes` | How often all active providers are probed. Default `1440` (every 24 hours). Scheduler re-reads this live, so changing it via **Settings → Health Check** applies without a restart |
+| `healthCheck.timeoutMs` | Time limit for a single probe before it is treated as a timeout failure (→ cooldown). Default `10000` |
+| `healthCheck.pauseAfterConsecutiveFailures` | Consecutive failures after which a provider is paused instead of cooled down. Default `2`. Permanent errors (auth, quota/billing, model/endpoint not found) pause on the first failure regardless |
 | `rateLimit.dashboardPerMinute` | Dashboard API requests per minute (default `120`) |
 | `rateLimit.proxyPerMinute` | `/v1` requests per minute, keyed by API key + IP (default `120`) |
 
 ### Editing settings from the dashboard
 
 The hot-applicable options (server nodeEnv, cache, relay) can be edited at **Settings** in the dashboard. Changes are written back to the physical `config.json` file (atomically) **and** applied to the running process immediately — **no restart needed**. Options that are only read at startup (`server.port`, `server.host`, `server.trustedProxy`, rate limits, `security.encryptionKey`, `db.path`) are shown as read-only in the UI with a note to edit `config.json` and restart the server. Fields overridden by an environment variable are shown with an `override:` badge and disabled. Rotate the encryption key via `config.json`/`ENCRYPTION_KEY` and re-enter provider keys, and change the database path via `config.json`/`DB_PATH`.
+
+### Provider health checks
+
+Relio can periodically probe every `active` provider with a minimal request (`{role: "user", content: "ping"}`, `max_tokens: 1` — a handful of tokens per provider) to catch dead or misconfigured providers before they break failover.
+
+How it works:
+
+- A scheduler runs the job every `healthCheck.intervalMinutes` (default every 24 hours). It skips the run entirely when `healthCheck.enabled` is `false`.
+- Each probe has its own timeout (`healthCheck.timeoutMs`, default 10s). Timeouts are classified as transient.
+- Results are classified and applied automatically:
+  - **Transient failures** (rate limit `429`, `408`/`5xx`, timeout, network) move the provider to **cooldown** for the configured cooldown duration; it resumes automatically once the cooldown expires.
+  - **Permanent failures** (auth `401/403`, quota/billing `402`/`429`-with-quota-marker, model/endpoint not found `404`/`400`) **pause** the provider immediately.
+  - A provider that keeps failing with transient errors is paused once it reaches `healthCheck.pauseAfterConsecutiveFailures` (default 2).
+- A provider that recovers (probe succeeds while paused/cooldown) is reactivated automatically.
+- The dashboard exposes the results under **Metrics → Provider Health**, with a "Check all now" button (`POST /admin/api/health/check`), per-provider "Check", and "Reactivate" for paused/cooldown providers.
+
+Because each probe is a single tiny request, health checks are cheap even on free-tier accounts — the default daily interval costs roughly tens of tokens per provider per month.
 
 ## Development
 
@@ -325,6 +347,8 @@ The dashboard Chat tab (session-based) is not affected by API key scoping.
 | GET | `/admin/api/metrics` | Metrics by date range |
 | GET | `/admin/api/metrics/logs` | Recent requests |
 | GET | `/admin/api/metrics/health` | Health check |
+| GET | `/admin/api/health` | Provider health checks (summary + per-provider state) |
+| POST | `/admin/api/health/check` | Run a health check now (all providers, or `{ "provider_id": id }` for one) |
 | GET | `/admin/api/chat/providers` | List chat-capable providers |
 | POST | `/admin/api/chat/send` | Send a message to a provider via Chat UI |
 | POST | `/admin/api/keys` | Create API Key (requires `providerIds`) |
