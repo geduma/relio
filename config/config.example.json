@@ -34,7 +34,7 @@
   },
   "healthCheck": {
     "enabled": true,
-    "intervalMinutes": 10,
+    "intervalMinutes": 1440,
     "timeoutMs": 10000,
     "pauseAfterConsecutiveFailures": 2
   }
