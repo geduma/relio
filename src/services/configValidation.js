@@ -32,6 +32,10 @@ const validators = {
   'relay.tokenOptimization.enabled': (v) => typeof v === 'boolean',
   'relay.tokenOptimization.logSavings': (v) => typeof v === 'boolean',
   'relay.tokenOptimization.aggressiveNormalization': (v) => typeof v === 'boolean',
+  'healthCheck.enabled': (v) => typeof v === 'boolean',
+  'healthCheck.intervalMinutes': (v) => isPositiveInt(v),
+  'healthCheck.timeoutMs': (v) => isPositiveInt(v),
+  'healthCheck.pauseAfterConsecutiveFailures': (v) => isPositiveInt(v),
 }
 
 export function getEditableConfigKeys() {

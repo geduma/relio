@@ -229,6 +229,7 @@ router.patch('/:id', wrap(async (req, res) => {
   const finalCapability = req.body.capability ?? provider.capability
 
   const doUpdate = () => {
+    if (finalStatus === 'active') updates.push('health_failures = 0')
     updates.push("updated_at = datetime('now')")
     values.push(id)
     dbRun(`UPDATE providers SET ${updates.join(', ')} WHERE id = ?`, values)
@@ -279,6 +280,7 @@ router.delete('/:id', (req, res) => {
     dbRun('DELETE FROM requests_log WHERE provider_id = ?', [id])
     dbRun('DELETE FROM cache WHERE provider_id = ?', [id])
     dbRun('DELETE FROM metrics WHERE provider_id = ?', [id])
+    dbRun('DELETE FROM provider_health_checks WHERE provider_id = ?', [id])
     dbRun('DELETE FROM providers WHERE id = ?', [id])
 
     const activeOnes = dbAll(

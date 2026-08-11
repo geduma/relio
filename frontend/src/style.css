@@ -250,6 +250,16 @@ body {
 .filter-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
 .filter-bar select, .filter-bar input { padding: 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--input-bg); color: var(--text-primary); }
 
+/* Tabs */
+.tabs { display: flex; gap: 0.25rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border-light); }
+.tab { padding: 0.5rem 0.9rem; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); cursor: pointer; font-size: 0.875rem; font-weight: 500; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+.tab:hover { color: var(--text-primary); }
+.tab--active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Provider health table */
+.btn-group { display: inline-flex; gap: 0.4rem; align-items: center; }
+.provider-sub { font-size: 0.75rem; color: var(--text-muted); font-weight: 400; }
+
 /* View toggle switch */
 .view-toggle {
   display: inline-flex;

@@ -174,6 +174,20 @@ export function initDb() {
       avg_response_time_ms REAL DEFAULT 0,
       UNIQUE(provider_id, metric_date)
     );
+
+    CREATE TABLE IF NOT EXISTS provider_health_checks (
+      provider_id TEXT PRIMARY KEY REFERENCES providers(id),
+      status TEXT NOT NULL DEFAULT 'ok' CHECK(status IN ('ok', 'error')),
+      http_status INT,
+      error_code TEXT,
+      error_type TEXT,
+      error_message TEXT,
+      latency_ms INT,
+      previous_status TEXT,
+      new_status TEXT,
+      action_taken TEXT,
+      checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 
   runMigrations(d)
@@ -222,6 +236,11 @@ function runMigrations(d) {
     d.exec('ALTER TABLE requests_log ADD COLUMN tokens_saved_estimate INT DEFAULT 0')
   }
 
+  columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
+  if (!columns.includes('health_failures')) {
+    d.exec('ALTER TABLE providers ADD COLUMN health_failures INT DEFAULT 0')
+  }
+
   migrateApiKeys(d)
 }
 
@@ -266,6 +285,7 @@ function createIndexes(d) {
     'CREATE INDEX IF NOT EXISTS idx_akp_provider ON api_key_providers(provider_id);',
     'CREATE INDEX IF NOT EXISTS idx_cb_state ON circuit_breaker_state(state, cooldown_until);',
     'CREATE INDEX IF NOT EXISTS idx_metrics_date ON metrics(metric_date);',
+    'CREATE INDEX IF NOT EXISTS idx_health_checked ON provider_health_checks(checked_at);',
   ]
 
   const tx = d.transaction(() => {

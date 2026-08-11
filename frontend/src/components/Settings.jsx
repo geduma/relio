@@ -33,6 +33,38 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Health Check',
+    fields: [
+      {
+        key: 'healthCheck.enabled',
+        label: 'Enable health checks',
+        type: 'toggle',
+        desc: 'Periodically probe active providers with a minimal chat request. Providers that fail are moved to cooldown (transient errors) or paused (permanent errors).',
+      },
+      {
+        key: 'healthCheck.intervalMinutes',
+        label: 'Interval (minutes)',
+        type: 'number',
+        half: true,
+        desc: 'How often all active providers are probed. Changes apply without a restart.',
+      },
+      {
+        key: 'healthCheck.timeoutMs',
+        label: 'Probe timeout (ms)',
+        type: 'number',
+        half: true,
+        desc: 'How long a single probe may take before it is treated as a timeout failure.',
+      },
+      {
+        key: 'healthCheck.pauseAfterConsecutiveFailures',
+        label: 'Pause after consecutive failures',
+        type: 'number',
+        half: true,
+        desc: 'Number of consecutive failures after which a provider is paused instead of cooled down.',
+      },
+    ],
+  },
+  {
     title: 'Relay',
     fields: [
       {
