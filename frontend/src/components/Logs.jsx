@@ -103,12 +103,19 @@ export default function Logs() {
       <div className="header-row">
         <h2>Request Logs</h2>
         <div className="filter-bar">
-          <button type="button" className={`btn btn-sm ${view === 'table' ? 'btn-primary' : ''}`} onClick={() => setView('table')}>
-            Table
-          </button>
-          <button type="button" className={`btn btn-sm ${view === 'text' ? 'btn-primary' : ''}`} onClick={() => setView('text')}>
-            Text
-          </button>
+          <label className="view-toggle">
+            <span className={`view-toggle__label ${view === 'table' ? 'view-toggle__label--active' : ''}`}>Table</span>
+            <input
+              type="checkbox"
+              checked={view === 'text'}
+              onChange={e => setView(e.target.checked ? 'text' : 'table')}
+              aria-label="Toggle text view"
+            />
+            <span className="view-toggle__track" aria-hidden="true">
+              <span className="view-toggle__thumb" />
+            </span>
+            <span className={`view-toggle__label ${view === 'text' ? 'view-toggle__label--active' : ''}`}>Text</span>
+          </label>
           <button type="button" className="btn btn-sm btn-outline" onClick={exportTxt}>
             Export .txt
           </button>
@@ -159,18 +166,8 @@ export default function Logs() {
           />
         </>
       ) : (
-        <div>
-          <textarea
-            readOnly
-            style={{
-              width: '100%', height: '70vh', fontFamily: 'monospace', fontSize: '0.8rem',
-              background: 'var(--input-bg)', color: 'var(--text-primary)',
-              border: '1px solid var(--border)', borderRadius: '4px',
-              padding: '0.75rem', resize: 'none', outline: 'none', lineHeight: '1.6',
-              whiteSpace: 'pre', overflow: 'auto',
-            }}
-            value={logs.map(formatLogLine).join('\n')}
-          />
+        <div className="log-text-view">
+          <pre>{logs.map(formatLogLine).join('\n')}</pre>
         </div>
       )}
     </div>
