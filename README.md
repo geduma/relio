@@ -242,11 +242,11 @@ On a clean install these steps are optional: the entrypoint creates `config.json
 
 ### Volumes
 
-The compose file mounts persistent host directories (relative to `docker/`):
+The compose file mounts persistent host directories (relative to the repo root):
 
 ```
-- ./db:/app/db
-- ./logs:/app/logs
+- ../db:/app/db
+- ../logs:/app/logs
 - ../config:/app/config:rw
 ```
 

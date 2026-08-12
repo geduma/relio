@@ -6,9 +6,10 @@ set -e
 CONFIG_DIR="/app/config"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 
-# Create the directory (host mount) and make it writable by node
-mkdir -p "$CONFIG_DIR"
+# Create the directories (host mounts) and make them writable by node
+mkdir -p "$CONFIG_DIR" /app/db /app/logs
 chown node:node "$CONFIG_DIR"
+chown -R node:node /app/db /app/logs
 
 # Bootstrap config.json from the example if it does not exist yet
 if [ ! -f "$CONFIG_FILE" ]; then
