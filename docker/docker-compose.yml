@@ -12,7 +12,7 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
       - CONFIG_PATH=/app/config/config.json
     volumes:
-      - ./db:/app/db
-      - ./logs:/app/logs
+      - ../db:/app/db
+      - ../logs:/app/logs
       - ../config:/app/config:rw
     restart: unless-stopped
