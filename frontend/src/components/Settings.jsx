@@ -22,6 +22,17 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Security',
+    fields: [
+      {
+        key: 'security.allowedPrivateHosts',
+        label: 'Allowed private hosts',
+        type: 'textlist',
+        desc: 'Hostnames or IP addresses (comma-separated) that may be used as provider URLs, e.g. ollama.home, 192.168.10.10. Everything else is blocked by the SSRF guard.',
+      },
+    ],
+  },
+  {
     title: 'Cache',
     fields: [
       {
@@ -369,6 +380,16 @@ export default function Settings() {
                             <option key={value} value={value}>{text}</option>
                           ))}
                         </select>
+                      ) : field.type === 'textlist' ? (
+                        <input
+                          type="text"
+                          value={(form[field.key] ?? []).join(', ')}
+                          disabled={disabled}
+                          onChange={e => handleField(
+                            field.key,
+                            e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                          )}
+                        />
                       ) : (
                         <input
                           type={field.type}

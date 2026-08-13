@@ -203,6 +203,7 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 
 - `src/utils/ssrf.js` exports `assertPublicUrl(url)` — rejects localhost/loopback, private/link-local addresses (IPv4 + IPv6) and non-http(s) protocols via DNS resolution.
 - Used in `providers.routes.js` on create/update/test-connection.
+- `config.security.allowedPrivateHosts` (array of hostnames/IPs, default `[]`, editable from Settings → Security) exempts matching hosts from the check — the normalized hostname and each resolved IP are compared against it. Non-allowlisted private URLs keep being rejected.
 
 ## Tests
 

@@ -17,6 +17,9 @@ function isPositiveInt(value) {
 const validators = {
   'server.nodeEnv': (v) => NODE_ENVS.includes(v),
   'cache.ttlSeconds': (v) => isPositiveInt(v),
+  'security.allowedPrivateHosts': (v) =>
+    Array.isArray(v) &&
+    v.every(host => typeof host === 'string' && host.trim().length > 0),
   'relay.exposeProvider': (v) => typeof v === 'boolean',
   'relay.debugProviderRequests': (v) => typeof v === 'boolean',
   'relay.streamTimeoutSeconds': (v) => isPositiveInt(v),
