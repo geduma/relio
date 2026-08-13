@@ -24,6 +24,7 @@ const validators = {
   'relay.debugProviderRequests': (v) => typeof v === 'boolean',
   'relay.streamTimeoutSeconds': (v) => isPositiveInt(v),
   'relay.streamIdleTimeoutMs': (v) => isPositiveInt(v),
+  'relay.streamKeepAliveMs': (v) => Number.isInteger(v) && v >= 0,
   'relay.requestTimeoutMs': (v) => isPositiveInt(v),
   'relay.routingStrategy': (v) => ROUTING_STRATEGIES.includes(v),
   'relay.failoverOnQuota': (v) => typeof v === 'boolean',

@@ -133,9 +133,11 @@ src/
 2. Resolves provider: for a specific provider name/ID, it must be in the key's `allowedProviderIds` (otherwise immediate `403 provider_access_denied`); in failover mode it uses `selectProviders('chat', allowedProviderIds)` skipping paused/cooldown/rate-limited/daily-limited providers
 3. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`
 4. Enforces an idle timeout (`relay.streamIdleTimeoutMs`) and a max duration (`relay.streamTimeoutSeconds`) via `AbortController`; client disconnect aborts the upstream fetch
-5. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
-6. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()`
-7. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors; no action once headers were sent
+5. A keep-alive timer (`relay.streamKeepAliveMs`, default `15000`, `0` = off) writes an SSE comment `: keep-alive\n\n` to the client whenever no upstream data has arrived for that long. It never resets the idle timer (which detects a dead upstream), so the transparent passthrough semantics are unchanged
+6. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
+7. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()` — the log records `ttft_ms` (time to first chunk)
+8. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors
+9. On mid-stream interruption (after headers were sent): the interruption is **logged** with `statusCode: 503` and a descriptive `error_message` (`Stream aborted: client disconnected` / `idle timeout` / `max duration exceeded` / upstream error). No SSE error frame is sent to the client — the stream closes as before (transparent passthrough); the abort reason is captured via an `abortReason` flag set by the timers and the `res.on('close')` handler
 
 ### Models Endpoint
 
@@ -179,6 +181,7 @@ To add a new key, add it to `config/config.json`, `config/config.example.json`, 
 - `relay.exposeProvider` (default `false`): when `true`, responses include the resolved `_provider` metadata.
 - `relay.streamTimeoutSeconds` (default `300`): max duration for streaming requests.
 - `relay.streamIdleTimeoutMs` (default `30000`): abort a stream if no data arrives for this long.
+- `relay.streamKeepAliveMs` (default `15000`): send an SSE keep-alive comment to the client when no upstream data has arrived for this long (`0` disables). Does **not** reset the idle timeout.
 - `relay.routingStrategy` (default `order`): how the proxy picks the starting provider in `auto` mode. `order` or `least-used` (provider with fewest tokens used today). Editable from the dashboard (Settings → Load balancer) and persisted to `config.json`; takes effect on restart.
 - `rateLimit.dashboardPerMinute` (default `120`): dashboard API requests per min.
 - `rateLimit.proxyPerMinute` (default `120`): `/v1` requests per min, keyed by API key + IP.

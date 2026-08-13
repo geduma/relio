@@ -102,6 +102,13 @@ const SECTIONS = [
       { key: 'relay.streamTimeoutSeconds', label: 'Stream timeout (s)', type: 'number', half: true },
       { key: 'relay.streamIdleTimeoutMs', label: 'Stream idle timeout (ms)', type: 'number', half: true },
       {
+        key: 'relay.streamKeepAliveMs',
+        label: 'Stream keep-alive (ms)',
+        type: 'number',
+        half: true,
+        desc: 'Send an SSE keep-alive comment to the client when no provider data has arrived for this long (0 = disabled). It does not reset the idle timeout, which still detects a dead upstream.',
+      },
+      {
         key: 'relay.failoverOnQuota',
         label: 'Failover on quota/rate errors',
         type: 'toggle',

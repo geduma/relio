@@ -17,7 +17,8 @@ function formatLogLine(log) {
   const requester = log.requester_name || (log.requester_key ? `${log.requester_key}...` : '-')
   const cache = log.cache_hit ? 'HIT' : 'MISS'
   const error = log.error_message || '-'
-  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${String(inTokens).padStart(6)} in  ${String(outTokens).padStart(6)} out  ${cache.padEnd(4)}  ${error}`
+  const ttft = log.ttft_ms != null ? `${String(log.ttft_ms).padStart(5)}` : '    -'
+  return `${time}  ${log.endpoint.padEnd(30)} ${provider.padEnd(16)} ${requester.padEnd(16)} ${String(log.status_code).padEnd(4)} ${String(log.response_time_ms).padStart(5)}ms  ${ttft} ttft  ${String(inTokens).padStart(6)} in  ${String(outTokens).padStart(6)} out  ${cache.padEnd(4)}  ${error}`
 }
 
 export default function Logs() {
@@ -135,6 +136,7 @@ export default function Logs() {
                 <th>In Tokens</th>
                 <th>Out Tokens</th>
                 <th>Time (ms)</th>
+                <th>TTFT (ms)</th>
                 <th>Cache</th>
                 <th>Error</th>
               </tr>
@@ -150,6 +152,7 @@ export default function Logs() {
                   <td data-label="In Tokens">{log.input_tokens || 0}</td>
                   <td data-label="Out Tokens">{log.output_tokens || 0}</td>
                   <td data-label="Time (ms)">{log.response_time_ms}</td>
+                  <td data-label="TTFT (ms)">{log.ttft_ms != null ? log.ttft_ms : '-'}</td>
                   <td data-label="Cache">{log.cache_hit ? 'HIT' : 'MISS'}</td>
                   <td data-label="Error" className="error-cell">{log.error_message || '-'}</td>
                 </tr>

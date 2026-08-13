@@ -240,6 +240,10 @@ function runMigrations(d) {
   if (!logColumns.includes('tokens_saved_estimate')) {
     d.exec('ALTER TABLE requests_log ADD COLUMN tokens_saved_estimate INT DEFAULT 0')
   }
+  const logColumnsFinal = d.prepare("PRAGMA table_info('requests_log')").all().map(c => c.name)
+  if (!logColumnsFinal.includes('ttft_ms')) {
+    d.exec('ALTER TABLE requests_log ADD COLUMN ttft_ms INT')
+  }
 
   columns = d.prepare("PRAGMA table_info('providers')").all().map(c => c.name)
   if (!columns.includes('health_failures')) {

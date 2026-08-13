@@ -50,7 +50,7 @@ export function getLogs(limit = 50, offset = 0) {
   const logs = dbAll(
     `SELECT l.id, l.provider_id, COALESCE(l.provider_name, p.name) AS provider_name,
             l.endpoint, l.status_code, l.input_tokens, l.output_tokens,
-            l.response_time_ms, l.cache_hit, l.authenticated_via,
+            l.response_time_ms, l.ttft_ms, l.cache_hit, l.authenticated_via,
             l.requester_name, l.requester_key, l.origin_ip, l.request_at, l.error_message,
             l.tokens_saved_estimate
      FROM requests_log l
