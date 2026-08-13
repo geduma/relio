@@ -229,7 +229,10 @@ router.patch('/:id', wrap(async (req, res) => {
   const finalCapability = req.body.capability ?? provider.capability
 
   const doUpdate = () => {
-    if (finalStatus === 'active') updates.push('health_failures = 0')
+    if (finalStatus === 'active') {
+      updates.push('health_failures = 0')
+      updates.push('cooldown_until = NULL')
+    }
     updates.push("updated_at = datetime('now')")
     values.push(id)
     dbRun(`UPDATE providers SET ${updates.join(', ')} WHERE id = ?`, values)
@@ -237,6 +240,19 @@ router.patch('/:id', wrap(async (req, res) => {
 
   const tx = db.transaction(() => {
     doUpdate()
+
+    if (finalStatus === 'active') {
+      dbRun(
+        `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, updated_at)
+         VALUES (?, 'healthy', 0, datetime('now'))
+         ON CONFLICT(provider_id) DO UPDATE SET
+           state = 'healthy',
+           failure_count = 0,
+           cooldown_until = NULL,
+           updated_at = datetime('now')`,
+        [id]
+      )
+    }
 
     const activeOnes = dbAll(
       `SELECT id FROM providers WHERE capability = ? AND status = 'active' ORDER BY order_position ASC`,

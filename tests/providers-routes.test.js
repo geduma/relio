@@ -5,7 +5,7 @@ vi.mock('../src/utils/ssrf.js', () => ({
   assertPublicUrl: async () => {},
 }))
 
-let setDbPath, initDb, closeDb, dbRun, encrypt
+let setDbPath, initDb, closeDb, dbRun, dbGet, encrypt
 let providersRoutes
 
 beforeAll(async () => {
@@ -14,6 +14,7 @@ beforeAll(async () => {
   initDb = dbMod.initDb
   closeDb = dbMod.closeDb
   dbRun = dbMod.dbRun
+  dbGet = dbMod.dbGet
   encrypt = dbMod.encrypt
 
   setDbPath(':memory:')
@@ -25,11 +26,11 @@ beforeAll(async () => {
 afterAll(() => closeDb())
 
 beforeEach(() => {
-  dbRun('DELETE FROM providers')
   dbRun('DELETE FROM circuit_breaker_state')
   dbRun('DELETE FROM requests_log')
   dbRun('DELETE FROM cache')
   dbRun('DELETE FROM metrics')
+  dbRun('DELETE FROM providers')
 })
 
 describe('POST /admin/api/providers (reserved name)', () => {
@@ -176,6 +177,36 @@ describe('PATCH /admin/api/providers/:id (status-only updates)', () => {
     } finally {
       globalThis.fetch = realFetch
     }
+  })
+
+  it('reactivating a cooldown provider clears cooldown_until and resets the circuit breaker', async () => {
+    dbRun(
+      `INSERT INTO providers (id, name, api_url, api_key, model, capability, provider_type, order_position, order_label, status, cooldown_until)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ['pst3', 'CooldownProvider', 'https://alpha.example.com/v1', encrypt('sk-test'), 'model-chat', 'chat', 'openai-compatible', 2, 'Fallback 2', 'cooldown', new Date(Date.now() + 3600000).toISOString()]
+    )
+    dbRun(
+      `INSERT INTO circuit_breaker_state (provider_id, state, failure_count, cooldown_until, updated_at)
+       VALUES (?, 'cooldown', 3, ?, datetime('now'))`,
+      ['pst3', new Date(Date.now() + 3600000).toISOString()]
+    )
+
+    const res = await fetch(`${baseUrl}/admin/api/providers/pst3`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'active' }),
+    })
+    expect(res.status).toBe(200)
+
+    const row = dbGet('SELECT status, cooldown_until, health_failures FROM providers WHERE id = ?', ['pst3'])
+    expect(row.status).toBe('active')
+    expect(row.cooldown_until).toBeNull()
+    expect(row.health_failures).toBe(0)
+
+    const cb = dbGet('SELECT state, failure_count, cooldown_until FROM circuit_breaker_state WHERE provider_id = ?', ['pst3'])
+    expect(cb.state).toBe('healthy')
+    expect(cb.failure_count).toBe(0)
+    expect(cb.cooldown_until).toBeNull()
   })
 
   it('allows deleting the Main provider', async () => {
