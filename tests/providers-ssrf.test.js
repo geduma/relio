@@ -34,11 +34,11 @@ afterAll(async () => {
 })
 
 beforeEach(() => {
-  dbRun('DELETE FROM providers')
   dbRun('DELETE FROM circuit_breaker_state')
   dbRun('DELETE FROM requests_log')
   dbRun('DELETE FROM cache')
   dbRun('DELETE FROM metrics')
+  dbRun('DELETE FROM providers')
 })
 
 function seed(id, name, apiUrl, position, label, status = 'active') {
