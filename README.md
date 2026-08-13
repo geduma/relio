@@ -91,7 +91,7 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | Key | Description |
 |---|---|
 | `security.encryptionKey` | **Required.** AES-256-GCM key used to encrypt provider API keys at rest and to hash API keys. Generate with `openssl rand -hex 32`. Overridable via `ENCRYPTION_KEY` env. The server refuses to start with the example placeholder or a key shorter than 32 chars |
-| `security.allowedPrivateHosts` | `[]` (default) — hostnames or IPs (comma-separated in the dashboard) that are exempt from the SSRF guard, for local/private providers such as Ollama or LM Studio (e.g. `ollama.home`, `192.168.10.10`). All other private/loopback URLs stay blocked. Editable from the dashboard (Settings → Security) and applies without a restart |
+| `security.allowedPrivateHosts` | `[]` (default) — hostnames or IPs (comma-separated in the dashboard) that are exempt from the SSRF guard, for local/private providers such as Ollama or LM Studio (e.g. `ollama`, `10.0.0.5`). All other private/loopback URLs stay blocked. Editable from the dashboard (Settings → Security) and applies without a restart |
 | `db.path` | SQLite database file path (overridable via `DB_PATH` env) |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port (overridable via `PORT` env) |
@@ -171,7 +171,7 @@ The dashboard requires no login and is intended for **trusted networks only**. O
 
 - **API keys at rest** — provider API keys are encrypted with AES-256-GCM using `security.encryptionKey`. Rotate the key by updating the config and re-entering provider keys.
 - **Client API keys hashed** — your `relio_sk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation. Each key only has access to the providers explicitly assigned to it.
-- **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols. Hosts listed in `security.allowedPrivateHosts` (Settings → Security) are exempt, so local/private providers like Ollama can be added explicitly.
+- **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols. Hosts listed in `security.allowedPrivateHosts` (Settings → Security) are exempt, so local/private providers like Ollama can be added explicitly. If a private hostname fails the connection test *despite* being allowlisted, see [Troubleshooting: private hostnames inside Docker](#troubleshooting-private-hostnames-inside-docker).
 - **Dashboard exposure** — the dashboard has no login; put it behind a trusted reverse proxy with authentication if exposed beyond your local network.
 - **Encryption key** — `security.encryptionKey` is required (min 32 chars); the server refuses the example placeholder. Set it via `ENCRYPTION_KEY` in production.
 
@@ -258,6 +258,31 @@ ENCRYPTION_KEY=... docker compose -f docker/docker-compose.yml up -d
 ```
 
 The image runs the app as a non-root user (`node`), includes a healthcheck at `/admin/api/metrics/health`, and the entrypoint automatically prepares the `config.json` permissions on every start.
+
+### Troubleshooting: private hostnames inside Docker
+
+**Symptom** — the connection test (and provider creation) fails with `Cannot reach server: fetch failed` for a private hostname such as `http://ollama/v1` (also `.home`, `.local`, or any name resolved only by your LAN DNS), even after adding both the hostname and its IP to `security.allowedPrivateHosts`.
+
+**Root cause** — the runtime image is `node:20-alpine` (musl libc). Node's resolver (`getaddrinfo`) can fail to resolve such names inside the container even though the system tools resolve them. Concretely, `getent hosts <hostname>` succeeds while Node's `dns.lookup('<hostname>')` returns `ENOTFOUND`. Since the SSRF guard's `resolveHost()` (`src/utils/ssrf.js`) swallows lookup errors and returns `[]`, the guard passes (fail-open) and the adapter's `fetch` then fails with `ENOTFOUND`. The allowlist is *not* the problem — the hostname simply never resolves in-process.
+
+**Confirm** (run on the Docker host, replacing `<hostname>`):
+```bash
+docker exec relio-app getent hosts <hostname>   # OK: resolves to your private IP (misleading — this is the legacy resolver)
+docker exec relio-app node -e "require('dns').lookup('<hostname>',(e,a)=>console.log(e?'ERR '+e.code:a))"  # ERR ENOTFOUND (decisive)
+```
+
+**Fix** — bypass DNS inside the container with `extra_hosts` (writes to `/etc/hosts`, which `getaddrinfo` reads first regardless of libc), then **recreate** the container (`docker restart` does not re-apply `extra_hosts`):
+```yaml
+    extra_hosts:
+      - "<hostname>:<private-ip>"
+```
+```bash
+docker compose up -d --force-recreate relio
+```
+
+Keep the `allowedPrivateHosts` entry (`<hostname>` and/or the IP) — it is what makes the guard's `assertPublicUrl` accept the resolved address. Optionally add the hostname itself so the guard short-circuits before resolving.
+
+**Note** — this is infrastructure-specific (your DNS topology); the repo's `docker/docker-compose.yml` intentionally does not ship host mappings. When a private hostname is unreachable from the container for other reasons (e.g. a firewall between the Docker bridge and the host LAN IP), the same `extra_hosts` trick can point the name at `172.17.0.1` (the Docker bridge gateway, always reachable) — but then the allowlist *must* contain the hostname, since `172.17.0.1` is a private IP not in the default allowlist.
 
 ## Usage
 
