@@ -19,7 +19,7 @@
     "exposeProvider": false,
     "requestTimeoutMs": 30000,
     "streamTimeoutSeconds": 300,
-    "streamIdleTimeoutMs": 30000,
+    "streamIdleTimeoutMs": 120000,
     "streamKeepAliveMs": 15000,
     "routingStrategy": "order",
     "failoverOnQuota": true,
@@ -31,7 +31,7 @@
       "maxBufferSize": 50
     },
     "tokenOptimization": {
-      "enabled": false,
+      "enabled": true,
       "logSavings": true,
       "aggressiveNormalization": false
     }
