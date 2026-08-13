@@ -91,6 +91,7 @@ All settings are in `config/config.json` (a single folder shared by npm, pm2 and
 | Key | Description |
 |---|---|
 | `security.encryptionKey` | **Required.** AES-256-GCM key used to encrypt provider API keys at rest and to hash API keys. Generate with `openssl rand -hex 32`. Overridable via `ENCRYPTION_KEY` env. The server refuses to start with the example placeholder or a key shorter than 32 chars |
+| `security.allowedPrivateHosts` | `[]` (default) — hostnames or IPs (comma-separated in the dashboard) that are exempt from the SSRF guard, for local/private providers such as Ollama or LM Studio (e.g. `ollama.home`, `192.168.10.10`). All other private/loopback URLs stay blocked. Editable from the dashboard (Settings → Security) and applies without a restart |
 | `db.path` | SQLite database file path (overridable via `DB_PATH` env) |
 | `cache.ttlSeconds` | Cache TTL in seconds (default 30 days) |
 | `server.port` | Server port (overridable via `PORT` env) |
@@ -170,7 +171,7 @@ The dashboard requires no login and is intended for **trusted networks only**. O
 
 - **API keys at rest** — provider API keys are encrypted with AES-256-GCM using `security.encryptionKey`. Rotate the key by updating the config and re-entering provider keys.
 - **Client API keys hashed** — your `relio_sk_*` keys are stored as SHA-256 hashes; only a 10-char prefix is displayed in the dashboard. The raw key is shown once at creation. Each key only has access to the providers explicitly assigned to it.
-- **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols.
+- **SSRF guard** — provider URLs are validated on create, on update (when the URL or API key changes), and on connection test to reject localhost, loopback, private and link-local addresses, and non-http(s) protocols. Hosts listed in `security.allowedPrivateHosts` (Settings → Security) are exempt, so local/private providers like Ollama can be added explicitly.
 - **Dashboard exposure** — the dashboard has no login; put it behind a trusted reverse proxy with authentication if exposed beyond your local network.
 - **Encryption key** — `security.encryptionKey` is required (min 32 chars); the server refuses the example placeholder. Set it via `ENCRYPTION_KEY` in production.
 

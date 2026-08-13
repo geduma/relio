@@ -1,6 +1,7 @@
 {
   "security": {
-    "encryptionKey": "replace-with-a-random-64-char-hex-string"
+    "encryptionKey": "replace-with-a-random-64-char-hex-string",
+    "allowedPrivateHosts": []
   },
   "db": {
     "path": "./db/db.sqlite"

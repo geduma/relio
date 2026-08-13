@@ -60,6 +60,7 @@ export function normalizeConfig(raw) {
 
   cfg.security ??= {}
   cfg.security.encryptionKey = process.env.ENCRYPTION_KEY || cfg.security.encryptionKey
+  cfg.security.allowedPrivateHosts ??= []
   validateEncryptionKey(cfg.security.encryptionKey)
 
   cfg.relay ??= {}

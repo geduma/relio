@@ -138,6 +138,20 @@ describe('settings routes', () => {
     expect(config.relay.exposeProvider).toBe(!before)
   })
 
+  it('PUT persists allowedPrivateHosts and applies it live', async () => {
+    const { config } = await import('../src/config.js')
+    const res = await fetch(`${baseUrl}/admin/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: { security: { allowedPrivateHosts: ['ollama.home', '192.168.10.10'] } } }),
+    })
+    expect(res.status).toBe(200)
+    expect(config.security.allowedPrivateHosts).toEqual(['ollama.home', '192.168.10.10'])
+    const file = readTempConfig()
+    expect(file.security.allowedPrivateHosts).toEqual(['ollama.home', '192.168.10.10'])
+    expect(file.security.encryptionKey).toBe(VALID_KEY)
+  })
+
   it('PUT rejects an invalid value without touching the file', async () => {
     const res = await fetch(`${baseUrl}/admin/api/settings`, {
       method: 'PUT',

@@ -1,5 +1,6 @@
 import net from 'net'
 import dns from 'dns/promises'
+import { config } from '../config.js'
 
 async function resolveHost(hostname) {
   const v4 = await dns.lookup(hostname, { family: 4, all: true }).catch(() => null)
@@ -38,6 +39,10 @@ function isNonPublic(ip) {
   return type === 4 ? isPrivateIpv4(ip) : isPrivateIpv6(ip)
 }
 
+function normalizeHost(host) {
+  return String(host).trim().toLowerCase().replace(/\.$/, '')
+}
+
 export async function assertPublicUrl(rawUrl) {
   let url
   try {
@@ -49,7 +54,13 @@ export async function assertPublicUrl(rawUrl) {
     throw new Error(`Unsupported protocol: ${url.protocol}`)
   }
 
+  const allowedHosts = new Set(
+    (config.security?.allowedPrivateHosts || []).map(normalizeHost)
+  )
+
   const hostname = url.hostname
+  if (allowedHosts.has(normalizeHost(hostname))) return
+
   if (
     hostname === 'localhost' ||
     hostname.endsWith('.localhost') ||
@@ -62,6 +73,7 @@ export async function assertPublicUrl(rawUrl) {
 
   const ips = await resolveHost(hostname)
   for (const ip of ips) {
+    if (allowedHosts.has(ip)) continue
     if (isNonPublic(ip)) {
       throw new Error(`URL resolves to a private/loopback address: ${ip}`)
     }

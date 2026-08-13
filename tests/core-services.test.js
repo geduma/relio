@@ -5,6 +5,7 @@ let recordSuccess, recordFailure
 let enqueueLog, enqueueMetric, enqueueApiKeyTouch, flushAll
 let getLogs, getMetrics
 let assertPublicUrl
+let config
 
 beforeAll(async () => {
   const dbMod = await import('../src/db.js')
@@ -43,6 +44,8 @@ beforeAll(async () => {
 
   const ssrf = await import('../src/utils/ssrf.js')
   assertPublicUrl = ssrf.assertPublicUrl
+
+  config = (await import('../src/config.js')).config
 })
 
 afterAll(() => closeDb())
@@ -173,5 +176,31 @@ describe('ssrf guard', () => {
 
   it('allows public https URLs', async () => {
     await expect(assertPublicUrl('https://api.example.com/v1')).resolves.toBeUndefined()
+  })
+})
+
+describe('ssrf guard allowlist', () => {
+  afterEach(() => {
+    config.security.allowedPrivateHosts = []
+  })
+
+  it('allows a hostname listed in allowedPrivateHosts', async () => {
+    config.security.allowedPrivateHosts = ['ollama.home']
+    await expect(assertPublicUrl('http://ollama.home/v1')).resolves.toBeUndefined()
+  })
+
+  it('matches hostnames case-insensitively and without a trailing dot', async () => {
+    config.security.allowedPrivateHosts = ['OLLAMA.HOME.']
+    await expect(assertPublicUrl('http://ollama.home/v1')).resolves.toBeUndefined()
+  })
+
+  it('allows a private IP listed in allowedPrivateHosts', async () => {
+    config.security.allowedPrivateHosts = ['192.168.10.10']
+    await expect(assertPublicUrl('http://192.168.10.10/v1')).resolves.toBeUndefined()
+  })
+
+  it('still rejects private addresses not in the allowlist', async () => {
+    config.security.allowedPrivateHosts = ['ollama.home']
+    await expect(assertPublicUrl('http://10.0.0.5')).rejects.toThrow(/private|loopback/i)
   })
 })
