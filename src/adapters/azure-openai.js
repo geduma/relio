@@ -48,6 +48,17 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     }
   }
 
+  _supportsStreamOptions(apiVersion) {
+    const m = /(\d{4})-(\d{2})-(\d{2})/.exec(String(apiVersion || ''))
+    if (!m) return false
+    const y = Number(m[1])
+    const mo = Number(m[2])
+    const d = Number(m[3])
+    if (y !== 2024) return y > 2024
+    if (mo !== 10) return mo > 10
+    return d >= 21
+  }
+
   async chat(provider, requestBody, signal) {
     const url = this.buildUrl(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
@@ -93,6 +104,10 @@ export default class AzureOpenAIAdapter extends ProviderAdapter {
     const headers = this.buildHeaders(provider.api_key)
     const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
+    const apiVersion = new URL(url).searchParams.get('api-version') || ''
+    if (this._supportsStreamOptions(apiVersion) && !body.stream_options?.include_usage) {
+      body.stream_options = { include_usage: true }
+    }
 
     this._logRequest('POST', url, headers, body)
     const response = await fetch(url, {

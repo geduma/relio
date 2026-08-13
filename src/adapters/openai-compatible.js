@@ -116,6 +116,9 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     const headers = this.buildHeaders(provider.api_key)
     const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
+    if (!body.stream_options?.include_usage) {
+      body.stream_options = { include_usage: true }
+    }
 
     const response = await this._fetch('POST', url, headers, JSON.stringify({ ...body, stream: true }), signal)
 

@@ -427,6 +427,7 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
       expect(sentBody.messages[0].user).toBeUndefined()
       expect(sentBody.user).toBe('user-123')
       expect(sentBody.stream).toBe(true)
+      expect(sentBody.stream_options).toEqual({ include_usage: true })
       stream.destroy()
     } finally {
       globalThis.fetch = originalFetch
@@ -837,6 +838,35 @@ describe('AzureOpenAIAdapter', () => {
       expect(sentBody.messages[0].user).toBeUndefined()
       expect(sentBody.user).toBe('user-123')
       expect(sentBody.stream).toBe(true)
+      expect(sentBody.stream_options).toBeUndefined()
+      stream.destroy()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('injects stream_options.include_usage only for api-versions that support it', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n'))
+          controller.close()
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const stream = await adapter.stream(
+        { api_url: 'https://api.example.com/azure/openai/deployments/model-chat?api-version=2024-10-21', api_key: 'k', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      expect(sentBody.stream_options).toEqual({ include_usage: true })
       stream.destroy()
     } finally {
       globalThis.fetch = originalFetch
@@ -1020,5 +1050,83 @@ describe('Error normalization', () => {
     const result = normalizeError(err)
     expect(result.error.type).toBe('content_filter_error')
     expect(result.error.code).toBe('content_filter')
+  })
+})
+
+describe('StreamUsageTracker captures tokens for every provider type', () => {
+  const encoder = new TextEncoder()
+
+  async function trackUsage(nodeStream) {
+    const { StreamUsageTracker } = await import('../src/services/streamUsageTracker.js')
+    const tracker = new StreamUsageTracker()
+    for await (const _chunk of nodeStream.pipe(tracker.createTransform())) { /* drain */ }
+    return tracker.usage
+  }
+
+  function sseResponse(payload) {
+    return new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(payload))
+        controller.close()
+      },
+    }), { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+  }
+
+  it('OpenAI-compatible', async () => {
+    const adapter = new OpenAICompatibleAdapter()
+    globalThis.fetch = async () => sseResponse('data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":7,"total_tokens":18}}\n\ndata: [DONE]\n\n')
+    const stream = await adapter.stream(
+      { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      new AbortController().signal
+    )
+    expect(await trackUsage(stream)).toEqual({ prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 })
+  })
+
+  it('Azure OpenAI (usage chunk in SSE)', async () => {
+    const adapter = new AzureOpenAIAdapter()
+    globalThis.fetch = async () => sseResponse('data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}\n\ndata: [DONE]\n\n')
+    const stream = await adapter.stream(
+      { api_url: 'https://api.example.com/azure/openai/deployments/model-chat?api-version=2024-10-21', api_key: 'k', model: 'model-chat' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      new AbortController().signal
+    )
+    expect(await trackUsage(stream)).toEqual({ prompt_tokens: 9, completion_tokens: 4, total_tokens: 13 })
+  })
+
+  it('Anthropic (message_delta usage mapped to OpenAI chunks)', async () => {
+    const adapter = new AnthropicAdapter()
+    const sse = [
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","model":"model-claude"}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":21,"output_tokens":8}}\n\n',
+    ].join('')
+    globalThis.fetch = async () => sseResponse(sse)
+    const stream = await adapter.stream(
+      { api_url: 'https://api.example.com/v1/messages', api_key: 'sk-ant-test', model: 'model-claude' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      new AbortController().signal
+    )
+    expect(await trackUsage(stream)).toEqual({ prompt_tokens: 21, completion_tokens: 8, total_tokens: 29 })
+  })
+
+  it('Gemini Native (usageMetadata mapped to OpenAI chunks)', async () => {
+    const adapter = new GeminiNativeAdapter()
+    const payload = [
+      { candidates: [{ content: { role: 'model', parts: [{ text: 'Hi' }] } }] },
+      { candidates: [{ finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3 } },
+    ].map(l => JSON.stringify(l)).join('\n')
+    globalThis.fetch = async () => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(payload))
+        controller.close()
+      },
+    }), { status: 200 })
+    const stream = await adapter.stream(
+      { api_url: 'https://api.example.com/v1beta/models', api_key: 'sk-g', model: 'model-native' },
+      { messages: [{ role: 'user', content: 'x' }] },
+      new AbortController().signal
+    )
+    expect(await trackUsage(stream)).toEqual({ prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 })
   })
 })

@@ -4,7 +4,8 @@ import { streamProvider, selectProviders, parseModelSelector, stripModel, isProv
 import { processRequest, optimizeRelayBody } from '../handlers/requestHandler.js'
 import { recordSuccess, recordFailure, recordProviderFailure } from '../services/circuitBreaker.js'
 import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
-import { pipeline } from 'stream/promises'
+import { createStreamSession, ABORT_REASONS } from '../services/streamSession.js'
+import { describeStreamError, resolveStreamAbortReason } from '../utils/streamErrors.js'
 import { normalizeError } from '../utils/logger.js'
 import { config } from '../config.js'
 
@@ -139,68 +140,24 @@ router.post('/embeddings', async (req, res) => {
 
 async function handleStreamingRequest(req, res) {
   const startTime = Date.now()
-  const controller = new AbortController()
-  let abortReason = null
 
   const optimized = optimizeRelayBody(req.body)
   const requestBody = optimized.body
   const tokensSavedEstimate = optimized.tokensSavedEstimate
 
-  res.on('close', () => {
-    if (!res.writableEnded) {
-      abortReason = abortReason || 'client_disconnect'
-      controller.abort()
-    }
+  const session = createStreamSession(res, {
+    idleMs: config.relay.streamIdleTimeoutMs,
+    maxDurationMs: config.relay.streamTimeoutSeconds * 1000,
+    keepAliveMs: config.relay.streamKeepAliveMs || 0,
+    startTime,
+    sseHeaders: SSE_HEADERS,
   })
 
   const selection = parseModelSelector(req.body.model, 'chat')
   if (selection.error) {
+    session.dispose()
     res.status(400).json(selectorError(selection, req.body.model))
     return
-  }
-
-  const maxDurationMs = config.relay.streamTimeoutSeconds * 1000
-  const idleMs = config.relay.streamIdleTimeoutMs
-
-  let idleTimer = null
-  const clearIdle = () => {
-    if (idleTimer) clearTimeout(idleTimer)
-    idleTimer = null
-  }
-  const resetIdle = () => {
-    clearIdle()
-    idleTimer = setTimeout(() => {
-      abortReason = abortReason || 'idle_timeout'
-      controller.abort()
-    }, idleMs)
-    if (idleTimer.unref) idleTimer.unref()
-  }
-  const durationTimer = setTimeout(() => {
-    abortReason = abortReason || 'max_duration'
-    controller.abort()
-  }, maxDurationMs)
-  if (durationTimer.unref) durationTimer.unref()
-
-  let firstChunkAt = null
-  let lastDataAt = 0
-  const keepAliveMs = config.relay.streamKeepAliveMs || 0
-  let keepAliveTimer = null
-  const clearKeepAlive = () => {
-    if (keepAliveTimer) clearInterval(keepAliveTimer)
-    keepAliveTimer = null
-  }
-  const startHeartbeat = () => {
-    if (keepAliveMs <= 0) return
-    keepAliveTimer = setInterval(() => {
-      if (res.writableEnded || res.destroyed) {
-        clearKeepAlive()
-        return
-      }
-      if (Date.now() - lastDataAt >= keepAliveMs) {
-        res.write(': keep-alive\n\n')
-      }
-    }, keepAliveMs)
-    if (keepAliveTimer.unref) keepAliveTimer.unref()
   }
 
   const logError = (provider, statusCode, errorMessage, retryCount) => {
@@ -217,15 +174,6 @@ async function handleStreamingRequest(req, res) {
     enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
   }
 
-  const describeError = (err) => {
-    if (err?.name !== 'AbortError') return err?.message
-    const reason = abortReason || 'aborted'
-    if (reason === 'client_disconnect') return 'Stream aborted: client disconnected'
-    if (reason === 'idle_timeout') return 'Stream aborted: idle timeout (no data received)'
-    if (reason === 'max_duration') return 'Stream aborted: max duration exceeded'
-    return 'Stream aborted: upstream request cancelled'
-  }
-
   let provider = null
   let stream = null
   let lastError = null
@@ -234,32 +182,34 @@ async function handleStreamingRequest(req, res) {
   if (selection.mode === 'provider') {
     const p = selection.provider
     if (!req.apiKey.allowedProviderIds.includes(p.id)) {
-      clearTimeout(durationTimer)
+      session.dispose()
       res.status(403).json(PROVIDER_ACCESS_DENIED)
       return
     }
     if (!isProviderAvailable(p)) {
-      clearTimeout(durationTimer)
+      session.dispose()
       res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${p.name}" is paused or in cooldown`), { status: 503 })))
       return
     }
     if (isRateLimitExceeded(p) || isDailyLimitExceeded(p)) {
-      clearTimeout(durationTimer)
+      session.dispose()
       res.status(503).json(normalizeError(Object.assign(new Error(`Provider "${p.name}" has reached its rate or daily limit`), { status: 503 })))
       return
     }
     try {
       recordProviderRequest(p.id)
-      stream = await streamProvider(p, stripModel(requestBody), controller.signal)
+      stream = await streamProvider(p, stripModel(requestBody), session.signal)
       provider = p
     } catch (err) {
       lastError = err
       provider = null
-      logError(p, err.status || 503, describeError(err), 0)
-      const { immediateCooldown } = classifyProviderError(err, p)
-      recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
-      if (immediateCooldown === 'circuit') {
-        recordFailure(p.id, p.cooldown_after_failures, p.cooldown_duration_seconds)
+      logError(p, err.status || 503, describeStreamError(err, session), 0)
+      if (!session.isAborted()) {
+        const { immediateCooldown } = classifyProviderError(err, p)
+        recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
+        if (immediateCooldown === 'circuit') {
+          recordFailure(p.id, p.cooldown_after_failures, p.cooldown_duration_seconds)
+        }
       }
     }
   } else {
@@ -270,13 +220,14 @@ async function handleStreamingRequest(req, res) {
       if (isDailyLimitExceeded(p)) continue
       try {
         recordProviderRequest(p.id)
-        stream = await streamProvider(p, stripModel(requestBody), controller.signal)
+        stream = await streamProvider(p, stripModel(requestBody), session.signal)
         provider = p
         break
       } catch (err) {
         lastError = err
         retryCount++
-        logError(p, err.status || 503, describeError(err), retryCount)
+        logError(p, err.status || 503, describeStreamError(err, session), retryCount)
+        if (session.isAborted()) break
         const { retryable, immediateCooldown } = classifyProviderError(err, p)
         recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
         if (!retryable) break
@@ -288,80 +239,72 @@ async function handleStreamingRequest(req, res) {
   }
 
   if (!provider) {
-    clearTimeout(durationTimer)
+    session.dispose()
     if (lastError) {
-      const finalErr = new Error(describeError(lastError))
+      const reason = resolveStreamAbortReason(lastError, session)
+      const finalErr = new Error(describeStreamError(lastError, session))
       finalErr.status = lastError.status || 503
       finalErr.data = lastError.data || null
+      finalErr.abortReason = reason
       res.status(finalErr.status).json(normalizeError(finalErr))
       return
     }
-    res.status(404).json(normalizeError(Object.assign(new Error('No available provider for streaming'), { status: 404 })))
+    res.status(503).json(normalizeError(Object.assign(new Error('No available provider for streaming (all providers paused, in cooldown, or rate/daily limited)'), { status: 503 })))
     return
   }
 
   try {
-    res.writeHead(200, SSE_HEADERS)
+    session.start()
 
-    lastDataAt = Date.now()
-    startHeartbeat()
-    resetIdle()
-    stream.on('data', () => {
-      lastDataAt = Date.now()
-      if (firstChunkAt === null) firstChunkAt = Date.now() - startTime
-      resetIdle()
-    })
+    const { ttftMs, usage } = await session.run(stream)
 
-    await pipeline(stream, res)
+    session.dispose()
 
-    clearIdle()
-    clearKeepAlive()
-    clearTimeout(durationTimer)
+    const inputTokens = usage.prompt_tokens || 0
+    const outputTokens = usage.completion_tokens || 0
+    const estimatedCost = (inputTokens * provider.cost_per_input_token) + (outputTokens * provider.cost_per_output_token)
 
     recordSuccess(provider.id)
     enqueueLog({
       providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
-      responseTimeMs: Date.now() - startTime, ttftMs: firstChunkAt,
+      responseTimeMs: Date.now() - startTime, ttftMs,
+      inputTokens, outputTokens, estimatedCost,
       authenticatedVia: 'api_key',
       requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
       cacheHit: false, retryCount, tokensSavedEstimate,
     })
     enqueueMetric(provider.id, {
-      responseTimeMs: Date.now() - startTime, cacheHit: false,
+      inputTokens, outputTokens, cost: estimatedCost, responseTimeMs: Date.now() - startTime, cacheHit: false,
     })
   } catch (err) {
-    clearIdle()
-    clearKeepAlive()
-    clearTimeout(durationTimer)
+    const reason = resolveStreamAbortReason(err, session)
+    session.dispose()
     if (res.headersSent) {
-      const reason = abortReason || 'upstream_error'
-      const reasonMessage = reason === 'client_disconnect'
-        ? 'Stream aborted: client disconnected'
-        : reason === 'idle_timeout'
-          ? 'Stream aborted: idle timeout (no data received)'
-          : reason === 'max_duration'
-            ? 'Stream aborted: max duration exceeded'
-            : `Stream aborted: ${err.message}`
       enqueueLog({
         providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
         originIp: req.ip, originHeader: req.headers['user-agent'],
-        statusCode: 503, errorMessage: reasonMessage,
-        responseTimeMs: Date.now() - startTime, ttftMs: firstChunkAt,
+        statusCode: 503, errorMessage: describeStreamError(err, session),
+        responseTimeMs: Date.now() - startTime, ttftMs: session.ttftMs(),
         authenticatedVia: 'api_key',
         requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
         cacheHit: false, wasRetry: retryCount > 0, retryCount,
         tokensSavedEstimate,
       })
       enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
+      if (reason === ABORT_REASONS.IDLE_TIMEOUT) {
+        recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+      }
       return
     }
 
-    const { retryable, immediateCooldown } = classifyProviderError(err, provider)
-    recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
-    if (retryable && immediateCooldown === 'circuit') {
-      recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+    if (!session.isAborted()) {
+      const { retryable, immediateCooldown } = classifyProviderError(err, provider)
+      recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
+      if (retryable && immediateCooldown === 'circuit') {
+        recordFailure(provider.id, provider.cooldown_after_failures, provider.cooldown_duration_seconds)
+      }
     }
     res.status(err.status || 503).json(normalizeError(err))
   }
