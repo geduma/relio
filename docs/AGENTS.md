@@ -129,15 +129,24 @@ src/
 
 ### Streaming Flow
 
-1. `proxy.routes.js` detects `stream: true` in request body → `handleStreamingRequest()`
-2. Resolves provider: for a specific provider name/ID, it must be in the key's `allowedProviderIds` (otherwise immediate `403 provider_access_denied`); in failover mode it uses `selectProviders('chat', allowedProviderIds)` skipping paused/cooldown/rate-limited/daily-limited providers
-3. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`
-4. Enforces an idle timeout (`relay.streamIdleTimeoutMs`) and a max duration (`relay.streamTimeoutSeconds`) via `AbortController`; client disconnect aborts the upstream fetch
-5. A keep-alive timer (`relay.streamKeepAliveMs`, default `15000`, `0` = off) writes an SSE comment `: keep-alive\n\n` to the client whenever no upstream data has arrived for that long. It never resets the idle timer (which detects a dead upstream), so the transparent passthrough semantics are unchanged
-6. `pipeline(stream, res)` from `stream/promises` handles backpressure, completion, and errors
-7. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()` — the log records `ttft_ms` (time to first chunk)
-8. On pre-headers failure: `enqueueLog()`/`enqueueMetric()` and `recordFailure()` for retryable errors
-9. On mid-stream interruption (after headers were sent): the interruption is **logged** with `statusCode: 503` and a descriptive `error_message` (`Stream aborted: client disconnected` / `idle timeout` / `max duration exceeded` / upstream error). No SSE error frame is sent to the client — the stream closes as before (transparent passthrough); the abort reason is captured via an `abortReason` flag set by the timers and the `res.on('close')` handler
+1. `proxy.routes.js` detects `stream: true` in request body → `handleStreamingRequest()` (dashboard `chat.routes.js` mirrors this via `handleStreamingSend`; both use the shared `createStreamSession()` from `src/services/streamSession.js` and message helpers from `src/utils/streamErrors.js`)
+2. `createStreamSession(res, { idleMs, maxDurationMs, keepAliveMs, startTime, sseHeaders })` owns the `AbortController`, the abort-reason taxonomy (`client_disconnect` | `idle_timeout` | `max_duration` | `upstream_error`), the idle/max-duration timers, the keep-alive timer, and TTFT tracking. It attaches `res.on('close')` from the start so a client abort aborts the upstream fetch even before the stream starts. `start()` writes the SSE headers and arms the timers; `run(stream)` pipes the adapter stream to `res` (backpressure + byte-for-byte passthrough through the `StreamUsageTracker`) and returns `{ ttftMs, usage }`; `dispose()` clears timers and the `close` listener
+3. Resolves provider: for a specific provider name/ID, it must be in the key's `allowedProviderIds` (otherwise immediate `403 provider_access_denied`); in failover mode it uses `selectProviders('chat', allowedProviderIds)` skipping paused/cooldown/rate-limited/daily-limited providers
+4. `streamProvider()` → `getAdapter(provider.provider_type)` → `adapter.stream()` returns a Node.js `Readable`; the fetch is called with `session.signal`
+5. Selection failure handling (pre-headers):
+   - If `session.isAborted()` (client disconnected / max duration while still waiting for the upstream), the retry loop **stops immediately and records no circuit failure** — a client disconnect or hard duration cap is not a provider fault, so it must not push a healthy provider into cooldown (this was the root cause of the "No available provider for streaming" 404 cascade)
+   - Genuine upstream errors keep the previous behavior: `recordProviderFailure()` for rate/quota kinds, `recordFailure()` (circuit) for retryable kinds, then the loop moves to the next provider
+6. Timeout semantics (all read from `config.relay` at request time):
+   - `streamTimeoutSeconds` → hard total ceiling from request start (`max_duration`)
+   - `streamIdleTimeoutMs` → aborts if no **real upstream data** arrives (`idle_timeout`). Only upstream data resets it — SSE keep-alive comments do **not**
+   - `streamKeepAliveMs` → writes `: keep-alive\n\n` to the client when no upstream data has arrived for that long. It never resets the idle timer (which is what actually detects a dead upstream). Keep it below `streamIdleTimeoutMs` or it is useless
+7. On success: `recordSuccess()`, `enqueueLog()`, `enqueueMetric()` — the log records `ttft_ms` (time to first chunk, `null` when no content ever arrived) and, when the upstream includes a `usage` field in a final SSE chunk, `input_tokens`/`output_tokens` (captured by a pass-through `StreamUsageTracker` transform inserted between the adapter stream and `res`; chunks are forwarded byte-for-byte unchanged). The relay never buffers or rewrites the stream.
+   - Token capture works for every provider type: the `openai-compatible` adapter auto-requests `stream_options.include_usage: true` (OpenAI/Ollama), the `azure-openai` adapter does the same but only when the effective `api-version` supports it (`>= 2024-10-21`, else graceful degradation), and the `anthropic`/`gemini-native` adapters already map their native usage (`message_delta` / `usageMetadata`) into the OpenAI-style SSE chunks the tracker reads.
+8. On mid-stream interruption (after headers were sent): the interruption is **logged** with `statusCode: 503` and a descriptive `error_message` (`Stream aborted: client disconnected` / `idle timeout (no data received)` / `max duration exceeded` / the upstream error). No SSE error frame is sent to the client — the stream closes as before (transparent passthrough). Failover is never attempted once headers are sent. Circuit penalties:
+   - `idle_timeout` → exactly **one** `recordFailure()` (a real dead upstream is a health signal)
+   - `client_disconnect` and `max_duration` → no penalty (not provider faults)
+   - genuine upstream error → no penalty mid-stream (matches prior behavior)
+9. When no provider resolves (all paused/cooldown/limited, or the only attempt aborted), the response is a **503** `No available provider for streaming (all providers paused, in cooldown, or rate/daily limited)` — never a 404 — so clients can retry. Non-streaming request timeouts (`relay.requestTimeoutMs`) are reported as `Request timed out after ${requestTimeoutMs}ms` instead of leaking the raw `This operation was aborted`
 
 ### Models Endpoint
 

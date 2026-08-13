@@ -318,6 +318,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    const transformStreamChunk = this.transformStreamChunk.bind(this)
 
     return new Readable({
       async read() {
@@ -335,7 +336,7 @@ export default class AnthropicAdapter extends ProviderAdapter {
             buffer = lines.pop() || ''
 
             for (const line of lines) {
-              const chunk = this.transformStreamChunk(line)
+              const chunk = transformStreamChunk(line)
               if (!chunk) continue
               if (chunk.done) {
                 this.push(null)

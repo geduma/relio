@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest'
 import express from 'express'
+import { Readable } from 'stream'
 
 let setDbPath, initDb, closeDb, dbRun, encrypt, hashApiKey
 let proxyRoutes
@@ -464,6 +465,47 @@ describe('POST /v1/chat/completions streaming', () => {
   })
 })
 
+describe('StreamUsageTracker', () => {
+  it('captures usage across split chunks and passes bytes through unchanged', async () => {
+    const { StreamUsageTracker } = await import('../src/services/streamUsageTracker.js')
+    const tracker = new StreamUsageTracker()
+    const sse = [
+      'data: {"choices":[{"index":0,"delta":{"content":"a"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n\n',
+      'data: [DONE]\n\n',
+    ].join('')
+
+    const fromWeb = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse.slice(0, 20)))
+        controller.enqueue(encoder.encode(sse.slice(20)))
+        controller.close()
+      },
+    })
+    const nodeStream = Readable.fromWeb(fromWeb)
+    const out = []
+    for await (const buf of nodeStream.pipe(tracker.createTransform())) {
+      out.push(Buffer.isBuffer(buf) ? buf.toString() : String(buf))
+    }
+
+    expect(out.join('')).toBe(sse)
+    expect(tracker.usage).toEqual({ prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 })
+  })
+
+  it('leaves usage null when no usage chunk is present', async () => {
+    const { StreamUsageTracker } = await import('../src/services/streamUsageTracker.js')
+    const tracker = new StreamUsageTracker()
+    const fromWeb = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"x"},"finish_reason":null}]}\n\ndata: [DONE]\n\n'))
+        controller.close()
+      },
+    })
+    for await (const _buf of Readable.fromWeb(fromWeb).pipe(tracker.createTransform())) { /* drain */ }
+    expect(tracker.usage).toBeNull()
+  })
+})
+
 describe('streaming request logging', () => {
   it('logs the provider and the authenticated api key as requester', async () => {
     const dbMod = await import('../src/db.js')
@@ -490,6 +532,42 @@ describe('streaming request logging', () => {
     expect(log.provider_name).toBe('AlphaOne')
     expect(log.requester_name).toBe('test')
     expect(log.requester_key).toBe(TEST_KEY_PREFIX)
+  })
+
+  it('captures input/output tokens from the final streaming usage chunk and relays it verbatim', async () => {
+    const dbMod = await import('../src/db.js')
+    const { flushAll } = await import('../src/services/logQueue.js')
+
+    const usageChunk = 'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":5,"total_tokens":12}}\n\n'
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]}\n\n',
+      usageChunk,
+      'data: [DONE]\n\n',
+    ]))
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+    }
+    expect(text).toContain(usageChunk)
+
+    flushAll()
+    const log = dbMod.dbGet("SELECT input_tokens, output_tokens, total_tokens, ttft_ms FROM requests_log WHERE endpoint = '/v1/chat/completions' AND status_code = 200 ORDER BY request_at DESC LIMIT 1")
+    expect(log.input_tokens).toBe(7)
+    expect(log.output_tokens).toBe(5)
+    expect(log.total_tokens).toBe(12)
   })
 })
 
@@ -697,7 +775,7 @@ describe('streaming failover', () => {
     expect(new Date(alpha.cooldown_until).getTime() - Date.now()).toBeGreaterThan(3000 * 1000 - 60000)
   })
 
-  it('returns 404 when no provider is available for streaming (all in cooldown)', async () => {
+  it('returns 503 when no provider is available for streaming (all in cooldown)', async () => {
     const authMod = await import('../src/services/authService.js')
     authMod.updateApiKeyProviders('k1', ['pA'])
     dbMod.dbRun(
@@ -711,8 +789,391 @@ describe('streaming failover', () => {
       stream: true,
     })
 
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(503)
     const body = await res.json()
     expect(body.error.message).toMatch(/No available provider for streaming/i)
+  })
+})
+
+describe('streaming timeout and abort semantics', () => {
+  let dbMod
+  let authMod
+  let flushAll
+  let cfg
+  let resetRunningCounts
+
+  const DEFAULT_CHUNKS = [
+    'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+    'data: [DONE]\n\n',
+  ]
+
+  beforeAll(async () => {
+    dbMod = await import('../src/db.js')
+    authMod = await import('../src/services/authService.js')
+    ;({ flushAll } = await import('../src/services/logQueue.js'))
+    ;({ resetRunningCounts } = await import('../src/services/circuitBreaker.js'))
+    cfg = (await import('../src/config.js')).config
+  })
+
+  afterEach(() => {
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+    dbMod.dbRun("DELETE FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    resetRunningCounts('pA')
+    authMod.updateApiKeyProviders('k1', ['pA'])
+    cfg.relay.streamIdleTimeoutMs = 120000
+    cfg.relay.streamKeepAliveMs = 0
+    cfg.relay.streamTimeoutSeconds = 300
+    installUpstreamMock((_url, _opts) => streamingMockResponse(DEFAULT_CHUNKS))
+  })
+
+  async function readAll(res) {
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    const t0 = Date.now()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        text += decoder.decode(value, { stream: true })
+      }
+    } catch {
+      // server destroyed the response socket (expected on abort)
+    }
+    return { text, totalMs: Date.now() - t0 }
+  }
+
+  function latestLog() {
+    flushAll()
+    return dbMod.dbGet("SELECT error_message, ttft_ms FROM requests_log WHERE endpoint = '/v1/chat/completions' ORDER BY rowid DESC LIMIT 1")
+  }
+
+  function latest503() {
+    flushAll()
+    return dbMod.dbGet("SELECT error_message, ttft_ms FROM requests_log WHERE endpoint = '/v1/chat/completions' AND status_code = 503 ORDER BY rowid DESC LIMIT 1")
+  }
+
+  async function waitFor503(messageRe) {
+    await waitFor(() => {
+      flushAll()
+      const row = latest503()
+      return row && messageRe.test(row.error_message)
+    }, 3000)
+    flushAll()
+    return latest503()
+  }
+
+  it('records TTFT from the first upstream chunk, not from heartbeats', async () => {
+    cfg.relay.streamKeepAliveMs = 100
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 200")
+    const upstreamCancelledRef = { cancelled: false }
+
+    globalThis.fetch = async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            if (upstreamCancelledRef.cancelled) return
+            controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"late"},"finish_reason":null}]}\n\n'))
+          }, 700)
+          setTimeout(() => {
+            if (upstreamCancelledRef.cancelled) return
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            controller.close()
+          }, 750)
+        },
+        cancel() { upstreamCancelledRef.cancelled = true },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text } = await readAll(res)
+    expect(text).toContain(': keep-alive')
+    const keepAliveIndex = text.indexOf(': keep-alive')
+    const firstContentIndex = text.indexOf('"content":"late"')
+    expect(keepAliveIndex).toBeGreaterThan(-1)
+    expect(firstContentIndex).toBeGreaterThan(-1)
+    expect(keepAliveIndex).toBeLessThan(firstContentIndex)
+
+    const log = latestLog()
+    expect(log.ttft_ms).toBeGreaterThan(600)
+    expect(log.ttft_ms).toBeLessThan(2000)
+  })
+
+  it('leaves TTFT null when the upstream never sends any content', async () => {
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 200")
+    globalThis.fetch = async () => {
+      const stream = new ReadableStream({
+        start(controller) { controller.close() },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text } = await readAll(res)
+    expect(text).toBe('')
+
+    const log = latestLog()
+    expect(log.ttft_ms).toBeNull()
+  })
+
+  it('does not penalize the provider when the client disconnects before the stream starts', async () => {
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+    dbMod.dbRun("DELETE FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    resetRunningCounts('pA')
+
+    upstreamSignal = null
+    globalThis.fetch = async (_url, opts) => {
+      upstreamSignal = opts?.signal || null
+      return new Promise((_resolve, reject) => {
+        opts.signal.addEventListener('abort', () => {
+          const err = new Error('This operation was aborted')
+          err.name = 'AbortError'
+          reject(err)
+        })
+      })
+    }
+
+    const ac = new AbortController()
+    const fetchPromise = postStream('/v1/chat/completions', {
+      model: 'auto',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    }, { signal: ac.signal })
+    fetchPromise.catch(() => {})
+
+    await waitFor(() => upstreamSignal !== null)
+    ac.abort()
+
+    await waitFor(() => upstreamSignal.aborted === true)
+    await expect(fetchPromise).rejects.toThrow()
+    await new Promise(r => setTimeout(r, 100))
+    flushAll()
+
+    const alpha = dbMod.dbGet("SELECT status FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('active')
+    const circuit = dbMod.dbGet("SELECT failure_count FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    expect(circuit?.failure_count || 0).toBe(0)
+
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"content":"still alive"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+    const { text } = await readAll(res)
+    expect(text).toContain('still alive')
+  })
+
+  it('cuts the stream on idle timeout and counts exactly one circuit failure', async () => {
+    cfg.relay.streamIdleTimeoutMs = 150
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 503")
+
+    globalThis.fetch = async (_url, opts) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          opts.signal.addEventListener('abort', () => {
+            try { controller.error(new Error('aborted')) } catch { /* already closed */ }
+          })
+          setTimeout(() => {
+            try {
+              controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"first"},"finish_reason":null}]}\n\n'))
+            } catch { /* already closed */ }
+          }, 20)
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text, totalMs } = await readAll(res)
+    expect(text).toContain('first')
+    expect(totalMs).toBeLessThan(1500)
+
+    const log = await waitFor503(/idle timeout/i)
+    expect(log.error_message).toMatch(/idle timeout/i)
+
+    flushAll()
+    const circuit = dbMod.dbGet("SELECT state, failure_count FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    expect(circuit.failure_count).toBe(1)
+    const alpha = dbMod.dbGet("SELECT status FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('active')
+  })
+
+  it('cuts the stream on max duration and does not penalize the provider', async () => {
+    cfg.relay.streamTimeoutSeconds = 1
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 503")
+
+    let intervalId = null
+    globalThis.fetch = async (_url, opts) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          opts.signal.addEventListener('abort', () => {
+            if (intervalId) clearInterval(intervalId)
+            try { controller.error(new Error('aborted')) } catch { /* already closed */ }
+          })
+          intervalId = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"tick"},"finish_reason":null}]}\n\n'))
+            } catch { /* already closed */ }
+          }, 20)
+        },
+        cancel() {
+          if (intervalId) clearInterval(intervalId)
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text, totalMs } = await readAll(res)
+    expect(text).toContain('tick')
+    expect(totalMs).toBeGreaterThan(800)
+    expect(totalMs).toBeLessThan(3000)
+
+    const log = await waitFor503(/max duration/i)
+    expect(log.error_message).toMatch(/max duration/i)
+
+    flushAll()
+    const circuit = dbMod.dbGet("SELECT failure_count FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    expect(circuit?.failure_count || 0).toBe(0)
+    const alpha = dbMod.dbGet("SELECT status FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('active')
+  })
+
+  it('idle timeout still fires while heartbeats flow (heartbeat does not reset idle)', async () => {
+    cfg.relay.streamIdleTimeoutMs = 200
+    cfg.relay.streamKeepAliveMs = 50
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 503")
+
+    globalThis.fetch = async (_url, opts) => {
+      const stream = new ReadableStream({
+        start(controller) {
+          opts.signal.addEventListener('abort', () => {
+            try { controller.error(new Error('aborted')) } catch { /* already closed */ }
+          })
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text, totalMs } = await readAll(res)
+    expect(text).toContain(': keep-alive')
+    expect(totalMs).toBeGreaterThan(50)
+    expect(totalMs).toBeLessThan(1500)
+
+    const log = await waitFor503(/idle timeout/i)
+    expect(log.error_message).toMatch(/idle timeout/i)
+  })
+
+  it('records a circuit failure for a pre-headers upstream error and still falls back', async () => {
+    authMod.updateApiKeyProviders('k1', ['pA', 'pB'])
+    dbMod.dbRun("UPDATE providers SET status = 'active', cooldown_until = NULL WHERE id = 'pA'")
+    dbMod.dbRun("DELETE FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    resetRunningCounts('pA')
+
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('alpha.example.com')) {
+        return new Response(
+          JSON.stringify({ error: { message: 'Server exploded', type: 'server_error' } }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return streamingMockResponse([
+        'data: {"choices":[{"index":0,"delta":{"content":"beta ok"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'auto',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text } = await readAll(res)
+    expect(text).toContain('beta ok')
+
+    flushAll()
+    const circuit = dbMod.dbGet("SELECT failure_count FROM circuit_breaker_state WHERE provider_id = 'pA'")
+    expect(circuit.failure_count).toBe(1)
+    const alpha = dbMod.dbGet("SELECT status FROM providers WHERE id = 'pA'")
+    expect(alpha.status).toBe('active')
+  })
+
+  it('does not fail over after headers are sent (no duplicated content)', async () => {
+    authMod.updateApiKeyProviders('k1', ['pA', 'pB'])
+    const calls = { alpha: 0, beta: 0 }
+
+    globalThis.fetch = async (url) => {
+      if (String(url).includes('alpha.example.com')) {
+        calls.alpha++
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"partial"},"finish_reason":null}]}\n\n'))
+            setTimeout(() => {
+              try { controller.error(new Error('upstream exploded')) } catch { /* already closed */ }
+            }, 50)
+          },
+        })
+        return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      }
+      calls.beta++
+      return streamingMockResponse([
+        'data: {"choices":[{"index":0,"delta":{"content":"BETA"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'auto',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const { text } = await readAll(res)
+    expect(calls.alpha).toBe(1)
+    expect(calls.beta).toBe(0)
+    expect(text).toContain('partial')
+    expect(text).not.toContain('BETA')
   })
 })

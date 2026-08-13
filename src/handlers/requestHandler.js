@@ -5,6 +5,13 @@ import { enqueueLog, enqueueMetric } from '../services/logQueue.js'
 import { optimizeRequestBody } from '../services/tokenOptimizer.js'
 import { config } from '../config.js'
 
+function describeRequestError(err) {
+  if (err?.name === 'AbortError') {
+    return `Request timed out after ${config.relay.requestTimeoutMs}ms`
+  }
+  return err?.message || 'Unknown error'
+}
+
 export function optimizeRelayBody(requestBody) {
   const tokenOpt = config.relay.tokenOptimization
   if (!tokenOpt.enabled) {
@@ -146,7 +153,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
       enqueueLog({
         providerId: provider.id, providerName: provider.name, endpoint, requestBody: effectiveBody, originIp, originHeader,
-        statusCode: err.status || 503, errorMessage: err.message,
+        statusCode: err.status || 503, errorMessage: describeRequestError(err),
         responseTimeMs: Date.now() - startTime,
         authenticatedVia, requesterName, requesterKey, cacheHit: false, wasRetry: retryCount > 0, retryCount,
         tokensSavedEstimate,
@@ -162,7 +169,7 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
       recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
 
       if (!retryable) {
-        const finalErr = new Error(err.message)
+        const finalErr = new Error(describeRequestError(err))
         finalErr.status = err.status || 400
         finalErr.data = err.data || null
         finalErr._provider = { id: provider.id, name: provider.name, model: provider.model }
@@ -177,13 +184,13 @@ export async function processRequest({ endpoint, requestBody, originIp, originHe
 
   enqueueLog({
     endpoint, requestBody: effectiveBody, originIp, originHeader,
-    statusCode: 503, errorMessage: lastError?.message || 'All providers unavailable',
+    statusCode: 503, errorMessage: describeRequestError(lastError) || 'All providers unavailable',
     responseTimeMs: Date.now() - startTime,
     authenticatedVia, requesterName, requesterKey, cacheHit: false, retryCount,
     tokensSavedEstimate,
   })
 
-  const finalErr = new Error(lastError?.message || 'All providers failed')
+  const finalErr = new Error(describeRequestError(lastError) || 'All providers failed')
   finalErr.status = lastError?.status || 503
   finalErr.data = lastError?.data || null
   if (lastProvider) {
