@@ -75,6 +75,7 @@ export function normalizeConfig(raw) {
   cfg.relay.debugProviderRequests ??= false
   cfg.relay.streamTimeoutSeconds ??= 300
   cfg.relay.streamIdleTimeoutMs ??= 30000
+  cfg.relay.streamKeepAliveMs ??= 15000
   cfg.relay.requestTimeoutMs ??= 30000
   cfg.relay.routingStrategy ??= 'order'
   cfg.relay.failoverOnQuota ??= true

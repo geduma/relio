@@ -309,6 +309,123 @@ describe('POST /v1/chat/completions streaming', () => {
     ]))
   })
 
+  it('emits SSE keep-alive comments while the upstream is slow to produce data', async () => {
+    const cfg = (await import('../src/config.js')).config
+    cfg.relay.streamKeepAliveMs = 200
+
+    globalThis.fetch = async () => {
+      upstreamSignal = null
+      upstreamCancelled = false
+      const stream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            if (upstreamCancelled) return
+            controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"late"},"finish_reason":null}]}\n\n'))
+          }, 800)
+          setTimeout(() => {
+            if (upstreamCancelled) return
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+            controller.close()
+          }, 850)
+        },
+        cancel() {
+          upstreamCancelled = true
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+    }
+
+    expect(text).toContain(': keep-alive')
+    expect(text).toContain('late')
+    expect(text.trimEnd().endsWith('data: [DONE]')).toBe(true)
+
+    cfg.relay.streamKeepAliveMs = 0
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+  })
+
+  it('logs a 503 interruption entry when the client disconnects mid-stream', async () => {
+    const dbMod = await import('../src/db.js')
+    const { flushAll } = await import('../src/services/logQueue.js')
+    const cfg = (await import('../src/config.js')).config
+    cfg.relay.streamKeepAliveMs = 0
+    dbMod.dbRun("DELETE FROM requests_log WHERE status_code = 503")
+
+    let cancelledFlag = false
+    let intervalId = null
+    upstreamSignal = null
+
+    globalThis.fetch = async (url, opts) => {
+      upstreamSignal = opts?.signal || null
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n'))
+          intervalId = setInterval(() => {
+            if (cancelledFlag) return
+            controller.enqueue(encoder.encode('data: {"choices":[{"index":0,"delta":{"content":"tick"},"finish_reason":null}]}\n\n'))
+          }, 20)
+        },
+        cancel() {
+          cancelledFlag = true
+          if (intervalId) clearInterval(intervalId)
+        },
+      })
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    const ac = new AbortController()
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    }, { signal: ac.signal })
+
+    expect(res.status).toBe(200)
+    const reader = res.body.getReader()
+    await reader.read()
+    await waitFor(() => upstreamSignal !== null)
+
+    ac.abort()
+
+    await waitFor(() => cancelledFlag === true, 2000)
+    expect(cancelledFlag).toBe(true)
+
+    await waitFor(() => {
+      flushAll()
+      return dbMod.dbGet("SELECT status_code, error_message FROM requests_log WHERE status_code = 503 ORDER BY request_at DESC LIMIT 1")
+    }, 3000)
+    const log = dbMod.dbGet("SELECT status_code, error_message FROM requests_log WHERE status_code = 503 ORDER BY request_at DESC LIMIT 1")
+    expect(log.status_code).toBe(503)
+    expect(log.error_message).toMatch(/client disconnected/i)
+
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+  })
+
   it('returns a 502 OpenAI-formatted error when the upstream responds JSON with status 200', async () => {
     installUpstreamMock((_url, _opts) => new Response(
       JSON.stringify({ error: { message: 'streaming unavailable' } }),

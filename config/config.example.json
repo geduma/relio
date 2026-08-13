@@ -18,6 +18,9 @@
   "relay": {
     "exposeProvider": false,
     "requestTimeoutMs": 30000,
+    "streamTimeoutSeconds": 300,
+    "streamIdleTimeoutMs": 30000,
+    "streamKeepAliveMs": 15000,
     "routingStrategy": "order",
     "failoverOnQuota": true,
     "quotaCooldownSeconds": 3600,

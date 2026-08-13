@@ -140,13 +140,17 @@ router.post('/embeddings', async (req, res) => {
 async function handleStreamingRequest(req, res) {
   const startTime = Date.now()
   const controller = new AbortController()
+  let abortReason = null
 
   const optimized = optimizeRelayBody(req.body)
   const requestBody = optimized.body
   const tokensSavedEstimate = optimized.tokensSavedEstimate
 
   res.on('close', () => {
-    if (!res.writableEnded) controller.abort()
+    if (!res.writableEnded) {
+      abortReason = abortReason || 'client_disconnect'
+      controller.abort()
+    }
   })
 
   const selection = parseModelSelector(req.body.model, 'chat')
@@ -165,11 +169,39 @@ async function handleStreamingRequest(req, res) {
   }
   const resetIdle = () => {
     clearIdle()
-    idleTimer = setTimeout(() => controller.abort(), idleMs)
+    idleTimer = setTimeout(() => {
+      abortReason = abortReason || 'idle_timeout'
+      controller.abort()
+    }, idleMs)
     if (idleTimer.unref) idleTimer.unref()
   }
-  const durationTimer = setTimeout(() => controller.abort(), maxDurationMs)
+  const durationTimer = setTimeout(() => {
+    abortReason = abortReason || 'max_duration'
+    controller.abort()
+  }, maxDurationMs)
   if (durationTimer.unref) durationTimer.unref()
+
+  let firstChunkAt = null
+  let lastDataAt = 0
+  const keepAliveMs = config.relay.streamKeepAliveMs || 0
+  let keepAliveTimer = null
+  const clearKeepAlive = () => {
+    if (keepAliveTimer) clearInterval(keepAliveTimer)
+    keepAliveTimer = null
+  }
+  const startHeartbeat = () => {
+    if (keepAliveMs <= 0) return
+    keepAliveTimer = setInterval(() => {
+      if (res.writableEnded || res.destroyed) {
+        clearKeepAlive()
+        return
+      }
+      if (Date.now() - lastDataAt >= keepAliveMs) {
+        res.write(': keep-alive\n\n')
+      }
+    }, keepAliveMs)
+    if (keepAliveTimer.unref) keepAliveTimer.unref()
+  }
 
   const logError = (provider, statusCode, errorMessage, retryCount) => {
     enqueueLog({
@@ -183,6 +215,15 @@ async function handleStreamingRequest(req, res) {
       tokensSavedEstimate,
     })
     enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
+  }
+
+  const describeError = (err) => {
+    if (err?.name !== 'AbortError') return err?.message
+    const reason = abortReason || 'aborted'
+    if (reason === 'client_disconnect') return 'Stream aborted: client disconnected'
+    if (reason === 'idle_timeout') return 'Stream aborted: idle timeout (no data received)'
+    if (reason === 'max_duration') return 'Stream aborted: max duration exceeded'
+    return 'Stream aborted: upstream request cancelled'
   }
 
   let provider = null
@@ -214,7 +255,7 @@ async function handleStreamingRequest(req, res) {
     } catch (err) {
       lastError = err
       provider = null
-      logError(p, err.status || 503, err.message, 0)
+      logError(p, err.status || 503, describeError(err), 0)
       const { immediateCooldown } = classifyProviderError(err, p)
       recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
       if (immediateCooldown === 'circuit') {
@@ -235,7 +276,7 @@ async function handleStreamingRequest(req, res) {
       } catch (err) {
         lastError = err
         retryCount++
-        logError(p, err.status || 503, err.message, retryCount)
+        logError(p, err.status || 503, describeError(err), retryCount)
         const { retryable, immediateCooldown } = classifyProviderError(err, p)
         recordProviderFailure(p, immediateCooldown, extractRetryAfter(err))
         if (!retryable) break
@@ -249,7 +290,7 @@ async function handleStreamingRequest(req, res) {
   if (!provider) {
     clearTimeout(durationTimer)
     if (lastError) {
-      const finalErr = new Error(lastError.message)
+      const finalErr = new Error(describeError(lastError))
       finalErr.status = lastError.status || 503
       finalErr.data = lastError.data || null
       res.status(finalErr.status).json(normalizeError(finalErr))
@@ -262,12 +303,19 @@ async function handleStreamingRequest(req, res) {
   try {
     res.writeHead(200, SSE_HEADERS)
 
+    lastDataAt = Date.now()
+    startHeartbeat()
     resetIdle()
-    stream.on('data', resetIdle)
+    stream.on('data', () => {
+      lastDataAt = Date.now()
+      if (firstChunkAt === null) firstChunkAt = Date.now() - startTime
+      resetIdle()
+    })
 
     await pipeline(stream, res)
 
     clearIdle()
+    clearKeepAlive()
     clearTimeout(durationTimer)
 
     recordSuccess(provider.id)
@@ -275,7 +323,7 @@ async function handleStreamingRequest(req, res) {
       providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
       originIp: req.ip, originHeader: req.headers['user-agent'],
       statusCode: 200, responseBody: { stream: true },
-      responseTimeMs: Date.now() - startTime,
+      responseTimeMs: Date.now() - startTime, ttftMs: firstChunkAt,
       authenticatedVia: 'api_key',
       requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
       cacheHit: false, retryCount, tokensSavedEstimate,
@@ -285,8 +333,30 @@ async function handleStreamingRequest(req, res) {
     })
   } catch (err) {
     clearIdle()
+    clearKeepAlive()
     clearTimeout(durationTimer)
-    if (res.headersSent) return
+    if (res.headersSent) {
+      const reason = abortReason || 'upstream_error'
+      const reasonMessage = reason === 'client_disconnect'
+        ? 'Stream aborted: client disconnected'
+        : reason === 'idle_timeout'
+          ? 'Stream aborted: idle timeout (no data received)'
+          : reason === 'max_duration'
+            ? 'Stream aborted: max duration exceeded'
+            : `Stream aborted: ${err.message}`
+      enqueueLog({
+        providerId: provider.id, providerName: provider.name, endpoint: '/v1/chat/completions', requestBody,
+        originIp: req.ip, originHeader: req.headers['user-agent'],
+        statusCode: 503, errorMessage: reasonMessage,
+        responseTimeMs: Date.now() - startTime, ttftMs: firstChunkAt,
+        authenticatedVia: 'api_key',
+        requesterName: req.apiKey.name, requesterKey: req.apiKey.key_prefix,
+        cacheHit: false, wasRetry: retryCount > 0, retryCount,
+        tokensSavedEstimate,
+      })
+      enqueueMetric(provider.id, { error: true, responseTimeMs: Date.now() - startTime })
+      return
+    }
 
     const { retryable, immediateCooldown } = classifyProviderError(err, provider)
     recordProviderFailure(provider, immediateCooldown, extractRetryAfter(err))
