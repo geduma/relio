@@ -2,6 +2,8 @@
 
 > **Personal-use, self-hosted LLM proxy.** Relio centralizes multiple LLM providers behind a single OpenAI-compatible API, with automatic failover, caching, audit logging, and a management dashboard.
 
+Licensed under AGPL-3.0 — see LICENSE.
+
 ## Philosophy
 
 Relio does not attempt to evaluate the quality, cost, or capabilities of models. It treats every provider as a black box. Model selection, and the order or weighting of providers, are decisions left entirely to the user.

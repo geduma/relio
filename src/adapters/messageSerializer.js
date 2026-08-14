@@ -2,6 +2,18 @@ const COMMON_FIELDS = ['role', 'content', 'name']
 const ASSISTANT_FIELDS = [...COMMON_FIELDS, 'tool_calls', 'reasoning', 'refusal']
 const TOOL_FIELDS = ['role', 'content', 'tool_call_id', 'name']
 
+const CHAT_COMPLETIONS_FIELDS = [
+  'model', 'messages', 'store', 'reasoning_effort', 'metadata',
+  'frequency_penalty', 'logit_bias', 'logprobs', 'top_logprobs',
+  'max_tokens', 'max_completion_tokens', 'n', 'modalities',
+  'prediction', 'audio', 'presence_penalty', 'response_format',
+  'seed', 'service_tier', 'stop', 'stream', 'stream_options',
+  'temperature', 'top_p', 'tools', 'tool_choice',
+  'parallel_tool_calls', 'user', 'function_call', 'functions',
+]
+
+const EMBEDDINGS_FIELDS = ['model', 'input', 'encoding_format', 'dimensions', 'user']
+
 const ALLOWED_FIELDS_BY_ROLE = {
   system: COMMON_FIELDS,
   user: COMMON_FIELDS,
@@ -44,8 +56,8 @@ export function toOpenAIMessage(msg) {
 }
 
 export function sanitizeChatBody(body) {
-  if (!body || typeof body !== 'object') return body
-  const clone = Array.isArray(body) ? [...body] : { ...body }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body
+  const clone = pick(body, CHAT_COMPLETIONS_FIELDS)
 
   if (clone.user && typeof clone.user === 'object') {
     clone.user = typeof clone.user.id === 'string' ? clone.user.id : undefined
@@ -61,4 +73,9 @@ export function sanitizeChatBody(body) {
   }
 
   return clone
+}
+
+export function sanitizeEmbeddingsBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body
+  return pick(body, EMBEDDINGS_FIELDS)
 }
