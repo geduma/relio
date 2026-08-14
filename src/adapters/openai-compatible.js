@@ -2,7 +2,7 @@ import ProviderAdapter from './base.js'
 import { Readable } from 'stream'
 import { logger } from '../utils/logger.js'
 import { config } from '../config.js'
-import { sanitizeChatBody } from './messageSerializer.js'
+import { sanitizeChatBody, sanitizeEmbeddingsBody } from './messageSerializer.js'
 import { redactAuthHeaders, truncate } from './debugUtils.js'
 
 export default class OpenAICompatibleAdapter extends ProviderAdapter {
@@ -116,16 +116,39 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
     const headers = this.buildHeaders(provider.api_key)
     const body = sanitizeChatBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
-    if (!body.stream_options?.include_usage) {
+    const usageRequested = body.stream_options?.include_usage === true
+    if (!usageRequested) {
       body.stream_options = { include_usage: true }
     }
 
-    const response = await this._fetch('POST', url, headers, JSON.stringify({ ...body, stream: true }), signal)
+    const doFetch = () => this._fetch('POST', url, headers, JSON.stringify({ ...body, stream: true }), signal)
+
+    let response = await doFetch()
+    let data = null
 
     if (!response.ok) {
-      let data
       try { data = await response.json() } catch { data = null }
       this._logResponse('POST', url, response, data)
+
+      const rejectedStreamOptions = !usageRequested
+        && (response.status === 400 || response.status === 422)
+        && /stream_options/i.test(JSON.stringify(data || ''))
+
+      if (rejectedStreamOptions) {
+        delete body.stream_options
+        response = await doFetch()
+        data = null
+        if (response.ok) {
+          await this.assertSseResponse(response)
+          this._logResponse('POST', url, response, null)
+          return Readable.fromWeb(response.body)
+        }
+        try { data = await response.json() } catch { data = null }
+        this._logResponse('POST', url, response, data)
+      }
+    }
+
+    if (!response.ok) {
       const detail = data ? JSON.stringify(data).slice(0, 500) : 'no body'
       const errMsg = ProviderAdapter.extractErrorMsg(data)
       const err = new Error(errMsg || `Stream request failed (status ${response.status}) — body: ${detail}`)
@@ -143,7 +166,7 @@ export default class OpenAICompatibleAdapter extends ProviderAdapter {
   async embeddings(provider, requestBody, signal) {
     const url = this.buildUrlForEmbeddings(provider.api_url)
     const headers = this.buildHeaders(provider.api_key)
-    const body = sanitizeChatBody(requestBody)
+    const body = sanitizeEmbeddingsBody(requestBody)
     if (!body.model && provider.model) body.model = provider.model
 
     const response = await this._fetch('POST', url, headers, JSON.stringify(body), signal)

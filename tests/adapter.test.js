@@ -6,7 +6,7 @@ import OpenAICompatibleAdapter from '../src/adapters/openai-compatible.js'
 import AnthropicAdapter from '../src/adapters/anthropic.js'
 import GeminiNativeAdapter from '../src/adapters/gemini-native.js'
 import AzureOpenAIAdapter from '../src/adapters/azure-openai.js'
-import { toOpenAIMessage, sanitizeChatBody } from '../src/adapters/messageSerializer.js'
+import { toOpenAIMessage, sanitizeChatBody, sanitizeEmbeddingsBody } from '../src/adapters/messageSerializer.js'
 
 describe('Adapter Factory', () => {
   it('returns OpenAICompatibleAdapter for openai-compatible', () => {
@@ -449,6 +449,118 @@ describe('OpenAICompatibleAdapter payload normalization', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('never forwards non-standard top-level fields (e.g. signal) on the streaming path', async () => {
+    let sentBody = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'))
+          controller.close()
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const stream = await adapter.stream(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi' }], signal: { aborted: false }, foo: 'bar' },
+        new AbortController().signal
+      )
+      expect(sentBody.signal).toBeUndefined()
+      expect(sentBody.foo).toBeUndefined()
+      expect(sentBody.messages).toEqual([{ role: 'user', content: 'hi' }])
+      expect(sentBody.stream).toBe(true)
+      stream.destroy()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('retries once without stream_options when the provider rejects the injected field', async () => {
+    const sentBodies = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, opts) => {
+      sentBodies.push(JSON.parse(opts.body))
+      if (sentBodies.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "property 'stream_options' is unsupported, did you mean 'stream'?" } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'))
+          controller.close()
+        },
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    }
+    try {
+      const stream = await adapter.stream(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )
+      expect(sentBodies).toHaveLength(2)
+      expect(sentBodies[0].stream_options).toEqual({ include_usage: true })
+      expect(sentBodies[1].stream_options).toBeUndefined()
+      expect(sentBodies[1].stream).toBe(true)
+      stream.destroy()
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not strip a client-provided stream_options and does not retry when it is rejected', async () => {
+    const sentBodies = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, opts) => {
+      sentBodies.push(JSON.parse(opts.body))
+      return new Response(JSON.stringify({ error: { message: "property 'stream_options' is unsupported" } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi' }], stream_options: { include_usage: true } },
+        new AbortController().signal
+      )).rejects.toThrow('stream_options')
+      expect(sentBodies).toHaveLength(1)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('does not retry a 400 that does not mention stream_options', async () => {
+    const sentBodies = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (_url, opts) => {
+      sentBodies.push(JSON.parse(opts.body))
+      return new Response(JSON.stringify({ error: { message: 'property x is unsupported' } }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    try {
+      await expect(adapter.stream(
+        { api_url: 'https://api.example.com/v1', api_key: 'sk-x', model: 'model-chat' },
+        { messages: [{ role: 'user', content: 'hi' }] },
+        new AbortController().signal
+      )).rejects.toThrow('unsupported')
+      expect(sentBodies).toHaveLength(1)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 describe('messageSerializer', () => {
@@ -497,6 +609,57 @@ describe('messageSerializer', () => {
     sanitizeChatBody(body)
     expect(body.user).toEqual({ id: 'top' })
     expect(body.messages[0].user).toEqual({ id: 'nested' })
+  })
+
+  it('drops non-standard top-level fields (e.g. signal) while keeping standard ones', () => {
+    const body = {
+      model: 'm',
+      messages: [{ role: 'user', content: 'hi' }],
+      temperature: 0.5,
+      max_tokens: 100,
+      tools: [{ type: 'function', function: { name: 'fn' } }],
+      stream: true,
+      stream_options: { include_usage: true },
+      signal: { aborted: false },
+      foo: 'bar',
+    }
+    const result = sanitizeChatBody(body)
+    expect(result).toEqual({
+      model: 'm',
+      messages: [{ role: 'user', content: 'hi' }],
+      temperature: 0.5,
+      max_tokens: 100,
+      tools: [{ type: 'function', function: { name: 'fn' } }],
+      stream: true,
+      stream_options: { include_usage: true },
+    })
+    expect(result.signal).toBeUndefined()
+    expect(result.foo).toBeUndefined()
+  })
+
+  it('sanitizeEmbeddingsBody keeps standard fields and drops the rest', () => {
+    const body = {
+      model: 'm',
+      input: ['hello'],
+      encoding_format: 'float',
+      dimensions: 128,
+      user: 'u',
+      signal: { aborted: false },
+      foo: 'bar',
+    }
+    expect(sanitizeEmbeddingsBody(body)).toEqual({
+      model: 'm',
+      input: ['hello'],
+      encoding_format: 'float',
+      dimensions: 128,
+      user: 'u',
+    })
+  })
+
+  it('sanitizeEmbeddingsBody returns non-objects unchanged', () => {
+    expect(sanitizeEmbeddingsBody(null)).toBeNull()
+    expect(sanitizeEmbeddingsBody(undefined)).toBeUndefined()
+    expect(sanitizeEmbeddingsBody([1, 2])).toEqual([1, 2])
   })
 })
 

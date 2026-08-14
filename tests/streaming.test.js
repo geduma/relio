@@ -154,6 +154,84 @@ describe('POST /v1/chat/completions streaming', () => {
     expect(upstreamSignal?.aborted).toBe(false)
   })
 
+  it('strips non-standard fields (e.g. signal) from the body forwarded upstream', async () => {
+    let sentBody = null
+    installUpstreamMock((_url, opts) => {
+      sentBody = JSON.parse(opts.body)
+      return streamingMockResponse([
+        'data: {"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+      signal: { aborted: false },
+    })
+    expect(res.status).toBe(200)
+    const reader = res.body.getReader()
+    while (!(await reader.read()).done) { /* drain */ }
+
+    expect(sentBody.signal).toBeUndefined()
+    expect(sentBody.messages).toEqual([{ role: 'user', content: 'hi' }])
+    expect(sentBody.stream).toBe(true)
+    expect(sentBody.stream_options).toEqual({ include_usage: true })
+
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+  })
+
+  it('retries upstream once without stream_options when the provider rejects the injected field', async () => {
+    const sentBodies = []
+    installUpstreamMock((_url, opts) => {
+      const parsed = JSON.parse(opts.body)
+      sentBodies.push(parsed)
+      if (sentBodies.length === 1) {
+        return new Response(JSON.stringify({ error: { message: "property 'stream_options' is unsupported, did you mean 'stream'?" } }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return streamingMockResponse([
+        'data: {"choices":[{"index":0,"delta":{"content":"recovered"},"finish_reason":null}]}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const res = await postStream('/v1/chat/completions', {
+      model: 'pA',
+      messages: [{ role: 'user', content: 'hi' }],
+      stream: true,
+    })
+    expect(res.status).toBe(200)
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let text = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+    }
+
+    expect(text).toContain('recovered')
+    expect(sentBodies).toHaveLength(2)
+    expect(sentBodies[0].stream_options).toEqual({ include_usage: true })
+    expect(sentBodies[1].stream_options).toBeUndefined()
+
+    installUpstreamMock((_url, _opts) => streamingMockResponse([
+      'data: {"choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}\n\n',
+      'data: {"choices":[{"index":0,"delta":{"content":" world"},"finish_reason":null}]}\n\n',
+      'data: [DONE]\n\n',
+    ]))
+  })
+
   it('relays OpenAI chunks verbatim (varied id/created, usage, tool_calls + content)', async () => {
     const chunkBodies = [
       { id: 'chatcmpl-A', created: 1000, choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }] },

@@ -2,6 +2,7 @@
   "name": "relio",
   "version": "1.3.0",
   "description": "LLM Relay — intelligent proxy with failover, caching, and audit",
+  "license": "AGPL-3.0-or-later",
   "main": "src/index.js",
   "type": "module",
   "engines": {
