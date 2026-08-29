@@ -150,7 +150,7 @@ body {
 .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-light); }
 .table th { background: var(--bg-elevated); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); position: sticky; top: 0; }
 .table tr:hover { background: var(--bg-elevated); }
-.row-paused { opacity: 0.55; }
+.row-paused > td:not(.actions-col) { opacity: 0.55; }
 
 /* Actions column */
 .actions-col { text-align: center; }
@@ -590,7 +590,7 @@ body {
     text-overflow: clip;
     white-space: normal;
   }
-  .row-paused { opacity: 0.55; }
+  .row-paused > td:not(.actions-col) { opacity: 0.55; }
   .order-label + .order-arrows { display: inline-flex; }
 
   /* Chat fills available space below the fixed topbar */
